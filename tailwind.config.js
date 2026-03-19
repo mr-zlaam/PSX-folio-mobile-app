@@ -1,5 +1,6 @@
 /** @type {import('tailwindcss').Config} */
 module.exports = {
+  darkMode: "class",
   // NOTE: Update this to include the paths to all files that contain Nativewind classes.
   content: [
     "./App.tsx",
@@ -8,7 +9,32 @@ module.exports = {
   ],
   presets: [require("nativewind/preset")],
   theme: {
-    extend: {},
+    extend: {
+      colors: {
+        brand: {
+          white: "#FFFFFF",
+          purple: "#140A26",
+          red: "#DC2626",
+        },
+        text: {
+          light: "#28282b",
+          dark: "#FFFFFF",
+        },
+        app: {
+          bg: "#FFFFFF",
+          bgDark: "#140A26",
+          highlight: "#140A26",
+          highlightDark: "#FFFFFF",
+          text: "#28282b",
+          textDark: "#FFFFFF",
+        },
+        button: {
+          primary: "#140A26",
+          neutral: "#FFFFFF",
+          danger: "#DC2626",
+        },
+      },
+    },
   },
   plugins: [],
 };

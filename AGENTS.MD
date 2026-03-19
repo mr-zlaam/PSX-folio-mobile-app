@@ -1,25 +1,75 @@
-# Coding Practice
+# PSX Portfolio Engineering Guide
 
-## Workflow
+## Mission
 
-1. Inspect the affected files and identify refactor opportunities before editing.
-2. Split large or mixed-responsibility code into reusable components.
-3. Keep each file below 250 lines; extract components or utilities when needed.
-4. Use consistent and descriptive variable, function, and component names.
-5. Run `bun run typecheck` after every code-change batch.
-6. Stop and fix type/lint issues before proceeding.
+Build and maintain `psx-portfolio`: a Pakistan Stock Exchange (PSX) portfolio manager app for tracking holdings, trades, valuation, and performance on mobile.
 
-## Theme Rules
+## Non-Negotiables
 
-- Define all app colors in `tailwind.config.js`.
-- Use only theme color tokens in class names.
+1. Always use `bun` as the package manager.
+2. Use only `bun` commands: `bun install`, `bun add`, `bun remove`, `bun run <script>`, `bunx <tool>`.
+3. Do not use `npm`, `yarn`, or `pnpm` commands in this repository.
+4. Run `bun run typecheck` after each meaningful change batch.
+5. Stop and fix type/lint issues before continuing.
+
+## Product Context
+
+- Market: Pakistan Stock Exchange (PSX).
+- Primary currency: PKR.
+- Local market timezone: `Asia/Karachi`.
+- Instrument symbols should be normalized to uppercase.
+
+## MVP Focus
+
+1. Holdings screen: current positions and cost basis.
+2. Trades ledger: buy/sell entries with date, quantity, price, and fees.
+3. Portfolio summary: invested amount, market value, unrealized/realized P/L, and return %.
+4. Watchlist: key symbols and latest price snapshot.
+5. Persistence: local-first storage with clear migration path for cloud sync.
+
+## Engineering Workflow
+
+1. Inspect affected files and identify refactor opportunities before editing.
+2. Keep files under 250 lines; split large responsibilities into smaller components/utilities.
+3. Use clear names for variables, functions, components, and hooks.
+4. Prefer typed, pure, and reusable units over large stateful components.
+5. Remove dead code and unused imports while touching files.
+
+## UI and Theme Rules
+
+- Define theme colors in `tailwind.config.js` and reference them by tokens only.
+- Never use any color explicitly in component files.
+- If a new color is needed, add it first to `tailwind.config.js` and then use the token/class name.
+- No gradients anywhere in the project.
+- Never use gradient utilities or APIs (`bg-gradient-*`, `expo-linear-gradient`, gradient images).
 - Do not use inline hex/rgb/hsl colors in JSX/TS/TSX/CSS.
-- Use the two base colors only:
-  `#fff` for light surfaces / dark text inverse and `#28282b` for dark surfaces / light text inverse.
-- Prefer semantic token names (`background`, `foreground`, `background-inverse`, `foreground-inverse`) over direct palette names.
+- Example policy: add `colors.card.border = "#XXXXXX"` in Tailwind, then use `border-card-border` in classes.
+- Two supported UI modes: `light` and `dark`.
+- Core brand colors:
+  - `brand.white`: `#FFFFFF`
+  - `brand.purple`: `#140A26`
+  - `brand.red`: `#DC2626`
+- Light mode behavior:
+  - Main surfaces: white
+  - Highlight/accent: dark purple
+  - Primary text: `#28282b`
+- Dark mode behavior:
+  - Main surfaces: dark purple
+  - Primary text/icons: white
+  - Accent/surface contrast: white where needed
+- Button behavior:
+  - Use red only for destructive or dangerous actions.
+  - Use purple or white for all non-destructive buttons.
 
-## Code Quality Rules
+## Data and Calculation Rules
 
-- Prefer typed props and small pure components.
-- Remove dead code and unused imports during edits.
-- Keep components focused on one responsibility.
+- Keep money and fee calculations deterministic and explicit.
+- Represent and validate all required trade inputs (`symbol`, `side`, `quantity`, `price`, `date`, `fees`).
+- Keep calculation logic separate from UI components.
+- Add lightweight tests for any non-trivial portfolio math.
+
+## Definition of Ready for Coding
+
+- Project rules are documented in this file and mirrored in `skills/coding-practice`.
+- Skill metadata and references are updated for PSX scope.
+- Commands and examples use `bun` only.

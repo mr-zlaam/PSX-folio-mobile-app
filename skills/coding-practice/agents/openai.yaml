@@ -1,4 +1,4 @@
 interface:
-  display_name: "Coding Practice"
-  short_description: "Enforce easy-quran coding standards and theme rules"
-  default_prompt: "Apply the easy-quran coding-practice workflow for this task."
+  display_name: "PSX Coding Practice"
+  short_description: "PSX workflow with bun-only tooling, dual-mode theme rules, and no gradients"
+  default_prompt: "Apply the PSX coding-practice workflow for this task, enforce bun-only commands, and follow the light/dark theme policy with no gradients."
