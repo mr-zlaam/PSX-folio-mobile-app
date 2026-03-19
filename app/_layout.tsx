@@ -37,6 +37,7 @@ export default function RootLayout() {
           <Stack.Screen name="deposit" />
           <Stack.Screen name="bonus-share" />
           <Stack.Screen name="transaction-history" />
+          <Stack.Screen name="market-index" />
         </Stack>
       </BottomSheetModalProvider>
     </GestureHandlerRootView>

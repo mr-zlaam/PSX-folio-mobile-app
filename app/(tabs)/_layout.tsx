@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type TabIconName =
   | "view-dashboard-outline"
+  | "chart-box-outline"
   | "briefcase-outline"
   | "eye-outline"
   | "swap-horizontal"
@@ -18,6 +19,10 @@ function getTabIconName(routeName: string): TabIconName {
 
   if (routeName === "portfolio") {
     return "briefcase-outline";
+  }
+
+  if (routeName === "market") {
+    return "chart-box-outline";
   }
 
   if (routeName === "watchlist") {
@@ -85,15 +90,21 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="portfolio"
+        name="market"
         options={{
-          title: "Portfolio",
+          title: "Market",
         }}
       />
       <Tabs.Screen
         name="watchlist"
         options={{
           title: "Watchlist",
+        }}
+      />
+      <Tabs.Screen
+        name="portfolio"
+        options={{
+          title: "Portfolio",
         }}
       />
       <Tabs.Screen
