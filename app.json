@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "psx-portfolio",
-    "slug": "psx-portfolio",
+    "name": "PSX Folio",
+    "slug": "psx-folio",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/images/1024.png",
