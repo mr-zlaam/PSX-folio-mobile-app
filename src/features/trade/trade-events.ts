@@ -1,12 +1,19 @@
 import type { TradeSide } from "@/src/features/trade/trade-orders";
 
-export type TradeMutationEvent = {
-  type: "trade-created";
-  orderId: string;
-  symbol: string;
-  side: TradeSide;
-  createdAt: string;
-};
+export type TradeMutationEvent =
+  | {
+      type: "trade-created";
+      orderId: string;
+      symbol: string;
+      side: TradeSide;
+      createdAt: string;
+    }
+  | {
+      type: "dividend-created";
+      dividendId: string;
+      symbol: string;
+      createdAt: string;
+    };
 
 type TradeMutationListener = (event: TradeMutationEvent) => void;
 
@@ -30,4 +37,17 @@ export function emitTradeMutation(event: TradeMutationEvent): void {
       // Keep other listeners alive even if one handler throws.
     }
   }
+}
+
+export function emitDividendMutation(event: {
+  dividendId: string;
+  symbol: string;
+  createdAt: string;
+}): void {
+  emitTradeMutation({
+    type: "dividend-created",
+    dividendId: event.dividendId,
+    symbol: event.symbol,
+    createdAt: event.createdAt,
+  });
 }

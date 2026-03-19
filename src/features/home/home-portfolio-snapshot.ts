@@ -74,18 +74,29 @@ function getHoldingWithMinValue(
 }
 
 export function buildHomeSnapshotFromHoldings(
-  holdings: PortfolioHolding[]
+  holdings: PortfolioHolding[],
+  options?: {
+    portfolioCashAdjustment?: number;
+  }
 ): {
   snapshot: HomeSnapshot;
   insightDisplayValues: InsightDisplayValues;
 } {
+  const portfolioCashAdjustment =
+    options &&
+    typeof options.portfolioCashAdjustment === "number" &&
+    Number.isFinite(options.portfolioCashAdjustment) &&
+    options.portfolioCashAdjustment > 0
+      ? options.portfolioCashAdjustment
+      : 0;
+
   if (holdings.length === 0) {
     return {
       snapshot: {
         summary: {
           invested: 0,
-          value: 0,
-          profit: 0,
+          value: portfolioCashAdjustment,
+          profit: portfolioCashAdjustment,
           returnPct: 0,
         },
         insights: [
@@ -111,7 +122,8 @@ export function buildHomeSnapshotFromHoldings(
   }
 
   const invested = holdings.reduce((sum, holding) => sum + holding.invested, 0);
-  const value = holdings.reduce((sum, holding) => sum + holding.marketValue, 0);
+  const holdingsValue = holdings.reduce((sum, holding) => sum + holding.marketValue, 0);
+  const value = holdingsValue + portfolioCashAdjustment;
   const profit = value - invested;
   const returnPct = invested === 0 ? 0 : (profit / invested) * 100;
 

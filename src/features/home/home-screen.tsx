@@ -6,12 +6,20 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import {
+  BottomSheetBackdrop,
+  BottomSheetModal,
+  BottomSheetView,
+} from "@gorhom/bottom-sheet";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import { useColorScheme } from "nativewind";
+import AppButton from "@/components/ui/app-button";
+import AppFeedbackModal from "@/components/ui/app-feedback-modal";
 import { InsightDisplayMode } from "@/src/features/home/home-data";
 import { buildHomeViewModel } from "@/src/features/home/home-view-model";
 import { ValueTone } from "@/src/features/home/types";
+import { formatPKRAmount } from "@/src/features/home/home-formatters";
 import {
   buildHomeSnapshotFromHoldings,
   DEFAULT_INSIGHT_DISPLAY_VALUES,
@@ -22,6 +30,7 @@ import {
   getPortfolioHoldingsWithLatestQuotes,
   PortfolioHolding,
 } from "@/src/features/portfolio/portfolio-data";
+import { getTotalDividendFinalAmount } from "@/src/features/dividend/dividend-records";
 import { subscribeToTradeMutations } from "@/src/features/trade/trade-events";
 import {
   getHomeInsightDisplayModePreference,
@@ -30,6 +39,8 @@ import {
 import { APP_COLORS } from "@/src/theme/colors";
 
 const HOME_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+
+type QuickActionType = "dividend" | "deposit" | "bonus";
 
 function getToneClassName(tone: ValueTone): string {
   if (tone === "positive") {
@@ -118,8 +129,15 @@ export default function HomeScreen() {
   );
   const [insightDisplayValues, setInsightDisplayValues] =
     React.useState<InsightDisplayValues>(DEFAULT_INSIGHT_DISPLAY_VALUES);
+  const [totalDividendValue, setTotalDividendValue] = React.useState(0);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [hasHydratedInsightMode, setHasHydratedInsightMode] = React.useState(false);
+  const quickActionSheetRef = React.useRef<BottomSheetModal>(null);
+  const quickActionSheetSnapPoints = React.useMemo(() => ["42%"], []);
+  const [quickActionNotice, setQuickActionNotice] = React.useState<{
+    title: string;
+    message: string;
+  } | null>(null);
 
   const handleTradePress = React.useCallback(() => {
     router.push({
@@ -134,19 +152,81 @@ export default function HomeScreen() {
     router.push("/(tabs)/portfolio");
   }, [router]);
 
-  const applyHomeSnapshot = React.useCallback((holdings: PortfolioHolding[]) => {
-    const nextHomeData = buildHomeSnapshotFromHoldings(holdings);
-    setViewModel(buildHomeViewModel(nextHomeData.snapshot));
-    setInsightDisplayValues(nextHomeData.insightDisplayValues);
-  }, []);
+  const handleOpenTransactionHistory = React.useCallback(() => {
+    router.push("/transaction-history");
+  }, [router]);
+
+  const applyHomeSnapshot = React.useCallback(
+    (holdings: PortfolioHolding[], totalDividendValue: number) => {
+      const nextHomeData = buildHomeSnapshotFromHoldings(holdings, {
+        portfolioCashAdjustment: totalDividendValue,
+      });
+      setViewModel(buildHomeViewModel(nextHomeData.snapshot));
+      setInsightDisplayValues(nextHomeData.insightDisplayValues);
+    },
+    []
+  );
 
   const refreshHomeSnapshot = React.useCallback(async () => {
-    const cachedHoldings = await getPortfolioHoldingsWithCachedQuotes();
-    applyHomeSnapshot(cachedHoldings);
+    const [cachedHoldings, totalDividendValue] = await Promise.all([
+      getPortfolioHoldingsWithCachedQuotes(),
+      getTotalDividendFinalAmount(),
+    ]);
+    setTotalDividendValue(totalDividendValue);
+    applyHomeSnapshot(cachedHoldings, totalDividendValue);
 
     const latestHoldings = await getPortfolioHoldingsWithLatestQuotes();
-    applyHomeSnapshot(latestHoldings);
+    applyHomeSnapshot(latestHoldings, totalDividendValue);
   }, [applyHomeSnapshot]);
+
+  const closeQuickActionNotice = React.useCallback(() => {
+    setQuickActionNotice(null);
+  }, []);
+
+  const handleDismissQuickActionSheet = React.useCallback(() => {
+    quickActionSheetRef.current?.dismiss();
+  }, []);
+
+  const handleSelectQuickAction = React.useCallback(
+    (action: QuickActionType) => {
+      handleDismissQuickActionSheet();
+
+      if (action === "dividend") {
+        router.push("/dividend");
+        return;
+      }
+
+      if (action === "deposit") {
+        setQuickActionNotice({
+          title: "Add Deposit",
+          message: "Deposit flow is added to actions and will be implemented next.",
+        });
+        return;
+      }
+
+      setQuickActionNotice({
+        title: "Bonus Share",
+        message: "Bonus share flow is added to actions and will be implemented next.",
+      });
+    },
+    [handleDismissQuickActionSheet, router]
+  );
+
+  const handleOpenQuickActionSheet = React.useCallback(() => {
+    quickActionSheetRef.current?.present();
+  }, []);
+
+  const quickActionSheetBackdrop = React.useCallback(
+    (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        pressBehavior="close"
+      />
+    ),
+    []
+  );
 
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
@@ -208,12 +288,16 @@ export default function HomeScreen() {
     () => viewModel.summaryItems.find((item) => item.key === "profit"),
     [viewModel.summaryItems]
   );
-  const returnSummaryItem = React.useMemo(
-    () => viewModel.summaryItems.find((item) => item.key === "returnPct"),
+  const investedSummaryItem = React.useMemo(
+    () => viewModel.summaryItems.find((item) => item.key === "invested"),
     [viewModel.summaryItems]
   );
-  const portfolioSummaryItems = React.useMemo(
-    () => viewModel.summaryItems.filter((item) => item.key !== "profit"),
+  const valueSummaryItem = React.useMemo(
+    () => viewModel.summaryItems.find((item) => item.key === "value"),
+    [viewModel.summaryItems]
+  );
+  const returnSummaryItem = React.useMemo(
+    () => viewModel.summaryItems.find((item) => item.key === "returnPct"),
     [viewModel.summaryItems]
   );
 
@@ -243,78 +327,75 @@ export default function HomeScreen() {
         }
       >
         <View className="gap-7">
+          <View className="flex-row items-center justify-between">
+            <Text className="text-3xl font-extrabold text-app-text dark:text-app-textDark">
+              Home
+            </Text>
+
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={handleOpenQuickActionSheet}
+              className="rounded-xl bg-app-highlight px-4 py-2 dark:bg-app-highlightDark"
+            >
+              <Text className="text-sm font-bold uppercase tracking-wide text-brand-white dark:text-brand-purple">
+                + Add
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           <View className="rounded-3xl bg-brand-white px-4 py-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
             <Text className="text-xs font-bold uppercase tracking-wider text-app-highlight dark:text-app-highlightDark">
-              Current Profit
+              Current Portfolio Worth
             </Text>
             <Text
               className={[
                 "mt-2 text-4xl font-extrabold",
+                getToneClassName(valueSummaryItem?.tone ?? "neutral"),
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            >
+              {valueSummaryItem?.value ?? "PKR 0"}
+            </Text>
+            <Text
+              className={[
+                "mt-1 text-sm font-semibold",
                 getToneClassName(profitSummaryItem?.tone ?? "neutral"),
               ]
                 .filter(Boolean)
                 .join(" ")}
             >
-              {profitSummaryItem?.value ?? "PKR 0"}
+              Profit: {profitSummaryItem?.value ?? "PKR 0"}
+            </Text>
+            <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
+              Invested: {investedSummaryItem?.value ?? "PKR 0"}
             </Text>
             <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
               Return: {returnSummaryItem?.value ?? "0.0%"}
             </Text>
+            <Text className="mt-1 text-sm font-semibold text-success-green">
+              Dividend: {formatPKRAmount(totalDividendValue)}
+            </Text>
           </View>
 
-          <TouchableOpacity
-            activeOpacity={0.94}
-            onPress={handleOpenPortfolio}
-            className="rounded-3xl bg-brand-white p-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
-          >
-            <View className="flex-row items-center justify-between gap-3">
-              <View className="self-start rounded-xl bg-app-highlight px-3 py-2 dark:bg-app-highlightDark">
-                <Text className="text-xs font-bold uppercase tracking-wider text-brand-white dark:text-brand-purple">
-                  Portfolio Summary
-                </Text>
-              </View>
-
-              <View className="flex-row items-center gap-2">
-                <HeaderActionButton
-                  label="Trade"
-                  selected={true}
-                  tone="danger"
-                  onPress={handleTradePress}
-                />
-              </View>
+          <View className="flex-row items-center gap-3">
+            <View className="flex-1">
+              <AppButton
+                label="Trade"
+                variant="danger"
+                size="sm"
+                onPress={handleTradePress}
+              />
             </View>
-
-            <View className="mt-4 gap-3">
-              {portfolioSummaryItems.map((item) => (
-                <View
-                  key={item.key}
-                  className="rounded-2xl bg-app-highlight/5 px-4 py-3 dark:bg-brand-white/5"
-                >
-                  <View className="flex-row items-start justify-between">
-                    <View className="mr-3 flex-1">
-                      <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
-                        {item.label}
-                      </Text>
-                      <Text className="mt-1 text-xs text-app-text dark:text-app-textDark">
-                        {item.hint}
-                      </Text>
-                    </View>
-
-                    <Text
-                      className={[
-                        "text-base font-extrabold",
-                        getToneClassName(item.tone),
-                      ]
-                        .filter(Boolean)
-                        .join(" ")}
-                    >
-                      {item.value}
-                    </Text>
-                  </View>
-                </View>
-              ))}
+            <View className="flex-1">
+              <AppButton
+                label="Transactions"
+                variant="secondary"
+                size="sm"
+                onPress={handleOpenTransactionHistory}
+              />
             </View>
-          </TouchableOpacity>
+          </View>
 
           <TouchableOpacity
             activeOpacity={0.94}
@@ -381,6 +462,86 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      <BottomSheetModal
+        ref={quickActionSheetRef}
+        snapPoints={quickActionSheetSnapPoints}
+        enablePanDownToClose
+        backdropComponent={quickActionSheetBackdrop}
+        backgroundStyle={{
+          backgroundColor: isDarkMode
+            ? APP_COLORS.brand.purple
+            : APP_COLORS.brand.white,
+        }}
+        handleIndicatorStyle={{
+          backgroundColor: isDarkMode
+            ? APP_COLORS.brand.white
+            : APP_COLORS.brand.purple,
+        }}
+      >
+        <BottomSheetView
+          style={{
+            paddingHorizontal: 16,
+            paddingBottom: insets.bottom + 16,
+            paddingTop: 8,
+          }}
+        >
+          <Text className="text-center text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+            Quick Add
+          </Text>
+
+          <View className="mt-3 gap-2">
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => handleSelectQuickAction("dividend")}
+              className="rounded-xl bg-brand-white px-4 py-3 dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
+            >
+              <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                Add Dividend
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => handleSelectQuickAction("deposit")}
+              className="rounded-xl bg-brand-white px-4 py-3 dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
+            >
+              <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                Add Deposit
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={() => handleSelectQuickAction("bonus")}
+              className="rounded-xl bg-brand-white px-4 py-3 dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
+            >
+              <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                Bonus Share
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={handleDismissQuickActionSheet}
+              className="rounded-xl bg-button-neutral px-4 py-3 dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/5"
+            >
+              <Text className="text-sm font-bold text-app-highlight dark:text-app-highlightDark">
+                Cancel
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </BottomSheetView>
+      </BottomSheetModal>
+
+      <AppFeedbackModal
+        visible={quickActionNotice !== null}
+        title={quickActionNotice?.title ?? ""}
+        message={quickActionNotice?.message ?? ""}
+        tone="info"
+        actionLabel="Done"
+        onClose={closeQuickActionNotice}
+      />
     </SafeAreaView>
   );
 }

@@ -47,6 +47,11 @@ export default function TabsLayout() {
           paddingTop: 8,
           height: 72,
         },
+        sceneStyle: {
+          backgroundColor: isDarkMode
+            ? APP_COLORS.app.bgDark
+            : APP_COLORS.app.bg,
+        },
         tabBarLabelStyle: {
           fontWeight: "700",
           fontSize: 12,
