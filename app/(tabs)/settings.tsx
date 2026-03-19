@@ -11,6 +11,9 @@ import {
   AppTheme,
   BrokerSettings,
   getBrokerSettings,
+  getTaxpayerProfilePreference,
+  setTaxpayerProfilePreference,
+  TaxpayerProfile,
   setThemePreference,
 } from "@/src/lib/app-preferences";
 
@@ -70,16 +73,24 @@ export default function SettingsTabScreen() {
   const [brokerSettings, setBrokerSettingsState] = React.useState<BrokerSettings | null>(
     null
   );
+  const [taxpayerProfile, setTaxpayerProfile] =
+    React.useState<TaxpayerProfile>("nonFiler");
 
   const loadBrokerSettings = React.useCallback(async () => {
     const savedBrokerSettings = await getBrokerSettings();
     setBrokerSettingsState(savedBrokerSettings);
   }, []);
 
+  const loadTaxpayerProfile = React.useCallback(async () => {
+    const savedTaxpayerProfile = await getTaxpayerProfilePreference();
+    setTaxpayerProfile(savedTaxpayerProfile);
+  }, []);
+
   useFocusEffect(
     React.useCallback(() => {
       void loadBrokerSettings();
-    }, [loadBrokerSettings])
+      void loadTaxpayerProfile();
+    }, [loadBrokerSettings, loadTaxpayerProfile])
   );
 
   const handlePullToRefresh = React.useCallback(async () => {
@@ -89,11 +100,12 @@ export default function SettingsTabScreen() {
         getLatestKse100Summary(),
         getLatestSymbols(),
         loadBrokerSettings(),
+        loadTaxpayerProfile(),
       ]);
     } finally {
       setIsRefreshing(false);
     }
-  }, [loadBrokerSettings]);
+  }, [loadBrokerSettings, loadTaxpayerProfile]);
 
   const handleThemeChange = React.useCallback(
     async (theme: AppTheme) => {
@@ -105,6 +117,18 @@ export default function SettingsTabScreen() {
       }
     },
     [setColorScheme]
+  );
+
+  const handleTaxpayerProfileChange = React.useCallback(
+    async (nextProfile: TaxpayerProfile) => {
+      setTaxpayerProfile(nextProfile);
+      try {
+        await setTaxpayerProfilePreference(nextProfile);
+      } catch {
+        // Keep selected value in UI even if persistence fails.
+      }
+    },
+    []
   );
 
   return (
@@ -185,6 +209,32 @@ export default function SettingsTabScreen() {
                 Open Broker Settings
               </Text>
             </TouchableOpacity>
+          </View>
+
+          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
+            <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+              Tax Profile
+            </Text>
+            <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
+              Filer: 15% CGT & dividend tax. Non-Filer: 30%.
+            </Text>
+
+            <View className="mt-3 flex-row gap-2">
+              <ToggleChip
+                label="Filer"
+                selected={taxpayerProfile === "filer"}
+                onPress={() => {
+                  void handleTaxpayerProfileChange("filer");
+                }}
+              />
+              <ToggleChip
+                label="Non-Filer"
+                selected={taxpayerProfile === "nonFiler"}
+                onPress={() => {
+                  void handleTaxpayerProfileChange("nonFiler");
+                }}
+              />
+            </View>
           </View>
 
         </View>

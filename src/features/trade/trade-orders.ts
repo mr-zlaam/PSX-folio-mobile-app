@@ -26,12 +26,79 @@ type TradeOrdersStore = {
   updatedAt: string;
 };
 
+export class InsufficientUnitsError extends Error {
+  readonly symbol: string;
+  readonly availableUnits: number;
+  readonly requestedUnits: number;
+
+  constructor(symbol: string, availableUnits: number, requestedUnits: number) {
+    super(`Cannot sell ${requestedUnits} units of ${symbol}. Available units: ${availableUnits}.`);
+    this.name = "InsufficientUnitsError";
+    this.symbol = symbol;
+    this.availableUnits = availableUnits;
+    this.requestedUnits = requestedUnits;
+  }
+}
+
 const TRADE_ORDERS_FILE_URI = FileSystem.documentDirectory
   ? `${FileSystem.documentDirectory}psx-trade-orders.json`
   : null;
 
 function normalizeSymbol(value: string): string {
   return value.trim().toUpperCase();
+}
+
+function sortOrdersChronologically(orders: TradeOrderRecord[]): TradeOrderRecord[] {
+  return [...orders].sort((firstOrder, secondOrder) => {
+    const firstTimestamp = new Date(firstOrder.tradedAt).getTime();
+    const secondTimestamp = new Date(secondOrder.tradedAt).getTime();
+
+    if (firstTimestamp !== secondTimestamp) {
+      return firstTimestamp - secondTimestamp;
+    }
+
+    return firstOrder.createdAt.localeCompare(secondOrder.createdAt);
+  });
+}
+
+function toSafeUnits(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+  return value;
+}
+
+function getOpenUnitsForSymbol(
+  orders: TradeOrderRecord[],
+  symbol: string
+): number {
+  const normalizedSymbol = normalizeSymbol(symbol);
+  if (normalizedSymbol.length === 0) {
+    return 0;
+  }
+
+  let openUnits = 0;
+  const sortedOrders = sortOrdersChronologically(orders);
+  for (const order of sortedOrders) {
+    if (normalizeSymbol(order.symbol) !== normalizedSymbol) {
+      continue;
+    }
+
+    const safeUnits = toSafeUnits(order.units);
+    if (safeUnits === 0) {
+      continue;
+    }
+
+    if (order.side === "buy") {
+      openUnits += safeUnits;
+      continue;
+    }
+
+    const sellableUnits = Math.min(openUnits, safeUnits);
+    openUnits -= sellableUnits;
+  }
+
+  return openUnits;
 }
 
 function getSafeOrdersStore(value: unknown): TradeOrdersStore {
@@ -111,12 +178,34 @@ export async function saveTradeOrder(
   orderInput: TradeOrderInput
 ): Promise<TradeOrderRecord> {
   const store = await readStore();
+  const normalizedSymbol = normalizeSymbol(orderInput.symbol);
+  const safePrice = orderInput.price;
+  const safeUnits = orderInput.units;
+
+  if (
+    normalizedSymbol.length === 0 ||
+    !Number.isFinite(safePrice) ||
+    safePrice <= 0 ||
+    !Number.isFinite(safeUnits) ||
+    safeUnits <= 0 ||
+    !Number.isInteger(safeUnits)
+  ) {
+    throw new Error("Invalid trade order input.");
+  }
+
+  if (orderInput.side === "sell") {
+    const openUnits = getOpenUnitsForSymbol(store.orders, normalizedSymbol);
+    if (safeUnits > openUnits) {
+      throw new InsufficientUnitsError(normalizedSymbol, openUnits, safeUnits);
+    }
+  }
+
   const record: TradeOrderRecord = {
     id: buildTradeOrderId(),
     side: orderInput.side,
-    symbol: normalizeSymbol(orderInput.symbol),
-    price: orderInput.price,
-    units: orderInput.units,
+    symbol: normalizedSymbol,
+    price: safePrice,
+    units: safeUnits,
     tradedAt: orderInput.tradedAt,
     brokerMode: orderInput.brokerMode,
     brokerName: orderInput.brokerName,

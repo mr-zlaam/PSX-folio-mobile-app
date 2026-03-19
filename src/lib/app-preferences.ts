@@ -5,6 +5,7 @@ export type AppTheme = "light" | "dark";
 export type HomeInsightDisplayModePreference = "percentage" | "price";
 export type PortfolioGroupingModePreference = "sectors" | "companies";
 export type PortfolioDisplayModePreference = "percentage" | "price";
+export type TaxpayerProfile = "filer" | "nonFiler";
 export type BrokerSettings = {
   brokerName: string;
   transactionFeePct: number;
@@ -16,6 +17,7 @@ const STORAGE_KEYS = {
   homeInsightDisplayMode: "@psx-portfolio/home-insight-display-mode",
   portfolioGroupingMode: "@psx-portfolio/portfolio-grouping-mode",
   portfolioDisplayMode: "@psx-portfolio/portfolio-display-mode",
+  taxpayerProfile: "@psx-portfolio/taxpayer-profile",
   brokerSettings: "@psx-portfolio/broker-settings",
 } as const;
 
@@ -30,6 +32,10 @@ const PORTFOLIO_GROUPING_MODE_VALUES: readonly PortfolioGroupingModePreference[]
 const PORTFOLIO_DISPLAY_MODE_VALUES: readonly PortfolioDisplayModePreference[] = [
   "percentage",
   "price",
+];
+const TAXPAYER_PROFILE_VALUES: readonly TaxpayerProfile[] = [
+  "filer",
+  "nonFiler",
 ];
 
 type PreferencesStore = Record<string, string>;
@@ -246,6 +252,20 @@ export async function setPortfolioDisplayModePreference(
   mode: PortfolioDisplayModePreference
 ): Promise<void> {
   await setStoredItem(STORAGE_KEYS.portfolioDisplayMode, mode);
+}
+
+export async function getTaxpayerProfilePreference(): Promise<TaxpayerProfile> {
+  return getEnumPreference(
+    STORAGE_KEYS.taxpayerProfile,
+    TAXPAYER_PROFILE_VALUES,
+    "nonFiler"
+  );
+}
+
+export async function setTaxpayerProfilePreference(
+  profile: TaxpayerProfile
+): Promise<void> {
+  await setStoredItem(STORAGE_KEYS.taxpayerProfile, profile);
 }
 
 export async function getBrokerSettings(): Promise<BrokerSettings | null> {

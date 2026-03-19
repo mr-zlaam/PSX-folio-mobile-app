@@ -35,9 +35,16 @@ import {
 import {
   BrokerSettings,
   getBrokerSettings,
+  getTaxpayerProfilePreference,
+  TaxpayerProfile,
 } from "@/src/lib/app-preferences";
 import { APP_COLORS } from "@/src/theme/colors";
-import { saveTradeOrder } from "@/src/features/trade/trade-orders";
+import {
+  InsufficientUnitsError,
+  getSavedTradeOrders,
+  saveTradeOrder,
+  TradeOrderRecord,
+} from "@/src/features/trade/trade-orders";
 
 const TRADE_QUOTE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -49,6 +56,89 @@ type TradeNoticeState = {
   message: string;
   tone: AppFeedbackModalTone;
 };
+type PositionSnapshot = {
+  units: number;
+  averageBuyPrice: number;
+};
+
+const CGT_RATE_BY_PROFILE: Record<TaxpayerProfile, number> = {
+  filer: 15,
+  nonFiler: 30,
+};
+
+function sortOrdersChronologically(orders: TradeOrderRecord[]): TradeOrderRecord[] {
+  return [...orders].sort((firstOrder, secondOrder) => {
+    const firstTimestamp = new Date(firstOrder.tradedAt).getTime();
+    const secondTimestamp = new Date(secondOrder.tradedAt).getTime();
+
+    if (firstTimestamp !== secondTimestamp) {
+      return firstTimestamp - secondTimestamp;
+    }
+
+    return firstOrder.createdAt.localeCompare(secondOrder.createdAt);
+  });
+}
+
+function toPositiveFiniteNumber(value: number): number {
+  if (!Number.isFinite(value) || value <= 0) {
+    return 0;
+  }
+
+  return value;
+}
+
+function getPositionSnapshotForSymbol(
+  orders: TradeOrderRecord[],
+  symbol: string
+): PositionSnapshot {
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  if (normalizedSymbol.length === 0) {
+    return {
+      units: 0,
+      averageBuyPrice: 0,
+    };
+  }
+
+  const sortedOrders = sortOrdersChronologically(orders);
+  const position: PositionSnapshot = {
+    units: 0,
+    averageBuyPrice: 0,
+  };
+
+  for (const order of sortedOrders) {
+    if (order.symbol.trim().toUpperCase() !== normalizedSymbol) {
+      continue;
+    }
+
+    const safeUnits = toPositiveFiniteNumber(order.units);
+    const safePrice = toPositiveFiniteNumber(order.price);
+    if (safeUnits === 0 || safePrice === 0) {
+      continue;
+    }
+
+    if (order.side === "buy") {
+      const currentCost = position.units * position.averageBuyPrice;
+      const nextUnits = position.units + safeUnits;
+      const nextCost = currentCost + safeUnits * safePrice;
+      position.units = nextUnits;
+      position.averageBuyPrice = nextUnits > 0 ? nextCost / nextUnits : 0;
+      continue;
+    }
+
+    const sellableUnits = Math.min(position.units, safeUnits);
+    position.units -= sellableUnits;
+    if (position.units <= 0) {
+      position.units = 0;
+      position.averageBuyPrice = 0;
+    }
+  }
+
+  return position;
+}
+
+function getTaxpayerProfileLabel(profile: TaxpayerProfile): string {
+  return profile === "filer" ? "Filer" : "Non-Filer";
+}
 
 function formatDateTimeInput(date: Date): string {
   const year = date.getFullYear();
@@ -203,6 +293,9 @@ export default function TransactionsTabScreen() {
   const [customBrokerFeePctInput, setCustomBrokerFeePctInput] = React.useState("");
   const [savedBrokerSettings, setSavedBrokerSettings] =
     React.useState<BrokerSettings | null>(null);
+  const [taxpayerProfile, setTaxpayerProfile] =
+    React.useState<TaxpayerProfile>("nonFiler");
+  const [deductCgtTaxOnSell, setDeductCgtTaxOnSell] = React.useState(true);
   const [hasEditedPrice, setHasEditedPrice] = React.useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = React.useState(false);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
@@ -281,6 +374,8 @@ export default function TransactionsTabScreen() {
     try {
       await refreshSymbols();
       await refreshQuoteForSymbol(selectedSymbol);
+      const savedTaxpayerProfile = await getTaxpayerProfilePreference();
+      setTaxpayerProfile(savedTaxpayerProfile);
     } finally {
       setIsRefreshing(false);
     }
@@ -312,10 +407,16 @@ export default function TransactionsTabScreen() {
     setSavedBrokerSettings(brokerSettings);
   }, []);
 
+  const loadTaxpayerProfile = React.useCallback(async () => {
+    const savedTaxpayerProfile = await getTaxpayerProfilePreference();
+    setTaxpayerProfile(savedTaxpayerProfile);
+  }, []);
+
   useFocusEffect(
     React.useCallback(() => {
       void loadSavedBrokerSettings();
-    }, [loadSavedBrokerSettings])
+      void loadTaxpayerProfile();
+    }, [loadSavedBrokerSettings, loadTaxpayerProfile])
   );
 
   React.useEffect(() => {
@@ -451,6 +552,45 @@ export default function TransactionsTabScreen() {
       brokerFeePct = parsedBrokerFeePct;
     }
 
+    let sellGrossProfit = 0;
+    let sellNetProfit = 0;
+    let sellCgtRatePct = 0;
+    let sellCgtTaxAmount = 0;
+    let isCgtApplied = false;
+
+    if (tradeSide === "sell") {
+      const savedOrders = await getSavedTradeOrders();
+      const positionSnapshot = getPositionSnapshotForSymbol(savedOrders, normalizedSymbol);
+
+      if (positionSnapshot.units <= 0) {
+        showTradeNotice(
+          "No Position Found",
+          `You do not have an active holding for ${normalizedSymbol}.`,
+          "error"
+        );
+        return;
+      }
+
+      if (parsedUnits > positionSnapshot.units) {
+        showTradeNotice(
+          "Units Exceed Holding",
+          `You can sell up to ${positionSnapshot.units} shares for ${normalizedSymbol}.`,
+          "error"
+        );
+        return;
+      }
+
+      sellGrossProfit = (parsedPrice - positionSnapshot.averageBuyPrice) * parsedUnits;
+      sellNetProfit = sellGrossProfit;
+
+      if (deductCgtTaxOnSell && sellGrossProfit > 0) {
+        sellCgtRatePct = CGT_RATE_BY_PROFILE[taxpayerProfile];
+        sellCgtTaxAmount = (sellGrossProfit * sellCgtRatePct) / 100;
+        sellNetProfit = sellGrossProfit - sellCgtTaxAmount;
+        isCgtApplied = true;
+      }
+    }
+
     setIsSubmittingOrder(true);
     try {
       const savedOrder = await saveTradeOrder({
@@ -463,6 +603,39 @@ export default function TransactionsTabScreen() {
         brokerName,
         brokerFeePct,
       });
+
+      if (tradeSide === "sell") {
+        const messageLines = [
+          `You have sold ${savedOrder.units} shares of ${savedOrder.symbol} at ${formatPKRAmount(savedOrder.price)} per share.`,
+          `Estimated Gross P/L: ${formatPKRAmount(sellGrossProfit)}.`,
+        ];
+
+        if (deductCgtTaxOnSell) {
+          if (isCgtApplied) {
+            messageLines.push(
+              `CGT (${getTaxpayerProfileLabel(taxpayerProfile)} ${sellCgtRatePct}%): ${formatPKRAmount(-sellCgtTaxAmount)}.`
+            );
+            messageLines.push(`Estimated Net P/L: ${formatPKRAmount(sellNetProfit)}.`);
+          } else {
+            messageLines.push("CGT not applied because this sell is not in profit.");
+          }
+        } else {
+          messageLines.push("CGT deduction is turned off for this sell order.");
+        }
+
+        messageLines.push("Saved locally on this device.");
+        showTradeNotice("Sold Successfully", messageLines.join("\n"), "success");
+
+        setUnitsInput("");
+        setCustomBrokerNameInput("");
+        setCustomBrokerFeePctInput("");
+        setTradeDateTime(new Date());
+        setHasEditedPrice(false);
+        if (symbolQuote.lastPrice > 0) {
+          setPriceInput(formatEditablePrice(symbolQuote.lastPrice));
+        }
+        return;
+      }
 
       showTradeNotice(
         tradeSide === "buy" ? "Bought Successfully" : "Sold Successfully",
@@ -482,7 +655,16 @@ export default function TransactionsTabScreen() {
       if (symbolQuote.lastPrice > 0) {
         setPriceInput(formatEditablePrice(symbolQuote.lastPrice));
       }
-    } catch {
+    } catch (error) {
+      if (error instanceof InsufficientUnitsError) {
+        showTradeNotice(
+          "Units Exceed Holding",
+          `You can sell up to ${error.availableUnits} shares for ${error.symbol}.`,
+          "error"
+        );
+        return;
+      }
+
       showTradeNotice(
         "Trade Save Failed",
         "Could not save this trade locally. Please try again.",
@@ -495,10 +677,12 @@ export default function TransactionsTabScreen() {
     brokerMode,
     customBrokerFeePctInput,
     customBrokerNameInput,
+    deductCgtTaxOnSell,
     priceInput,
     selectedSymbol,
     savedBrokerSettings,
     symbolQuote.lastPrice,
+    taxpayerProfile,
     tradeDateTime,
     tradeSide,
     unitsInput,
@@ -824,6 +1008,36 @@ export default function TransactionsTabScreen() {
                     Configure Broker Settings
                   </Text>
                 </TouchableOpacity>
+              ) : null}
+
+              {tradeSide === "sell" ? (
+                <View className="rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5">
+                  <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                    CGT Tax
+                  </Text>
+                  <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
+                    {`Profile: ${getTaxpayerProfileLabel(taxpayerProfile)} (${CGT_RATE_BY_PROFILE[taxpayerProfile]}% on profit)`}
+                  </Text>
+
+                  <View className="mt-2 flex-row items-center gap-2">
+                    <ToggleChip
+                      label="Deduct"
+                      selected={deductCgtTaxOnSell}
+                      onPress={() => setDeductCgtTaxOnSell(true)}
+                    />
+                    <ToggleChip
+                      label="Skip"
+                      selected={!deductCgtTaxOnSell}
+                      onPress={() => setDeductCgtTaxOnSell(false)}
+                    />
+                  </View>
+
+                  <Text className="mt-2 text-xs font-semibold text-app-text dark:text-app-textDark">
+                    {deductCgtTaxOnSell
+                      ? "CGT will be deducted only when this sell is in profit."
+                      : "No CGT will be deducted for this sell order."}
+                  </Text>
+                </View>
               ) : null}
             </View>
 
