@@ -1,4 +1,5 @@
 import React from "react";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -117,7 +118,7 @@ function buildSectorAggregates(holdings: PortfolioHolding[]): SectorAggregate[] 
     .sort((firstSector, secondSector) => secondSector.value - firstSector.value);
 }
 
-function FilterChip({
+function ModeSegmentButton({
   label,
   selected,
   onPress,
@@ -131,20 +132,20 @@ function FilterChip({
       activeOpacity={0.88}
       onPress={onPress}
       className={[
-        "rounded-xl border px-3 py-2",
+        "flex-1 rounded-xl px-3 py-2",
         selected
-          ? "border-app-highlight bg-app-highlight dark:border-app-highlightDark dark:bg-app-highlightDark"
-          : "border-app-highlight bg-button-neutral dark:border-app-highlightDark dark:bg-transparent",
+          ? "bg-app-highlight dark:bg-app-highlightDark"
+          : "bg-app-highlight/5 dark:border dark:border-app-highlightDark/30 dark:bg-brand-white/5",
       ]
         .filter(Boolean)
         .join(" ")}
     >
       <Text
         className={[
-          "text-xs font-bold uppercase tracking-wide",
+          "text-[11px] font-semibold",
           selected
             ? "text-brand-white dark:text-brand-purple"
-            : "text-app-highlight dark:text-app-highlightDark",
+            : "text-app-text dark:text-app-textDark",
         ]
           .filter(Boolean)
           .join(" ")}
@@ -186,7 +187,7 @@ function CompactHoldingCard({
     <TouchableOpacity
       activeOpacity={0.9}
       onPress={onPress}
-      className="rounded-2xl border border-app-highlight/15 bg-brand-white px-3 py-3 shadow-sm dark:border-app-highlightDark/25 dark:bg-brand-white/10"
+      className="rounded-2xl bg-brand-white px-3 py-3 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
     >
       <View className="flex-row items-start justify-between">
         <View className="mr-2 flex-1">
@@ -253,7 +254,7 @@ function CompactHoldingCard({
         </View>
       </View>
 
-      <View className="mt-3 flex-row items-center justify-between rounded-xl border border-app-highlight/10 bg-brand-white px-3 py-2 dark:border-app-highlightDark/20 dark:bg-brand-white/5">
+      <View className="mt-3 flex-row items-center justify-between rounded-xl bg-app-highlight/5 px-3 py-2 dark:bg-brand-white/5">
         <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
           {investedLabel}
         </Text>
@@ -284,7 +285,7 @@ function SectorCard({
     <TouchableOpacity
       activeOpacity={0.9}
       onPress={onPress}
-      className="rounded-2xl border border-app-highlight/15 bg-brand-white px-3 py-3 shadow-sm dark:border-app-highlightDark/25 dark:bg-brand-white/10"
+      className="rounded-2xl bg-brand-white px-3 py-3 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
     >
       <View className="flex-row items-start justify-between">
         <View className="mr-2 flex-1">
@@ -329,6 +330,7 @@ export default function PortfolioTabScreen() {
   const isDarkMode = colorScheme === "dark";
   const [holdings, setHoldings] = React.useState<PortfolioHolding[]>([]);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [isFilterPanelVisible, setIsFilterPanelVisible] = React.useState(false);
   const [groupingMode, setGroupingMode] = React.useState<PortfolioGroupingMode>("sectors");
   const [displayMode, setDisplayMode] = React.useState<PortfolioDisplayMode>("percentage");
   const [hasHydratedViewPreferences, setHasHydratedViewPreferences] =
@@ -460,46 +462,68 @@ export default function PortfolioTabScreen() {
         }
       >
         <View className="gap-4">
-          <Text className="text-3xl font-extrabold text-app-text dark:text-app-textDark">
-            Portfolio
-          </Text>
-
-          <View className="rounded-2xl border border-app-highlight/15 bg-brand-white p-3 shadow-sm dark:border-app-highlightDark/25 dark:bg-brand-white/10">
-            <Text className="text-xs font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-              View Mode
+          <View className="flex-row items-center justify-between">
+            <Text className="text-3xl font-extrabold text-app-text dark:text-app-textDark">
+              Portfolio
             </Text>
-            <View className="mt-2 flex-row gap-2">
-              <FilterChip
-                label="Sectors"
-                selected={groupingMode === "sectors"}
-                onPress={() => setGroupingMode("sectors")}
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={() => setIsFilterPanelVisible((currentValue) => !currentValue)}
+              className="flex-row items-center gap-1 rounded-xl bg-app-highlight/10 px-3 py-2 dark:bg-brand-white/10"
+            >
+              <MaterialCommunityIcons
+                name={isFilterPanelVisible ? "close" : "filter-variant"}
+                size={18}
+                color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
               />
-              <FilterChip
-                label="Companies"
-                selected={groupingMode === "companies"}
-                onPress={() => setGroupingMode("companies")}
-              />
-            </View>
-
-            <Text className="mt-3 text-xs font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-              Display Values
-            </Text>
-            <View className="mt-2 flex-row gap-2">
-              <FilterChip
-                label="Percentage"
-                selected={displayMode === "percentage"}
-                onPress={() => setDisplayMode("percentage")}
-              />
-              <FilterChip
-                label="Price"
-                selected={displayMode === "price"}
-                onPress={() => setDisplayMode("price")}
-              />
-            </View>
+              <Text className="text-sm font-semibold text-app-highlight dark:text-app-highlightDark">
+                Filter
+              </Text>
+            </TouchableOpacity>
           </View>
 
+          {isFilterPanelVisible ? (
+            <View className="rounded-2xl bg-brand-white p-3 shadow-sm dark:border dark:border-app-highlightDark/30 dark:bg-brand-white/10">
+              <View className="flex-row items-center justify-between">
+                <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                  Filters
+                </Text>
+                <Text className="text-[11px] font-semibold text-app-text dark:text-app-textDark">
+                  {groupingMode === "sectors" ? "Sectors" : "Companies"} •{" "}
+                  {displayMode === "percentage" ? "%" : "PKR"}
+                </Text>
+              </View>
+
+              <View className="mt-2 flex-row gap-2">
+                <ModeSegmentButton
+                  label="Sectors"
+                  selected={groupingMode === "sectors"}
+                  onPress={() => setGroupingMode("sectors")}
+                />
+                <ModeSegmentButton
+                  label="Companies"
+                  selected={groupingMode === "companies"}
+                  onPress={() => setGroupingMode("companies")}
+                />
+              </View>
+
+              <View className="mt-2 flex-row gap-2">
+                <ModeSegmentButton
+                  label="Percentage"
+                  selected={displayMode === "percentage"}
+                  onPress={() => setDisplayMode("percentage")}
+                />
+                <ModeSegmentButton
+                  label="Price"
+                  selected={displayMode === "price"}
+                  onPress={() => setDisplayMode("price")}
+                />
+              </View>
+            </View>
+          ) : null}
+
           {holdings.length === 0 ? (
-            <View className="rounded-2xl border border-app-highlight/15 bg-brand-white p-4 shadow-sm dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+            <View className="rounded-2xl bg-brand-white p-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
               <Text className="text-base font-semibold text-app-text dark:text-app-textDark">
                 No holdings yet.
               </Text>

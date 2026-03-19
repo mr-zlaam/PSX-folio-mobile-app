@@ -67,7 +67,6 @@ export default function SettingsTabScreen() {
   const isDarkMode = colorScheme === "dark";
   const currentTheme: AppTheme = isDarkMode ? "dark" : "light";
   const [isRefreshing, setIsRefreshing] = React.useState(false);
-  const [lastSyncAt, setLastSyncAt] = React.useState<string | null>(null);
   const [brokerSettings, setBrokerSettingsState] = React.useState<BrokerSettings | null>(
     null
   );
@@ -91,7 +90,6 @@ export default function SettingsTabScreen() {
         getLatestSymbols(),
         loadBrokerSettings(),
       ]);
-      setLastSyncAt(new Date().toISOString());
     } finally {
       setIsRefreshing(false);
     }
@@ -189,19 +187,6 @@ export default function SettingsTabScreen() {
             </TouchableOpacity>
           </View>
 
-          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
-            <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-              Data Sync
-            </Text>
-            <Text className="mt-2 text-sm text-app-text dark:text-app-textDark">
-              Pull down to refresh latest market snapshots and symbol cache.
-            </Text>
-            <Text className="mt-3 text-sm font-semibold text-app-highlight dark:text-app-highlightDark">
-              {lastSyncAt
-                ? `Last refreshed: ${new Date(lastSyncAt).toLocaleString()}`
-                : "No manual refresh yet."}
-            </Text>
-          </View>
         </View>
       </ScrollView>
     </SafeAreaView>

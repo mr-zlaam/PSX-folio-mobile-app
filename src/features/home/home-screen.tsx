@@ -130,6 +130,10 @@ export default function HomeScreen() {
     });
   }, [router]);
 
+  const handleOpenPortfolio = React.useCallback(() => {
+    router.push("/(tabs)/portfolio");
+  }, [router]);
+
   const applyHomeSnapshot = React.useCallback((holdings: PortfolioHolding[]) => {
     const nextHomeData = buildHomeSnapshotFromHoldings(holdings);
     setViewModel(buildHomeViewModel(nextHomeData.snapshot));
@@ -223,7 +227,7 @@ export default function HomeScreen() {
         contentContainerStyle={{
           paddingTop: 14,
           paddingHorizontal: 20,
-          paddingBottom: insets.bottom + 96,
+          paddingBottom: insets.bottom + 24,
         }}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -239,7 +243,7 @@ export default function HomeScreen() {
         }
       >
         <View className="gap-7">
-          <View className="rounded-3xl border border-app-highlight/15 bg-brand-white px-4 py-4 shadow-sm dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+          <View className="rounded-3xl bg-brand-white px-4 py-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
             <Text className="text-xs font-bold uppercase tracking-wider text-app-highlight dark:text-app-highlightDark">
               Current Profit
             </Text>
@@ -258,7 +262,11 @@ export default function HomeScreen() {
             </Text>
           </View>
 
-          <View className="rounded-3xl border border-app-highlight/15 bg-brand-white p-4 shadow-sm dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+          <TouchableOpacity
+            activeOpacity={0.94}
+            onPress={handleOpenPortfolio}
+            className="rounded-3xl bg-brand-white p-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
+          >
             <View className="flex-row items-center justify-between gap-3">
               <View className="self-start rounded-xl bg-app-highlight px-3 py-2 dark:bg-app-highlightDark">
                 <Text className="text-xs font-bold uppercase tracking-wider text-brand-white dark:text-brand-purple">
@@ -280,7 +288,7 @@ export default function HomeScreen() {
               {portfolioSummaryItems.map((item) => (
                 <View
                   key={item.key}
-                  className="rounded-2xl border border-app-highlight/10 bg-brand-white px-4 py-3 dark:border-app-highlightDark/20 dark:bg-brand-white/5"
+                  className="rounded-2xl bg-app-highlight/5 px-4 py-3 dark:bg-brand-white/5"
                 >
                   <View className="flex-row items-start justify-between">
                     <View className="mr-3 flex-1">
@@ -306,9 +314,13 @@ export default function HomeScreen() {
                 </View>
               ))}
             </View>
-          </View>
+          </TouchableOpacity>
 
-          <View className="rounded-3xl border border-app-highlight/15 bg-brand-white p-4 shadow-sm dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+          <TouchableOpacity
+            activeOpacity={0.94}
+            onPress={handleOpenPortfolio}
+            className="rounded-3xl bg-brand-white p-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
+          >
             <View className="flex-row items-center justify-between gap-3">
               <View className="self-start rounded-xl bg-app-highlight px-3 py-2 dark:bg-app-highlightDark">
                 <Text className="text-xs font-bold uppercase tracking-wider text-brand-white dark:text-brand-purple">
@@ -341,7 +353,7 @@ export default function HomeScreen() {
                 return (
                   <View
                     key={insight.label}
-                    className="flex-row items-center justify-between rounded-2xl border border-app-highlight/10 bg-brand-white px-4 py-3 dark:border-app-highlightDark/20 dark:bg-brand-white/5"
+                    className="flex-row items-center justify-between rounded-2xl bg-app-highlight/5 px-4 py-3 dark:bg-brand-white/5"
                   >
                     <View className="mr-3 flex-1">
                       <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
@@ -366,7 +378,7 @@ export default function HomeScreen() {
                 );
               })}
             </View>
-          </View>
+          </TouchableOpacity>
         </View>
       </ScrollView>
     </SafeAreaView>
