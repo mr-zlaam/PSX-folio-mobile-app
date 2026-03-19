@@ -13,6 +13,10 @@ export type TradeMutationEvent =
       dividendId: string;
       symbol: string;
       createdAt: string;
+    }
+  | {
+      type: "portfolio-reset";
+      createdAt: string;
     };
 
 type TradeMutationListener = (event: TradeMutationEvent) => void;
@@ -48,6 +52,13 @@ export function emitDividendMutation(event: {
     type: "dividend-created",
     dividendId: event.dividendId,
     symbol: event.symbol,
+    createdAt: event.createdAt,
+  });
+}
+
+export function emitPortfolioReset(event: { createdAt: string }): void {
+  emitTradeMutation({
+    type: "portfolio-reset",
     createdAt: event.createdAt,
   });
 }

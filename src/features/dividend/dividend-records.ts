@@ -196,3 +196,12 @@ export async function getTotalDividendFinalAmount(): Promise<number> {
   return records.reduce((sum, record) => sum + toPositiveFiniteNumber(record.finalAmount), 0);
 }
 
+export async function clearSavedDividendRecords(): Promise<void> {
+  const clearedStore: DividendStore = {
+    version: 1,
+    records: [],
+    updatedAt: new Date().toISOString(),
+  };
+
+  await writeStore(clearedStore);
+}

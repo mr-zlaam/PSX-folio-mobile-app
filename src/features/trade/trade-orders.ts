@@ -234,3 +234,13 @@ export async function getSavedTradeOrders(): Promise<TradeOrderRecord[]> {
   const store = await readStore();
   return store.orders;
 }
+
+export async function clearSavedTradeOrders(): Promise<void> {
+  const clearedStore: TradeOrdersStore = {
+    version: 1,
+    orders: [],
+    updatedAt: new Date().toISOString(),
+  };
+
+  await writeStore(clearedStore);
+}
