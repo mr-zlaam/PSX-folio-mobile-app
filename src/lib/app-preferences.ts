@@ -5,6 +5,10 @@ export type AppTheme = "light" | "dark";
 export type HomeInsightDisplayModePreference = "percentage" | "price";
 export type PortfolioGroupingModePreference = "sectors" | "companies";
 export type PortfolioDisplayModePreference = "percentage" | "price";
+export type BrokerSettings = {
+  brokerName: string;
+  transactionFeePct: number;
+};
 
 const STORAGE_KEYS = {
   onboardingComplete: "@psx-portfolio/onboarding-complete",
@@ -12,6 +16,7 @@ const STORAGE_KEYS = {
   homeInsightDisplayMode: "@psx-portfolio/home-insight-display-mode",
   portfolioGroupingMode: "@psx-portfolio/portfolio-grouping-mode",
   portfolioDisplayMode: "@psx-portfolio/portfolio-display-mode",
+  brokerSettings: "@psx-portfolio/broker-settings",
 } as const;
 
 const HOME_INSIGHT_DISPLAY_MODE_VALUES: readonly HomeInsightDisplayModePreference[] = [
@@ -145,6 +150,37 @@ async function getEnumPreference<T extends string>(
   return defaultValue;
 }
 
+function parseBrokerSettings(rawValue: string | null): BrokerSettings | null {
+  if (!rawValue) {
+    return null;
+  }
+
+  try {
+    const parsedValue = JSON.parse(rawValue) as Partial<BrokerSettings>;
+    if (
+      typeof parsedValue.brokerName !== "string" ||
+      parsedValue.brokerName.trim().length === 0
+    ) {
+      return null;
+    }
+
+    if (
+      typeof parsedValue.transactionFeePct !== "number" ||
+      !Number.isFinite(parsedValue.transactionFeePct) ||
+      parsedValue.transactionFeePct < 0
+    ) {
+      return null;
+    }
+
+    return {
+      brokerName: parsedValue.brokerName.trim(),
+      transactionFeePct: parsedValue.transactionFeePct,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export async function getOnboardingComplete(): Promise<boolean> {
   const storedValue = await getStoredItem(STORAGE_KEYS.onboardingComplete);
   return storedValue === "true";
@@ -210,4 +246,32 @@ export async function setPortfolioDisplayModePreference(
   mode: PortfolioDisplayModePreference
 ): Promise<void> {
   await setStoredItem(STORAGE_KEYS.portfolioDisplayMode, mode);
+}
+
+export async function getBrokerSettings(): Promise<BrokerSettings | null> {
+  const storedValue = await getStoredItem(STORAGE_KEYS.brokerSettings);
+  return parseBrokerSettings(storedValue);
+}
+
+export async function setBrokerSettings(
+  brokerSettings: BrokerSettings
+): Promise<void> {
+  const normalizedBrokerName = brokerSettings.brokerName.trim();
+  const normalizedTransactionFeePct = brokerSettings.transactionFeePct;
+
+  if (
+    normalizedBrokerName.length === 0 ||
+    !Number.isFinite(normalizedTransactionFeePct) ||
+    normalizedTransactionFeePct < 0
+  ) {
+    throw new Error("Invalid broker settings");
+  }
+
+  await setStoredItem(
+    STORAGE_KEYS.brokerSettings,
+    JSON.stringify({
+      brokerName: normalizedBrokerName,
+      transactionFeePct: normalizedTransactionFeePct,
+    })
+  );
 }

@@ -8,6 +8,7 @@ export default function RootLayout() {
       <Stack.Screen name="(tabs)" />
       <Stack.Screen name="portfolio-position" />
       <Stack.Screen name="portfolio-sector" />
+      <Stack.Screen name="broker-settings" />
     </Stack>
   );
 }

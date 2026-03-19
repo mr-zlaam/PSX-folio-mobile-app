@@ -239,7 +239,7 @@ export default function HomeScreen() {
         }
       >
         <View className="gap-7">
-          <View className="rounded-3xl bg-brand-white/95 px-4 py-4 shadow-sm dark:bg-brand-white/10">
+          <View className="rounded-3xl border border-app-highlight/15 bg-brand-white px-4 py-4 shadow-sm dark:border-app-highlightDark/25 dark:bg-brand-white/10">
             <Text className="text-xs font-bold uppercase tracking-wider text-app-highlight dark:text-app-highlightDark">
               Current Profit
             </Text>
@@ -258,7 +258,7 @@ export default function HomeScreen() {
             </Text>
           </View>
 
-          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
+          <View className="rounded-3xl border border-app-highlight/15 bg-brand-white p-4 shadow-sm dark:border-app-highlightDark/25 dark:bg-brand-white/10">
             <View className="flex-row items-center justify-between gap-3">
               <View className="self-start rounded-xl bg-app-highlight px-3 py-2 dark:bg-app-highlightDark">
                 <Text className="text-xs font-bold uppercase tracking-wider text-brand-white dark:text-brand-purple">
@@ -278,7 +278,10 @@ export default function HomeScreen() {
 
             <View className="mt-4 gap-3">
               {portfolioSummaryItems.map((item) => (
-                <View key={item.key} className="rounded-2xl bg-brand-white/70 px-4 py-3 dark:bg-brand-white/5">
+                <View
+                  key={item.key}
+                  className="rounded-2xl border border-app-highlight/10 bg-brand-white px-4 py-3 dark:border-app-highlightDark/20 dark:bg-brand-white/5"
+                >
                   <View className="flex-row items-start justify-between">
                     <View className="mr-3 flex-1">
                       <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
@@ -305,7 +308,7 @@ export default function HomeScreen() {
             </View>
           </View>
 
-          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
+          <View className="rounded-3xl border border-app-highlight/15 bg-brand-white p-4 shadow-sm dark:border-app-highlightDark/25 dark:bg-brand-white/10">
             <View className="flex-row items-center justify-between gap-3">
               <View className="self-start rounded-xl bg-app-highlight px-3 py-2 dark:bg-app-highlightDark">
                 <Text className="text-xs font-bold uppercase tracking-wider text-brand-white dark:text-brand-purple">
@@ -338,7 +341,7 @@ export default function HomeScreen() {
                 return (
                   <View
                     key={insight.label}
-                    className="flex-row items-center justify-between rounded-2xl bg-brand-white/70 px-4 py-3 dark:bg-brand-white/5"
+                    className="flex-row items-center justify-between rounded-2xl border border-app-highlight/10 bg-brand-white px-4 py-3 dark:border-app-highlightDark/20 dark:bg-brand-white/5"
                   >
                     <View className="mr-3 flex-1">
                       <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">

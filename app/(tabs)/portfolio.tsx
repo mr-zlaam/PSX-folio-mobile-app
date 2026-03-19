@@ -186,7 +186,7 @@ function CompactHoldingCard({
     <TouchableOpacity
       activeOpacity={0.9}
       onPress={onPress}
-      className="rounded-2xl bg-brand-white/95 px-3 py-3 shadow-sm dark:bg-brand-white/10"
+      className="rounded-2xl border border-app-highlight/15 bg-brand-white px-3 py-3 shadow-sm dark:border-app-highlightDark/25 dark:bg-brand-white/10"
     >
       <View className="flex-row items-start justify-between">
         <View className="mr-2 flex-1">
@@ -253,7 +253,7 @@ function CompactHoldingCard({
         </View>
       </View>
 
-      <View className="mt-3 flex-row items-center justify-between rounded-xl bg-brand-white/70 px-3 py-2 dark:bg-brand-white/5">
+      <View className="mt-3 flex-row items-center justify-between rounded-xl border border-app-highlight/10 bg-brand-white px-3 py-2 dark:border-app-highlightDark/20 dark:bg-brand-white/5">
         <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
           {investedLabel}
         </Text>
@@ -284,7 +284,7 @@ function SectorCard({
     <TouchableOpacity
       activeOpacity={0.9}
       onPress={onPress}
-      className="rounded-2xl bg-brand-white/95 px-3 py-3 shadow-sm dark:bg-brand-white/10"
+      className="rounded-2xl border border-app-highlight/15 bg-brand-white px-3 py-3 shadow-sm dark:border-app-highlightDark/25 dark:bg-brand-white/10"
     >
       <View className="flex-row items-start justify-between">
         <View className="mr-2 flex-1">
@@ -464,7 +464,7 @@ export default function PortfolioTabScreen() {
             Portfolio
           </Text>
 
-          <View className="rounded-2xl bg-brand-white/95 p-3 shadow-sm dark:bg-brand-white/10">
+          <View className="rounded-2xl border border-app-highlight/15 bg-brand-white p-3 shadow-sm dark:border-app-highlightDark/25 dark:bg-brand-white/10">
             <Text className="text-xs font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
               View Mode
             </Text>
@@ -499,7 +499,7 @@ export default function PortfolioTabScreen() {
           </View>
 
           {holdings.length === 0 ? (
-            <View className="rounded-2xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
+            <View className="rounded-2xl border border-app-highlight/15 bg-brand-white p-4 shadow-sm dark:border-app-highlightDark/25 dark:bg-brand-white/10">
               <Text className="text-base font-semibold text-app-text dark:text-app-textDark">
                 No holdings yet.
               </Text>

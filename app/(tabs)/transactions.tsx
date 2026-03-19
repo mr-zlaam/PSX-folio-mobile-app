@@ -9,6 +9,7 @@ import {
   View,
 } from "react-native";
 import { useLocalSearchParams, useRouter } from "expo-router";
+import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import DateTimePicker, {
@@ -31,11 +32,14 @@ import {
   formatPKRAmount,
   formatSignedPercentage,
 } from "@/src/features/home/home-formatters";
+import {
+  BrokerSettings,
+  getBrokerSettings,
+} from "@/src/lib/app-preferences";
 import { APP_COLORS } from "@/src/theme/colors";
 import { saveTradeOrder } from "@/src/features/trade/trade-orders";
 
 const TRADE_QUOTE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
-const SAVED_BROKER_LABEL = "Saved broker (from settings)";
 
 type TradeSide = "buy" | "sell";
 type BrokerMode = "saved" | "custom";
@@ -197,6 +201,8 @@ export default function TransactionsTabScreen() {
     React.useState(false);
   const [customBrokerNameInput, setCustomBrokerNameInput] = React.useState("");
   const [customBrokerFeePctInput, setCustomBrokerFeePctInput] = React.useState("");
+  const [savedBrokerSettings, setSavedBrokerSettings] =
+    React.useState<BrokerSettings | null>(null);
   const [hasEditedPrice, setHasEditedPrice] = React.useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = React.useState(false);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
@@ -301,6 +307,17 @@ export default function TransactionsTabScreen() {
     void refreshSymbols();
   }, [refreshSymbols]);
 
+  const loadSavedBrokerSettings = React.useCallback(async () => {
+    const brokerSettings = await getBrokerSettings();
+    setSavedBrokerSettings(brokerSettings);
+  }, []);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      void loadSavedBrokerSettings();
+    }, [loadSavedBrokerSettings])
+  );
+
   React.useEffect(() => {
     let isMounted = true;
     const normalizedSymbol = selectedSymbol.trim().toUpperCase();
@@ -397,6 +414,20 @@ export default function TransactionsTabScreen() {
     let brokerName: string | null = null;
     let brokerFeePct: number | null = null;
 
+    if (brokerMode === "saved") {
+      if (!savedBrokerSettings) {
+        showTradeNotice(
+          "Saved Broker Missing",
+          "Please configure Broker Settings first, or switch to Custom mode.",
+          "error"
+        );
+        return;
+      }
+
+      brokerName = savedBrokerSettings.brokerName;
+      brokerFeePct = savedBrokerSettings.transactionFeePct;
+    }
+
     if (brokerMode === "custom") {
       const normalizedBrokerName = customBrokerNameInput.trim();
       if (normalizedBrokerName.length === 0) {
@@ -466,6 +497,7 @@ export default function TransactionsTabScreen() {
     customBrokerNameInput,
     priceInput,
     selectedSymbol,
+    savedBrokerSettings,
     symbolQuote.lastPrice,
     tradeDateTime,
     tradeSide,
@@ -745,7 +777,7 @@ export default function TransactionsTabScreen() {
                 {brokerMode === "saved" ? (
                   <FieldInput
                     label="Broker"
-                    value={SAVED_BROKER_LABEL}
+                    value={savedBrokerSettings?.brokerName ?? "Not configured"}
                     placeholderTextColor={inputPlaceholderTextColor}
                     editable={false}
                   />
@@ -771,12 +803,28 @@ export default function TransactionsTabScreen() {
                 ) : (
                   <FieldInput
                     label="Broker Fee %"
-                    value="From settings"
+                    value={
+                      savedBrokerSettings
+                        ? `${savedBrokerSettings.transactionFeePct}%`
+                        : "Not configured"
+                    }
                     placeholderTextColor={inputPlaceholderTextColor}
                     editable={false}
                   />
                 )}
               </View>
+
+              {brokerMode === "saved" && !savedBrokerSettings ? (
+                <TouchableOpacity
+                  activeOpacity={0.88}
+                  onPress={() => router.push("/broker-settings")}
+                  className="self-start rounded-xl border border-app-highlight px-3 py-2 dark:border-app-highlightDark"
+                >
+                  <Text className="text-xs font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                    Configure Broker Settings
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
             </View>
 
             <View className="mt-5">
