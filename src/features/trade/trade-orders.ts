@@ -1,4 +1,5 @@
 import * as FileSystem from "expo-file-system/legacy";
+import { emitTradeMutation } from "@/src/features/trade/trade-events";
 
 export type TradeSide = "buy" | "sell";
 export type BrokerMode = "saved" | "custom";
@@ -130,6 +131,13 @@ export async function saveTradeOrder(
   };
 
   await writeStore(nextStore);
+  emitTradeMutation({
+    type: "trade-created",
+    orderId: record.id,
+    symbol: record.symbol,
+    side: record.side,
+    createdAt: record.createdAt,
+  });
   return record;
 }
 

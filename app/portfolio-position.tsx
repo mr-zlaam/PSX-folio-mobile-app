@@ -11,6 +11,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import AppButton from "@/components/ui/app-button";
+import StockLineChart from "@/components/charts/stock-line-chart";
 import {
   getPortfolioHoldingBySymbol,
   PortfolioHolding,
@@ -19,9 +20,26 @@ import {
   formatPKRAmount,
   formatSignedPercentage,
 } from "@/src/features/home/home-formatters";
+import {
+  getCachedStockChartSeries,
+  getLatestStockChartSeries,
+  getStockChartSeriesFallback,
+  StockChartPoint,
+  StockChartRange,
+  StockChartSeries,
+} from "@/src/features/trade/stock-chart-data";
 import { APP_COLORS } from "@/src/theme/colors";
 
 const POSITION_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const CHART_RANGE_OPTIONS: StockChartRange[] = [
+  "1D",
+  "1M",
+  "6M",
+  "YTD",
+  "1Y",
+  "3Y",
+  "5Y",
+];
 
 function getValueToneClassName(value: number): string {
   if (value > 0) {
@@ -52,6 +70,64 @@ function formatCompactVolume(value: number): string {
   return Math.round(value).toLocaleString("en-PK");
 }
 
+function formatPointTimestamp(
+  timestamp: number,
+  range: StockChartRange
+): string {
+  const pointDate = new Date(timestamp);
+
+  if (range === "1D") {
+    return pointDate.toLocaleTimeString("en-PK", {
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  }
+
+  return pointDate.toLocaleDateString("en-PK", {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  });
+}
+
+function ChartRangeChip({
+  label,
+  selected,
+  onPress,
+}: {
+  label: StockChartRange;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.88}
+      onPress={onPress}
+      className={[
+        "rounded-xl border px-3 py-2",
+        selected
+          ? "border-app-highlight bg-app-highlight dark:border-app-highlightDark dark:bg-app-highlightDark"
+          : "border-app-highlight bg-button-neutral dark:border-app-highlightDark dark:bg-transparent",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <Text
+        className={[
+          "text-xs font-bold uppercase tracking-wide",
+          selected
+            ? "text-brand-white dark:text-brand-purple"
+            : "text-app-highlight dark:text-app-highlightDark",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 export default function PortfolioPositionScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -68,6 +144,14 @@ export default function PortfolioPositionScreen() {
   const [holding, setHolding] = React.useState<PortfolioHolding | null>(null);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [isInitialLoading, setIsInitialLoading] = React.useState(true);
+  const [chartRange, setChartRange] = React.useState<StockChartRange>("1D");
+  const [chartSeries, setChartSeries] = React.useState<StockChartSeries>(() =>
+    getStockChartSeriesFallback("1D")
+  );
+  const [isChartLoading, setIsChartLoading] = React.useState(true);
+  const [selectedChartPoint, setSelectedChartPoint] =
+    React.useState<StockChartPoint | null>(null);
+  const chartRequestIdRef = React.useRef(0);
 
   const refreshPosition = React.useCallback(
     async (showLoader = false) => {
@@ -92,15 +176,6 @@ export default function PortfolioPositionScreen() {
     [normalizedSymbol]
   );
 
-  const handlePullToRefresh = React.useCallback(async () => {
-    setIsRefreshing(true);
-    try {
-      await refreshPosition();
-    } finally {
-      setIsRefreshing(false);
-    }
-  }, [refreshPosition]);
-
   const handleTradeAction = React.useCallback(
     (side: "buy" | "sell") => {
       if (!holding) {
@@ -119,6 +194,50 @@ export default function PortfolioPositionScreen() {
     [holding, router]
   );
 
+  const refreshChart = React.useCallback(
+    async (range: StockChartRange, showLoader = false) => {
+      const requestId = chartRequestIdRef.current + 1;
+      chartRequestIdRef.current = requestId;
+
+      if (showLoader) {
+        setIsChartLoading(true);
+      }
+
+      try {
+        if (normalizedSymbol.length === 0) {
+          if (requestId === chartRequestIdRef.current) {
+            setChartSeries(getStockChartSeriesFallback(range));
+          }
+          return;
+        }
+
+        const cachedSeries = await getCachedStockChartSeries(normalizedSymbol, range);
+        if (requestId === chartRequestIdRef.current) {
+          setChartSeries(cachedSeries);
+        }
+
+        const latestSeries = await getLatestStockChartSeries(normalizedSymbol, range);
+        if (requestId === chartRequestIdRef.current) {
+          setChartSeries(latestSeries);
+        }
+      } finally {
+        if (showLoader && requestId === chartRequestIdRef.current) {
+          setIsChartLoading(false);
+        }
+      }
+    },
+    [normalizedSymbol]
+  );
+
+  const handlePullToRefresh = React.useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await Promise.all([refreshPosition(), refreshChart(chartRange)]);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [chartRange, refreshChart, refreshPosition]);
+
   React.useEffect(() => {
     void refreshPosition(true);
     const intervalId = setInterval(() => {
@@ -129,6 +248,47 @@ export default function PortfolioPositionScreen() {
       clearInterval(intervalId);
     };
   }, [refreshPosition]);
+
+  React.useEffect(() => {
+    setSelectedChartPoint(null);
+    void refreshChart(chartRange, true);
+    const intervalId = setInterval(() => {
+      void refreshChart(chartRange);
+    }, POSITION_REFRESH_INTERVAL_MS);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [chartRange, refreshChart]);
+
+  const chartToneValue = React.useMemo(() => {
+    if (chartSeries.points.length < 2) {
+      return 0;
+    }
+
+    const firstPrice = chartSeries.points[0].price;
+    const lastPrice = chartSeries.points[chartSeries.points.length - 1].price;
+    return lastPrice - firstPrice;
+  }, [chartSeries.points]);
+
+  const chartLineColor = React.useMemo(() => {
+    if (chartToneValue > 0) {
+      return APP_COLORS.success.green;
+    }
+
+    if (chartToneValue < 0) {
+      return APP_COLORS.brand.red;
+    }
+
+    return isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple;
+  }, [chartToneValue, isDarkMode]);
+
+  const chartGridColor = isDarkMode
+    ? APP_COLORS.text.placeholderDark
+    : APP_COLORS.text.placeholderLight;
+
+  const chartFirstPoint = chartSeries.points[0] ?? null;
+  const chartLastPoint = chartSeries.points[chartSeries.points.length - 1] ?? null;
 
   return (
     <SafeAreaView
@@ -316,6 +476,101 @@ export default function PortfolioPositionScreen() {
                     onPress={() => handleTradeAction("sell")}
                   />
                 </View>
+              </View>
+
+              <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
+                <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                  Performance
+                </Text>
+
+                <View className="mt-3 flex-row flex-wrap gap-2">
+                  {CHART_RANGE_OPTIONS.map((rangeOption) => (
+                    <ChartRangeChip
+                      key={rangeOption}
+                      label={rangeOption}
+                      selected={chartRange === rangeOption}
+                      onPress={() => setChartRange(rangeOption)}
+                    />
+                  ))}
+                </View>
+
+                <View className="mt-4">
+                  {isChartLoading ? (
+                    <View className="items-center justify-center rounded-2xl bg-brand-white/70 p-6 dark:bg-brand-white/5">
+                      <ActivityIndicator
+                        size="small"
+                        color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
+                      />
+                      <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
+                        Loading chart...
+                      </Text>
+                    </View>
+                  ) : (
+                    <StockLineChart
+                      points={chartSeries.points}
+                      lineColor={chartLineColor}
+                      gridColor={chartGridColor}
+                      emptyLabel="No performance data for this range"
+                      onPointSelected={setSelectedChartPoint}
+                    />
+                  )}
+                </View>
+
+                {selectedChartPoint ? (
+                  <View className="mt-3 rounded-2xl bg-brand-white/70 px-3 py-2 dark:bg-brand-white/5">
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                        Selected Point
+                      </Text>
+                      <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                        {formatPKRAmount(selectedChartPoint.price)}
+                      </Text>
+                    </View>
+                    <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
+                      {formatPointTimestamp(selectedChartPoint.timestamp, chartRange)}
+                    </Text>
+                  </View>
+                ) : null}
+
+                {chartFirstPoint && chartLastPoint ? (
+                  <View className="mt-3 gap-1">
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                        Start
+                      </Text>
+                      <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                        {formatPKRAmount(chartFirstPoint.price)}
+                      </Text>
+                    </View>
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                        Latest
+                      </Text>
+                      <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                        {formatPKRAmount(chartLastPoint.price)}
+                      </Text>
+                    </View>
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                        Change
+                      </Text>
+                      <Text
+                        className={[
+                          "text-sm font-bold",
+                          getValueToneClassName(chartToneValue),
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                      >
+                        {formatSignedPercentage(
+                          chartFirstPoint.price === 0
+                            ? 0
+                            : (chartToneValue / chartFirstPoint.price) * 100
+                        )}
+                      </Text>
+                    </View>
+                  </View>
+                ) : null}
               </View>
             </>
           )}

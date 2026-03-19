@@ -8,10 +8,17 @@ import {
   getPortfolioHoldingsWithLatestQuotes,
   PortfolioHolding,
 } from "@/src/features/portfolio/portfolio-data";
+import { subscribeToTradeMutations } from "@/src/features/trade/trade-events";
 import {
   formatPKRAmount,
   formatSignedPercentage,
 } from "@/src/features/home/home-formatters";
+import {
+  getPortfolioDisplayModePreference,
+  getPortfolioGroupingModePreference,
+  setPortfolioDisplayModePreference,
+  setPortfolioGroupingModePreference,
+} from "@/src/lib/app-preferences";
 import { APP_COLORS } from "@/src/theme/colors";
 
 const PORTFOLIO_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
@@ -151,10 +158,12 @@ function FilterChip({
 function CompactHoldingCard({
   holding,
   displayMode,
+  totalInvested,
   onPress,
 }: {
   holding: PortfolioHolding;
   displayMode: PortfolioDisplayMode;
+  totalInvested: number;
   onPress: () => void;
 }) {
   const changeValueText =
@@ -165,6 +174,13 @@ function CompactHoldingCard({
     displayMode === "price"
       ? getValueToneClassName(holding.priceDiff)
       : getValueToneClassName(holding.priceDiffPct);
+  const investedSharePct =
+    totalInvested === 0 ? 0 : (holding.invested / totalInvested) * 100;
+  const investedValueText =
+    displayMode === "price"
+      ? formatPKRAmount(holding.invested)
+      : formatUnsignedPercentage(investedSharePct);
+  const investedLabel = displayMode === "price" ? "Invested" : "Invested Share";
 
   return (
     <TouchableOpacity
@@ -236,6 +252,15 @@ function CompactHoldingCard({
           </Text>
         </View>
       </View>
+
+      <View className="mt-3 flex-row items-center justify-between rounded-xl bg-brand-white/70 px-3 py-2 dark:bg-brand-white/5">
+        <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+          {investedLabel}
+        </Text>
+        <Text className="text-sm font-extrabold text-app-text dark:text-app-textDark">
+          {investedValueText}
+        </Text>
+      </View>
     </TouchableOpacity>
   );
 }
@@ -306,7 +331,13 @@ export default function PortfolioTabScreen() {
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [groupingMode, setGroupingMode] = React.useState<PortfolioGroupingMode>("sectors");
   const [displayMode, setDisplayMode] = React.useState<PortfolioDisplayMode>("percentage");
+  const [hasHydratedViewPreferences, setHasHydratedViewPreferences] =
+    React.useState(false);
   const sectorAggregates = React.useMemo(() => buildSectorAggregates(holdings), [holdings]);
+  const totalInvested = React.useMemo(
+    () => holdings.reduce((sum, holding) => sum + holding.invested, 0),
+    [holdings]
+  );
 
   const refreshPortfolio = React.useCallback(async () => {
     const cachedHoldings = await getPortfolioHoldingsWithCachedQuotes();
@@ -326,6 +357,40 @@ export default function PortfolioTabScreen() {
   }, [refreshPortfolio]);
 
   React.useEffect(() => {
+    let isMounted = true;
+
+    async function hydrateViewPreferences() {
+      const [savedGroupingMode, savedDisplayMode] = await Promise.all([
+        getPortfolioGroupingModePreference(),
+        getPortfolioDisplayModePreference(),
+      ]);
+
+      if (!isMounted) {
+        return;
+      }
+
+      setGroupingMode(savedGroupingMode);
+      setDisplayMode(savedDisplayMode);
+      setHasHydratedViewPreferences(true);
+    }
+
+    void hydrateViewPreferences();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (!hasHydratedViewPreferences) {
+      return;
+    }
+
+    void setPortfolioGroupingModePreference(groupingMode);
+    void setPortfolioDisplayModePreference(displayMode);
+  }, [displayMode, groupingMode, hasHydratedViewPreferences]);
+
+  React.useEffect(() => {
     void refreshPortfolio();
     const intervalId = setInterval(() => {
       void refreshPortfolio();
@@ -334,6 +399,14 @@ export default function PortfolioTabScreen() {
     return () => {
       clearInterval(intervalId);
     };
+  }, [refreshPortfolio]);
+
+  React.useEffect(() => {
+    const unsubscribe = subscribeToTradeMutations(() => {
+      void refreshPortfolio();
+    });
+
+    return unsubscribe;
   }, [refreshPortfolio]);
 
   const handleOpenHolding = React.useCallback(
@@ -441,6 +514,7 @@ export default function PortfolioTabScreen() {
                   key={holding.symbol}
                   holding={holding}
                   displayMode={displayMode}
+                  totalInvested={totalInvested}
                   onPress={() => handleOpenHolding(holding.symbol)}
                 />
               ))}

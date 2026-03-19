@@ -22,6 +22,11 @@ import {
   getPortfolioHoldingsWithLatestQuotes,
   PortfolioHolding,
 } from "@/src/features/portfolio/portfolio-data";
+import { subscribeToTradeMutations } from "@/src/features/trade/trade-events";
+import {
+  getHomeInsightDisplayModePreference,
+  setHomeInsightDisplayModePreference,
+} from "@/src/lib/app-preferences";
 import { APP_COLORS } from "@/src/theme/colors";
 
 const HOME_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
@@ -114,6 +119,7 @@ export default function HomeScreen() {
   const [insightDisplayValues, setInsightDisplayValues] =
     React.useState<InsightDisplayValues>(DEFAULT_INSIGHT_DISPLAY_VALUES);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [hasHydratedInsightMode, setHasHydratedInsightMode] = React.useState(false);
 
   const handleTradePress = React.useCallback(() => {
     router.push({
@@ -148,6 +154,34 @@ export default function HomeScreen() {
   }, [refreshHomeSnapshot]);
 
   React.useEffect(() => {
+    let isMounted = true;
+
+    async function hydrateInsightMode() {
+      const savedInsightMode = await getHomeInsightDisplayModePreference();
+      if (!isMounted) {
+        return;
+      }
+
+      setInsightMode(savedInsightMode);
+      setHasHydratedInsightMode(true);
+    }
+
+    void hydrateInsightMode();
+
+    return () => {
+      isMounted = false;
+    };
+  }, []);
+
+  React.useEffect(() => {
+    if (!hasHydratedInsightMode) {
+      return;
+    }
+
+    void setHomeInsightDisplayModePreference(insightMode);
+  }, [hasHydratedInsightMode, insightMode]);
+
+  React.useEffect(() => {
     void refreshHomeSnapshot();
     const intervalId = setInterval(() => {
       void refreshHomeSnapshot();
@@ -156,6 +190,14 @@ export default function HomeScreen() {
     return () => {
       clearInterval(intervalId);
     };
+  }, [refreshHomeSnapshot]);
+
+  React.useEffect(() => {
+    const unsubscribe = subscribeToTradeMutations(() => {
+      void refreshHomeSnapshot();
+    });
+
+    return unsubscribe;
   }, [refreshHomeSnapshot]);
 
   const profitSummaryItem = React.useMemo(

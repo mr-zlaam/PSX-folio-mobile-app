@@ -1,6 +1,5 @@
 import React from "react";
 import {
-  Alert,
   Platform,
   RefreshControl,
   ScrollView,
@@ -16,6 +15,9 @@ import DateTimePicker, {
   DateTimePickerEvent,
 } from "@react-native-community/datetimepicker";
 import AppButton from "@/components/ui/app-button";
+import AppFeedbackModal, {
+  AppFeedbackModalTone,
+} from "@/components/ui/app-feedback-modal";
 import {
   getCachedSymbolQuote,
   getCachedSymbols,
@@ -38,6 +40,11 @@ const SAVED_BROKER_LABEL = "Saved broker (from settings)";
 type TradeSide = "buy" | "sell";
 type BrokerMode = "saved" | "custom";
 type TradeDateTimePickerMode = "date" | "time";
+type TradeNoticeState = {
+  title: string;
+  message: string;
+  tone: AppFeedbackModalTone;
+};
 
 function formatDateTimeInput(date: Date): string {
   const year = date.getFullYear();
@@ -193,6 +200,7 @@ export default function TransactionsTabScreen() {
   const [hasEditedPrice, setHasEditedPrice] = React.useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = React.useState(false);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [tradeNotice, setTradeNotice] = React.useState<TradeNoticeState | null>(null);
 
   const normalizedRouteSymbol = React.useMemo(() => {
     const rawSymbol = Array.isArray(searchParams.symbol)
@@ -343,27 +351,46 @@ export default function TransactionsTabScreen() {
     setSymbolSearchQuery(symbol);
   }, []);
 
+  const showTradeNotice = React.useCallback(
+    (title: string, message: string, tone: AppFeedbackModalTone = "info") => {
+      setTradeNotice({
+        title,
+        message,
+        tone,
+      });
+    },
+    []
+  );
+
+  const handleCloseTradeNotice = React.useCallback(() => {
+    setTradeNotice(null);
+  }, []);
+
   const handleCreateOrder = React.useCallback(async () => {
     const normalizedSymbol = selectedSymbol.trim().toUpperCase();
     if (normalizedSymbol.length === 0) {
-      Alert.alert("Symbol Required", "Please select a symbol before creating order.");
+      showTradeNotice(
+        "Symbol Required",
+        "Please select a symbol before creating order.",
+        "error"
+      );
       return;
     }
 
     const parsedPrice = Number(priceInput.trim().replace(/,/g, ""));
     if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
-      Alert.alert("Invalid Price", "Enter a valid price greater than 0.");
+      showTradeNotice("Invalid Price", "Enter a valid price greater than 0.", "error");
       return;
     }
 
     const parsedUnits = Number(unitsInput.trim().replace(/,/g, ""));
     if (!Number.isFinite(parsedUnits) || parsedUnits <= 0) {
-      Alert.alert("Invalid Units", "Enter units greater than 0.");
+      showTradeNotice("Invalid Units", "Enter units greater than 0.", "error");
       return;
     }
 
     if (!Number.isInteger(parsedUnits)) {
-      Alert.alert("Invalid Units", "Units must be a whole number.");
+      showTradeNotice("Invalid Units", "Units must be a whole number.", "error");
       return;
     }
 
@@ -373,7 +400,7 @@ export default function TransactionsTabScreen() {
     if (brokerMode === "custom") {
       const normalizedBrokerName = customBrokerNameInput.trim();
       if (normalizedBrokerName.length === 0) {
-        Alert.alert("Broker Required", "Enter your custom broker name.");
+        showTradeNotice("Broker Required", "Enter your custom broker name.", "error");
         return;
       }
 
@@ -381,9 +408,10 @@ export default function TransactionsTabScreen() {
         customBrokerFeePctInput.trim().replace(/,/g, "")
       );
       if (!Number.isFinite(parsedBrokerFeePct) || parsedBrokerFeePct < 0) {
-        Alert.alert(
+        showTradeNotice(
           "Invalid Broker Fee",
-          "Enter broker fee percentage (0 or above)."
+          "Enter broker fee percentage (0 or above).",
+          "error"
         );
         return;
       }
@@ -405,13 +433,14 @@ export default function TransactionsTabScreen() {
         brokerFeePct,
       });
 
-      Alert.alert(
+      showTradeNotice(
         tradeSide === "buy" ? "Bought Successfully" : "Sold Successfully",
         `You have ${getTradeSideActionText(tradeSide)} ${
           savedOrder.units
         } shares of ${savedOrder.symbol} at ${formatPKRAmount(
           savedOrder.price
-        )} per share.\nSaved locally on this device.`
+        )} per share.\nSaved locally on this device.`,
+        "success"
       );
 
       setUnitsInput("");
@@ -423,9 +452,10 @@ export default function TransactionsTabScreen() {
         setPriceInput(formatEditablePrice(symbolQuote.lastPrice));
       }
     } catch {
-      Alert.alert(
+      showTradeNotice(
         "Trade Save Failed",
-        "Could not save this trade locally. Please try again."
+        "Could not save this trade locally. Please try again.",
+        "error"
       );
     } finally {
       setIsSubmittingOrder(false);
@@ -440,6 +470,7 @@ export default function TransactionsTabScreen() {
     tradeDateTime,
     tradeSide,
     unitsInput,
+    showTradeNotice,
   ]);
 
   const handleStartTradeDateTimeSelection = React.useCallback(() => {
@@ -774,6 +805,15 @@ export default function TransactionsTabScreen() {
           </View>
         </View>
       </ScrollView>
+
+      <AppFeedbackModal
+        visible={tradeNotice !== null}
+        title={tradeNotice?.title ?? ""}
+        message={tradeNotice?.message ?? ""}
+        tone={tradeNotice?.tone ?? "info"}
+        actionLabel="Done"
+        onClose={handleCloseTradeNotice}
+      />
     </SafeAreaView>
   );
 }

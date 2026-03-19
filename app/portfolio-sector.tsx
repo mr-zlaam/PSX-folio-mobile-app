@@ -19,6 +19,10 @@ import {
   formatPKRAmount,
   formatSignedPercentage,
 } from "@/src/features/home/home-formatters";
+import {
+  getPortfolioDisplayModePreference,
+  setPortfolioDisplayModePreference,
+} from "@/src/lib/app-preferences";
 import { APP_COLORS } from "@/src/theme/colors";
 
 const SECTOR_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
@@ -92,15 +96,16 @@ function FilterChip({
 function SectorCompanyCard({
   holding,
   displayMode,
-  sectorTotalValue,
+  portfolioTotalValue,
   onPress,
 }: {
   holding: PortfolioHolding;
   displayMode: PortfolioDisplayMode;
-  sectorTotalValue: number;
+  portfolioTotalValue: number;
   onPress: () => void;
 }) {
-  const sharePct = sectorTotalValue === 0 ? 0 : (holding.marketValue / sectorTotalValue) * 100;
+  const sharePct =
+    portfolioTotalValue === 0 ? 0 : (holding.marketValue / portfolioTotalValue) * 100;
   const headlineValue =
     displayMode === "price"
       ? formatPKRAmount(holding.marketValue)
@@ -135,7 +140,7 @@ function SectorCompanyCard({
             {headlineValue}
           </Text>
           <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
-            {displayMode === "price" ? "Market Value" : "Sector Share"}
+            {displayMode === "price" ? "Market Value" : "Portfolio Share"}
           </Text>
         </View>
       </View>
@@ -180,7 +185,7 @@ export default function PortfolioSectorScreen() {
       : searchParams.sector;
     return (rawSectorName ?? "").trim().toUpperCase();
   }, [searchParams.sector]);
-  const requestedDisplayMode = React.useMemo(() => {
+  const requestedDisplayMode = React.useMemo<PortfolioDisplayMode | null>(() => {
     const rawDisplayMode = Array.isArray(searchParams.display)
       ? searchParams.display[0]
       : searchParams.display;
@@ -189,28 +194,63 @@ export default function PortfolioSectorScreen() {
       return rawDisplayMode;
     }
 
-    return "percentage";
+    return null;
   }, [searchParams.display]);
 
-  const [displayMode, setDisplayMode] = React.useState<PortfolioDisplayMode>(
-    requestedDisplayMode
-  );
+  const [displayMode, setDisplayMode] = React.useState<PortfolioDisplayMode>("percentage");
+  const [hasHydratedDisplayMode, setHasHydratedDisplayMode] = React.useState(false);
   const [holdings, setHoldings] = React.useState<PortfolioHolding[]>([]);
+  const [portfolioTotalValue, setPortfolioTotalValue] = React.useState(0);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [isInitialLoading, setIsInitialLoading] = React.useState(true);
 
   React.useEffect(() => {
-    setDisplayMode(requestedDisplayMode);
+    let isMounted = true;
+
+    async function hydrateDisplayMode() {
+      if (requestedDisplayMode) {
+        setDisplayMode(requestedDisplayMode);
+        setHasHydratedDisplayMode(true);
+        return;
+      }
+
+      const savedDisplayMode = await getPortfolioDisplayModePreference();
+      if (!isMounted) {
+        return;
+      }
+
+      setDisplayMode(savedDisplayMode);
+      setHasHydratedDisplayMode(true);
+    }
+
+    void hydrateDisplayMode();
+
+    return () => {
+      isMounted = false;
+    };
   }, [requestedDisplayMode]);
+
+  React.useEffect(() => {
+    if (!hasHydratedDisplayMode) {
+      return;
+    }
+
+    void setPortfolioDisplayModePreference(displayMode);
+  }, [displayMode, hasHydratedDisplayMode]);
 
   const applySectorHoldings = React.useCallback(
     (allHoldings: PortfolioHolding[]) => {
+      const nextPortfolioTotalValue = allHoldings.reduce(
+        (sum, holding) => sum + holding.marketValue,
+        0
+      );
       const nextSectorHoldings = allHoldings
         .filter((holding) => getHoldingSectorName(holding) === normalizedSectorName)
         .sort((firstHolding, secondHolding) =>
           secondHolding.marketValue - firstHolding.marketValue
         );
 
+      setPortfolioTotalValue(nextPortfolioTotalValue);
       setHoldings(nextSectorHoldings);
     },
     [normalizedSectorName]
@@ -224,6 +264,7 @@ export default function PortfolioSectorScreen() {
 
       try {
         if (normalizedSectorName.length === 0) {
+          setPortfolioTotalValue(0);
           setHoldings([]);
           return;
         }
@@ -261,11 +302,6 @@ export default function PortfolioSectorScreen() {
       clearInterval(intervalId);
     };
   }, [refreshSector]);
-
-  const sectorTotalValue = React.useMemo(
-    () => holdings.reduce((sum, holding) => sum + holding.marketValue, 0),
-    [holdings]
-  );
 
   const handleOpenCompany = React.useCallback(
     (symbol: string) => {
@@ -367,7 +403,7 @@ export default function PortfolioSectorScreen() {
                   key={holding.symbol}
                   holding={holding}
                   displayMode={displayMode}
-                  sectorTotalValue={sectorTotalValue}
+                  portfolioTotalValue={portfolioTotalValue}
                   onPress={() => handleOpenCompany(holding.symbol)}
                 />
               ))}

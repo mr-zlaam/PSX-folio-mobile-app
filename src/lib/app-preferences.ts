@@ -2,11 +2,30 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system/legacy";
 
 export type AppTheme = "light" | "dark";
+export type HomeInsightDisplayModePreference = "percentage" | "price";
+export type PortfolioGroupingModePreference = "sectors" | "companies";
+export type PortfolioDisplayModePreference = "percentage" | "price";
 
 const STORAGE_KEYS = {
   onboardingComplete: "@psx-portfolio/onboarding-complete",
   themePreference: "@psx-portfolio/theme-preference",
+  homeInsightDisplayMode: "@psx-portfolio/home-insight-display-mode",
+  portfolioGroupingMode: "@psx-portfolio/portfolio-grouping-mode",
+  portfolioDisplayMode: "@psx-portfolio/portfolio-display-mode",
 } as const;
+
+const HOME_INSIGHT_DISPLAY_MODE_VALUES: readonly HomeInsightDisplayModePreference[] = [
+  "percentage",
+  "price",
+];
+const PORTFOLIO_GROUPING_MODE_VALUES: readonly PortfolioGroupingModePreference[] = [
+  "sectors",
+  "companies",
+];
+const PORTFOLIO_DISPLAY_MODE_VALUES: readonly PortfolioDisplayModePreference[] = [
+  "percentage",
+  "price",
+];
 
 type PreferencesStore = Record<string, string>;
 
@@ -113,6 +132,19 @@ async function removeStoredItem(key: string): Promise<void> {
   await removeFromFallbackStorage(key);
 }
 
+async function getEnumPreference<T extends string>(
+  key: string,
+  allowedValues: readonly T[],
+  defaultValue: T
+): Promise<T> {
+  const storedValue = await getStoredItem(key);
+  if (storedValue && allowedValues.includes(storedValue as T)) {
+    return storedValue as T;
+  }
+
+  return defaultValue;
+}
+
 export async function getOnboardingComplete(): Promise<boolean> {
   const storedValue = await getStoredItem(STORAGE_KEYS.onboardingComplete);
   return storedValue === "true";
@@ -136,4 +168,46 @@ export async function setThemePreference(theme: AppTheme): Promise<void> {
 
 export async function clearThemePreference(): Promise<void> {
   await removeStoredItem(STORAGE_KEYS.themePreference);
+}
+
+export async function getHomeInsightDisplayModePreference(): Promise<HomeInsightDisplayModePreference> {
+  return getEnumPreference(
+    STORAGE_KEYS.homeInsightDisplayMode,
+    HOME_INSIGHT_DISPLAY_MODE_VALUES,
+    "percentage"
+  );
+}
+
+export async function setHomeInsightDisplayModePreference(
+  mode: HomeInsightDisplayModePreference
+): Promise<void> {
+  await setStoredItem(STORAGE_KEYS.homeInsightDisplayMode, mode);
+}
+
+export async function getPortfolioGroupingModePreference(): Promise<PortfolioGroupingModePreference> {
+  return getEnumPreference(
+    STORAGE_KEYS.portfolioGroupingMode,
+    PORTFOLIO_GROUPING_MODE_VALUES,
+    "sectors"
+  );
+}
+
+export async function setPortfolioGroupingModePreference(
+  mode: PortfolioGroupingModePreference
+): Promise<void> {
+  await setStoredItem(STORAGE_KEYS.portfolioGroupingMode, mode);
+}
+
+export async function getPortfolioDisplayModePreference(): Promise<PortfolioDisplayModePreference> {
+  return getEnumPreference(
+    STORAGE_KEYS.portfolioDisplayMode,
+    PORTFOLIO_DISPLAY_MODE_VALUES,
+    "percentage"
+  );
+}
+
+export async function setPortfolioDisplayModePreference(
+  mode: PortfolioDisplayModePreference
+): Promise<void> {
+  await setStoredItem(STORAGE_KEYS.portfolioDisplayMode, mode);
 }
