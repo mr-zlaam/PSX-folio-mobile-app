@@ -18,7 +18,8 @@
         "monochromeImage": "./assets/images/1024.png"
       },
       "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false
+      "predictiveBackGestureEnabled": false,
+      "package": "com.zlaaam.psxfolio"
     },
     "web": {
       "output": "static",
@@ -46,6 +47,12 @@
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "2e13ac6e-44e9-43b5-88d2-2f240bd9f142"
+      }
     }
   }
 }
