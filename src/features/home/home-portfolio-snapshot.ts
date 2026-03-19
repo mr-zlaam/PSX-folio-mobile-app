@@ -17,8 +17,8 @@ export const DEFAULT_INSIGHT_DISPLAY_VALUES: InsightDisplayValues = {
     price: "PKR 0",
   },
   "Worst Loss": {
-    percentage: "0.0%",
-    price: "PKR 0",
+    percentage: "Nil",
+    price: "Nil",
   },
 };
 
@@ -73,6 +73,18 @@ function getHoldingWithMinValue(
   );
 }
 
+function getWorstLossHolding(holdings: PortfolioHolding[]): PortfolioHolding | null {
+  const losingHoldings = holdings.filter(
+    (holding) => holding.pnl < 0 || holding.pnlPct < 0
+  );
+
+  if (losingHoldings.length === 0) {
+    return null;
+  }
+
+  return getHoldingWithMinValue(losingHoldings, (holding) => holding.pnlPct);
+}
+
 export function buildHomeSnapshotFromHoldings(
   holdings: PortfolioHolding[],
   options?: {
@@ -125,8 +137,8 @@ export function buildHomeSnapshotFromHoldings(
           },
           {
             label: "Worst Loss",
-            symbol: "-",
-            valueText: "0.0%",
+            symbol: "Nil",
+            valueText: "Nil",
           },
         ],
       },
@@ -144,7 +156,7 @@ export function buildHomeSnapshotFromHoldings(
 
   const topStock = getHoldingWithMaxValue(holdings, (holding) => holding.marketValue);
   const bestGain = getHoldingWithMaxValue(holdings, (holding) => holding.pnlPct);
-  const worstLoss = getHoldingWithMinValue(holdings, (holding) => holding.pnlPct);
+  const worstLoss = getWorstLossHolding(holdings);
 
   const topStockSharePct =
     topStock && value > 0 ? (topStock.marketValue / value) * 100 : 0;
@@ -161,8 +173,8 @@ export function buildHomeSnapshotFromHoldings(
       price: formatSignedPkrAmount(bestGain?.pnl ?? 0),
     },
     "Worst Loss": {
-      percentage: formatSignedPercentage(worstLossPct),
-      price: formatSignedPkrAmount(worstLoss?.pnl ?? 0),
+      percentage: worstLoss ? formatSignedPercentage(worstLossPct) : "Nil",
+      price: worstLoss ? formatSignedPkrAmount(worstLoss.pnl) : "Nil",
     },
   };
 
@@ -187,7 +199,7 @@ export function buildHomeSnapshotFromHoldings(
         },
         {
           label: "Worst Loss",
-          symbol: worstLoss?.symbol ?? "-",
+          symbol: worstLoss?.symbol ?? "Nil",
           valueText: insightDisplayValues["Worst Loss"].percentage,
         },
       ],
