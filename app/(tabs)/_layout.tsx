@@ -1,7 +1,8 @@
+import { APP_COLORS } from "@/src/theme/colors";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { Tabs } from "expo-router";
 import { useColorScheme } from "nativewind";
-import { APP_COLORS } from "@/src/theme/colors";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type TabIconName =
   | "view-dashboard-outline"
@@ -27,7 +28,11 @@ function getTabIconName(routeName: string): TabIconName {
 
 export default function TabsLayout() {
   const { colorScheme } = useColorScheme();
+  const insets = useSafeAreaInsets();
   const isDarkMode = colorScheme === "dark";
+  const bottomInset = insets.bottom;
+  const tabBarBottomPadding = bottomInset > 0 ? bottomInset : 8;
+  const tabBarHeight = 60 + tabBarBottomPadding;
 
   return (
     <Tabs
@@ -45,7 +50,8 @@ export default function TabsLayout() {
             : APP_COLORS.brand.white,
           borderTopWidth: 0,
           paddingTop: 8,
-          height: 72,
+          paddingBottom: tabBarBottomPadding,
+          height: tabBarHeight,
         },
         sceneStyle: {
           backgroundColor: isDarkMode
