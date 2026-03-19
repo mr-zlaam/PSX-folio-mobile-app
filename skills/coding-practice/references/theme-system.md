@@ -11,6 +11,7 @@
 - `brand.white`: `#FFFFFF`
 - `brand.purple`: `#140A26`
 - `brand.red`: `#DC2626`
+- `success.green`: `#16A34A` (positive P/L indicator only)
 - `text.light`: `#28282b` (primary text in light mode)
 
 ## Mode Mapping
@@ -28,6 +29,7 @@
 ## Button Rules
 
 - Use red only for destructive actions (delete, remove, irreversible actions).
+- Use `success.green` only for positive profit/return values.
 - Use purple or white button variants for all non-destructive actions.
 
 ## Implementation Notes

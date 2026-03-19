@@ -6,6 +6,9 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "allowJs": false,
+    "types": [
+      "bun-types"
+    ],
     "paths": {
       "@/*": [
         "./*"

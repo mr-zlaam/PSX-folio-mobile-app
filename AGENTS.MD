@@ -49,6 +49,7 @@ Build and maintain `psx-portfolio`: a Pakistan Stock Exchange (PSX) portfolio ma
   - `brand.white`: `#FFFFFF`
   - `brand.purple`: `#140A26`
   - `brand.red`: `#DC2626`
+  - `success.green`: `#16A34A` (allowed only for positive profit/return indicators)
 - Light mode behavior:
   - Main surfaces: white
   - Highlight/accent: dark purple
@@ -60,6 +61,10 @@ Build and maintain `psx-portfolio`: a Pakistan Stock Exchange (PSX) portfolio ma
 - Button behavior:
   - Use red only for destructive or dangerous actions.
   - Use purple or white for all non-destructive buttons.
+- Profit/return behavior:
+  - Positive values may use `success.green`.
+  - Negative values use `brand.red`.
+  - Zero values use neutral text tokens.
 
 ## Data and Calculation Rules
 

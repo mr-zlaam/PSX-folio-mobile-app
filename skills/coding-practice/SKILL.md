@@ -49,6 +49,7 @@ description: "PSX portfolio engineering workflow for this repository. Use when i
 - Color policy:
   - White + dark purple are the main UI colors.
   - Red is only for destructive/danger actions.
+  - `success.green` is allowed only for positive profit/return indicators.
   - Non-destructive buttons must use purple or white variants.
 
 ## Required References

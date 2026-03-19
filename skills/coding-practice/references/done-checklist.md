@@ -31,6 +31,7 @@ Use this checklist before declaring a task complete.
 - Light mode uses white as main background, dark purple for highlights, and `#28282b` for text.
 - Dark mode uses dark purple as main background and white as primary text color.
 - Red buttons are only used for destructive/danger actions.
+- `success.green` is only used for positive profit/return indicators.
 - Non-destructive buttons use purple or white variants only.
 - Views are responsive enough for phone layouts.
 

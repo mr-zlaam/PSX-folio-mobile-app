@@ -29,6 +29,9 @@ module.exports = {
           text: "#28282b",
           textDark: "#FFFFFF",
         },
+        success: {
+          green: "#16A34A",
+        },
         button: {
           primary: "#140A26",
           neutral: "#FFFFFF",

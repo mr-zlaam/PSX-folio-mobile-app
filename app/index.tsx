@@ -1,7 +1,7 @@
 import React from "react";
 import { Appearance, Text, View } from "react-native";
+import { Redirect } from "expo-router";
 import { useColorScheme } from "nativewind";
-import AppButton from "@/components/ui/app-button";
 import OnboardingFlow from "@/src/features/onboarding/onboarding-flow";
 import {
   AppTheme,
@@ -18,7 +18,7 @@ function getDeviceTheme(): AppTheme {
 }
 
 export default function IndexScreen() {
-  const { colorScheme, setColorScheme } = useColorScheme();
+  const { setColorScheme } = useColorScheme();
   const [isBootstrapping, setIsBootstrapping] = React.useState(true);
   const [hasCompletedOnboarding, setHasCompletedOnboarding] = React.useState(false);
   const [selectedTheme, setSelectedTheme] = React.useState<AppTheme>(getDeviceTheme());
@@ -110,33 +110,6 @@ export default function IndexScreen() {
   }
 
   return (
-    <View className="flex-1 bg-app-bg px-5 py-12 dark:bg-app-bgDark">
-      <Text className="text-4xl font-extrabold text-app-text dark:text-app-textDark">
-        PSX Portfolio
-      </Text>
-      <Text className="mt-3 text-base text-app-text dark:text-app-textDark">
-        Onboarding is complete. Next we will build portfolio screens.
-      </Text>
-
-      <View className="mt-8 gap-4">
-        <AppButton
-          label={`Theme: ${colorScheme === "dark" ? "Dark" : "Light"}`}
-          variant="secondary"
-          fullWidth={false}
-          onPress={() => {
-            void handleThemeSelect(colorScheme === "dark" ? "light" : "dark");
-          }}
-        />
-
-        <AppButton
-          label="Reset Onboarding (Testing)"
-          variant="danger"
-          onPress={async () => {
-            await setOnboardingComplete(false);
-            setHasCompletedOnboarding(false);
-          }}
-        />
-      </View>
-    </View>
+    <Redirect href="/(tabs)/home" />
   );
 }
