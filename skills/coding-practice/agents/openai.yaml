@@ -1,0 +1,4 @@
+interface:
+  display_name: "Coding Practice"
+  short_description: "Enforce easy-quran coding standards and theme rules"
+  default_prompt: "Apply the easy-quran coding-practice workflow for this task."
