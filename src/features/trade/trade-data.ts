@@ -18,6 +18,9 @@ export type PsxSymbol = {
 export type SymbolQuote = {
   symbol: string;
   lastPrice: number;
+  previousClose: number;
+  highPrice: number;
+  lowPrice: number;
   change: number;
   changePct: number;
   lastVolume: number;
@@ -199,12 +202,23 @@ function deriveQuoteFromRows(
   const previousRow = rows[1] ?? latestRow;
   const lastPrice = latestRow[1];
   const previousPrice = previousRow[1];
+  const highPrice = rows.reduce(
+    (currentHigh, row) => (row[1] > currentHigh ? row[1] : currentHigh),
+    rows[0][1]
+  );
+  const lowPrice = rows.reduce(
+    (currentLow, row) => (row[1] < currentLow ? row[1] : currentLow),
+    rows[0][1]
+  );
   const change = lastPrice - previousPrice;
   const changePct = previousPrice === 0 ? 0 : (change / previousPrice) * 100;
 
   return {
     symbol: symbol.trim().toUpperCase(),
     lastPrice,
+    previousClose: previousPrice,
+    highPrice,
+    lowPrice,
     change,
     changePct,
     lastVolume: latestRow[2],
@@ -302,6 +316,9 @@ export function getSymbolQuoteFallback(symbol: string): SymbolQuote {
   return {
     symbol: symbol.trim().toUpperCase(),
     lastPrice: 0,
+    previousClose: 0,
+    highPrice: 0,
+    lowPrice: 0,
     change: 0,
     changePct: 0,
     lastVolume: 0,

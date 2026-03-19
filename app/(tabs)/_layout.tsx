@@ -82,6 +82,18 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
+        name="portfolio-position"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="portfolio-sector"
+        options={{
+          href: null,
+        }}
+      />
+      <Tabs.Screen
         name="settings"
         options={{
           title: "Settings",

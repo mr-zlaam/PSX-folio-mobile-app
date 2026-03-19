@@ -1,7 +1,6 @@
 import React from "react";
 import {
-  Animated,
-  Easing,
+  RefreshControl,
   ScrollView,
   Text,
   TouchableOpacity,
@@ -9,20 +8,23 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
-import {
-  getCachedKse100Summary,
-  getHomeSnapshot,
-  getInsightDisplayValue,
-  InsightDisplayMode,
-  getLatestKse100Summary,
-  getLatestKse100SummaryMock,
-  Kse100Summary,
-} from "@/src/features/home/home-data";
-import { formatKse100Points } from "@/src/features/home/home-formatters";
+import { useColorScheme } from "nativewind";
+import { InsightDisplayMode } from "@/src/features/home/home-data";
 import { buildHomeViewModel } from "@/src/features/home/home-view-model";
 import { ValueTone } from "@/src/features/home/types";
+import {
+  buildHomeSnapshotFromHoldings,
+  DEFAULT_INSIGHT_DISPLAY_VALUES,
+  InsightDisplayValues,
+} from "@/src/features/home/home-portfolio-snapshot";
+import {
+  getPortfolioHoldingsWithCachedQuotes,
+  getPortfolioHoldingsWithLatestQuotes,
+  PortfolioHolding,
+} from "@/src/features/portfolio/portfolio-data";
+import { APP_COLORS } from "@/src/theme/colors";
 
-const KSE100_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const HOME_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 function getToneClassName(tone: ValueTone): string {
   if (tone === "positive") {
@@ -53,10 +55,16 @@ function getInsightValueClassName(valueText: string): string {
 type HeaderActionButtonProps = {
   label: string;
   selected: boolean;
+  tone?: "default" | "danger";
   onPress: () => void;
 };
 
-function HeaderActionButton({ label, selected, onPress }: HeaderActionButtonProps) {
+function HeaderActionButton({
+  label,
+  selected,
+  tone = "default",
+  onPress,
+}: HeaderActionButtonProps) {
   return (
     <TouchableOpacity
       activeOpacity={0.88}
@@ -64,7 +72,9 @@ function HeaderActionButton({ label, selected, onPress }: HeaderActionButtonProp
       className={[
         "rounded-xl border px-3 py-1.5",
         selected
-          ? "border-app-highlight bg-app-highlight dark:border-app-highlightDark dark:bg-app-highlightDark"
+          ? tone === "danger"
+            ? "border-brand-red bg-brand-red dark:border-brand-red dark:bg-brand-red"
+            : "border-app-highlight bg-app-highlight dark:border-app-highlightDark dark:bg-app-highlightDark"
           : "border-app-highlight bg-button-neutral dark:border-app-highlightDark dark:bg-transparent",
       ]
         .filter(Boolean)
@@ -74,7 +84,9 @@ function HeaderActionButton({ label, selected, onPress }: HeaderActionButtonProp
         className={[
           "text-xs font-bold",
           selected
-            ? "text-brand-white dark:text-brand-purple"
+            ? tone === "danger"
+              ? "text-brand-white"
+              : "text-brand-white dark:text-brand-purple"
             : "text-app-highlight dark:text-app-highlightDark",
         ]
           .filter(Boolean)
@@ -89,92 +101,75 @@ function HeaderActionButton({ label, selected, onPress }: HeaderActionButtonProp
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const initialKse100Summary = React.useMemo(
-    () => getLatestKse100SummaryMock(),
+  const { colorScheme } = useColorScheme();
+  const isDarkMode = colorScheme === "dark";
+  const initialHomeData = React.useMemo(
+    () => buildHomeSnapshotFromHoldings([]),
     []
   );
-  const animatedPoints = React.useRef(
-    new Animated.Value(initialKse100Summary.points)
-  ).current;
-  const viewModel = React.useMemo(() => {
-    const snapshot = getHomeSnapshot();
-    return buildHomeViewModel(snapshot);
-  }, []);
-  const kse100SummaryRef = React.useRef<Kse100Summary>(initialKse100Summary);
-  const [displayedKse100Points, setDisplayedKse100Points] = React.useState<number>(
-    initialKse100Summary.points
-  );
   const [insightMode, setInsightMode] = React.useState<InsightDisplayMode>("percentage");
+  const [viewModel, setViewModel] = React.useState(() =>
+    buildHomeViewModel(initialHomeData.snapshot)
+  );
+  const [insightDisplayValues, setInsightDisplayValues] =
+    React.useState<InsightDisplayValues>(DEFAULT_INSIGHT_DISPLAY_VALUES);
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
 
   const handleTradePress = React.useCallback(() => {
-    router.push("/(tabs)/transactions");
+    router.push({
+      pathname: "/(tabs)/transactions",
+      params: {
+        lockSymbol: "0",
+      },
+    });
   }, [router]);
 
-  const animateKse100Points = React.useCallback(
-    (toValue: number) => {
-      Animated.timing(animatedPoints, {
-        toValue,
-        duration: 520,
-        easing: Easing.out(Easing.cubic),
-        useNativeDriver: false,
-      }).start();
-    },
-    [animatedPoints]
-  );
+  const applyHomeSnapshot = React.useCallback((holdings: PortfolioHolding[]) => {
+    const nextHomeData = buildHomeSnapshotFromHoldings(holdings);
+    setViewModel(buildHomeViewModel(nextHomeData.snapshot));
+    setInsightDisplayValues(nextHomeData.insightDisplayValues);
+  }, []);
 
-  const applyKse100Summary = React.useCallback(
-    (nextSummary: Kse100Summary) => {
-      const currentSummary = kse100SummaryRef.current;
-      const didPointsChange = currentSummary.points !== nextSummary.points;
+  const refreshHomeSnapshot = React.useCallback(async () => {
+    const cachedHoldings = await getPortfolioHoldingsWithCachedQuotes();
+    applyHomeSnapshot(cachedHoldings);
 
-      if (!didPointsChange) {
-        return;
-      }
+    const latestHoldings = await getPortfolioHoldingsWithLatestQuotes();
+    applyHomeSnapshot(latestHoldings);
+  }, [applyHomeSnapshot]);
 
-      kse100SummaryRef.current = nextSummary;
-
-      animateKse100Points(nextSummary.points);
-    },
-    [animateKse100Points]
-  );
-
-  React.useEffect(() => {
-    const listenerId = animatedPoints.addListener(({ value }) => {
-      setDisplayedKse100Points(value);
-    });
-
-    return () => {
-      animatedPoints.removeListener(listenerId);
-    };
-  }, [animatedPoints]);
-
-  React.useEffect(() => {
-    let isMounted = true;
-
-    async function refreshKse100Summary() {
-      const cachedSummary = await getCachedKse100Summary();
-      if (isMounted && cachedSummary) {
-        applyKse100Summary(cachedSummary);
-      }
-
-      const latestSummary = await getLatestKse100Summary();
-      if (!isMounted) {
-        return;
-      }
-
-      applyKse100Summary(latestSummary);
+  const handlePullToRefresh = React.useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshHomeSnapshot();
+    } finally {
+      setIsRefreshing(false);
     }
+  }, [refreshHomeSnapshot]);
 
-    void refreshKse100Summary();
+  React.useEffect(() => {
+    void refreshHomeSnapshot();
     const intervalId = setInterval(() => {
-      void refreshKse100Summary();
-    }, KSE100_REFRESH_INTERVAL_MS);
+      void refreshHomeSnapshot();
+    }, HOME_REFRESH_INTERVAL_MS);
 
     return () => {
-      isMounted = false;
       clearInterval(intervalId);
     };
-  }, [applyKse100Summary]);
+  }, [refreshHomeSnapshot]);
+
+  const profitSummaryItem = React.useMemo(
+    () => viewModel.summaryItems.find((item) => item.key === "profit"),
+    [viewModel.summaryItems]
+  );
+  const returnSummaryItem = React.useMemo(
+    () => viewModel.summaryItems.find((item) => item.key === "returnPct"),
+    [viewModel.summaryItems]
+  );
+  const portfolioSummaryItems = React.useMemo(
+    () => viewModel.summaryItems.filter((item) => item.key !== "profit"),
+    [viewModel.summaryItems]
+  );
 
   return (
     <SafeAreaView
@@ -189,14 +184,35 @@ export default function HomeScreen() {
           paddingBottom: insets.bottom + 96,
         }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handlePullToRefresh}
+            tintColor={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
+            colors={[isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple]}
+            progressBackgroundColor={
+              isDarkMode ? APP_COLORS.brand.purple : APP_COLORS.brand.white
+            }
+          />
+        }
       >
         <View className="gap-7">
           <View className="rounded-3xl bg-brand-white/95 px-4 py-4 shadow-sm dark:bg-brand-white/10">
             <Text className="text-xs font-bold uppercase tracking-wider text-app-highlight dark:text-app-highlightDark">
-              KSE-100
+              Current Profit
             </Text>
-            <Text className="mt-2 text-4xl font-extrabold text-app-text dark:text-app-textDark">
-              {formatKse100Points(displayedKse100Points)}
+            <Text
+              className={[
+                "mt-2 text-4xl font-extrabold",
+                getToneClassName(profitSummaryItem?.tone ?? "neutral"),
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            >
+              {profitSummaryItem?.value ?? "PKR 0"}
+            </Text>
+            <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
+              Return: {returnSummaryItem?.value ?? "0.0%"}
             </Text>
           </View>
 
@@ -212,13 +228,14 @@ export default function HomeScreen() {
                 <HeaderActionButton
                   label="Trade"
                   selected={true}
+                  tone="danger"
                   onPress={handleTradePress}
                 />
               </View>
             </View>
 
             <View className="mt-4 gap-3">
-              {viewModel.summaryItems.map((item) => (
+              {portfolioSummaryItems.map((item) => (
                 <View key={item.key} className="rounded-2xl bg-brand-white/70 px-4 py-3 dark:bg-brand-white/5">
                   <View className="flex-row items-start justify-between">
                     <View className="mr-3 flex-1">
@@ -270,11 +287,11 @@ export default function HomeScreen() {
 
             <View className="mt-4 gap-3">
               {viewModel.insights.map((insight) => {
-                const displayValue = getInsightDisplayValue(
-                  insight.symbol,
-                  insightMode,
-                  insight.valueText
-                );
+                const displayValues = insightDisplayValues[insight.label];
+                const displayValue =
+                  insightMode === "price"
+                    ? displayValues?.price ?? insight.valueText
+                    : displayValues?.percentage ?? insight.valueText;
 
                 return (
                   <View

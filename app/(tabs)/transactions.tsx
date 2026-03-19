@@ -2,13 +2,14 @@ import React from "react";
 import {
   Alert,
   Platform,
+  RefreshControl,
   ScrollView,
   Text,
   TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import DateTimePicker, {
@@ -79,10 +80,12 @@ function getTradeSideActionText(side: TradeSide): "bought" | "sold" {
 function ToggleChip({
   label,
   selected,
+  selectedTone = "default",
   onPress,
 }: {
   label: string;
   selected: boolean;
+  selectedTone?: "default" | "danger";
   onPress: () => void;
 }) {
   return (
@@ -92,7 +95,9 @@ function ToggleChip({
       className={[
         "rounded-xl border px-3 py-2",
         selected
-          ? "border-app-highlight bg-app-highlight dark:border-app-highlightDark dark:bg-app-highlightDark"
+          ? selectedTone === "danger"
+            ? "border-brand-red bg-brand-red dark:border-brand-red dark:bg-brand-red"
+            : "border-app-highlight bg-app-highlight dark:border-app-highlightDark dark:bg-app-highlightDark"
           : "border-app-highlight bg-button-neutral dark:border-app-highlightDark dark:bg-transparent",
       ]
         .filter(Boolean)
@@ -102,7 +107,9 @@ function ToggleChip({
         className={[
           "text-xs font-bold uppercase tracking-wide",
           selected
-            ? "text-brand-white dark:text-brand-purple"
+            ? selectedTone === "danger"
+              ? "text-brand-white"
+              : "text-brand-white dark:text-brand-purple"
             : "text-app-highlight dark:text-app-highlightDark",
         ]
           .filter(Boolean)
@@ -151,6 +158,11 @@ function FieldInput({
 
 export default function TransactionsTabScreen() {
   const router = useRouter();
+  const searchParams = useLocalSearchParams<{
+    symbol?: string | string[];
+    side?: string | string[];
+    lockSymbol?: string | string[];
+  }>();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
@@ -180,6 +192,31 @@ export default function TransactionsTabScreen() {
   const [customBrokerFeePctInput, setCustomBrokerFeePctInput] = React.useState("");
   const [hasEditedPrice, setHasEditedPrice] = React.useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = React.useState(false);
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
+
+  const normalizedRouteSymbol = React.useMemo(() => {
+    const rawSymbol = Array.isArray(searchParams.symbol)
+      ? searchParams.symbol[0]
+      : searchParams.symbol;
+    return (rawSymbol ?? "").trim().toUpperCase();
+  }, [searchParams.symbol]);
+
+  const requestedRouteSide = React.useMemo(() => {
+    const rawSide = Array.isArray(searchParams.side)
+      ? searchParams.side[0]
+      : searchParams.side;
+    if (rawSide === "buy" || rawSide === "sell") {
+      return rawSide;
+    }
+    return null;
+  }, [searchParams.side]);
+
+  const isSymbolLocked = React.useMemo(() => {
+    const rawLockSymbol = Array.isArray(searchParams.lockSymbol)
+      ? searchParams.lockSymbol[0]
+      : searchParams.lockSymbol;
+    return rawLockSymbol === "1" || rawLockSymbol === "true";
+  }, [searchParams.lockSymbol]);
 
   const filteredSymbols = React.useMemo(() => {
     const normalizedQuery = symbolSearchQuery.trim().toLowerCase();
@@ -197,27 +234,64 @@ export default function TransactionsTabScreen() {
       .slice(0, 8);
   }, [symbolSearchQuery, symbols]);
 
-  React.useEffect(() => {
-    let isMounted = true;
-
-    async function refreshSymbols() {
-      const cachedSymbols = await getCachedSymbols();
-      if (isMounted && cachedSymbols.length > 0) {
-        setSymbols(cachedSymbols);
-      }
-
-      const latestSymbols = await getLatestSymbols();
-      if (isMounted && latestSymbols.length > 0) {
-        setSymbols(latestSymbols);
-      }
+  const refreshSymbols = React.useCallback(async () => {
+    const cachedSymbols = await getCachedSymbols();
+    if (cachedSymbols.length > 0) {
+      setSymbols(cachedSymbols);
     }
 
-    void refreshSymbols();
-
-    return () => {
-      isMounted = false;
-    };
+    const latestSymbols = await getLatestSymbols();
+    if (latestSymbols.length > 0) {
+      setSymbols(latestSymbols);
+    }
   }, []);
+
+  const refreshQuoteForSymbol = React.useCallback(async (symbol: string) => {
+    const normalizedSymbol = symbol.trim().toUpperCase();
+    if (normalizedSymbol.length === 0) {
+      setSymbolQuote(getSymbolQuoteFallback(""));
+      return;
+    }
+
+    const cachedQuote = await getCachedSymbolQuote(normalizedSymbol);
+    if (cachedQuote) {
+      setSymbolQuote(cachedQuote);
+    }
+
+    const latestQuote = await getLatestSymbolQuote(normalizedSymbol);
+    setSymbolQuote(latestQuote);
+  }, []);
+
+  const handlePullToRefresh = React.useCallback(async () => {
+    setIsRefreshing(true);
+    try {
+      await refreshSymbols();
+      await refreshQuoteForSymbol(selectedSymbol);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [refreshQuoteForSymbol, refreshSymbols, selectedSymbol]);
+
+  React.useEffect(() => {
+    if (normalizedRouteSymbol.length === 0) {
+      return;
+    }
+
+    setSelectedSymbol(normalizedRouteSymbol);
+    setSymbolSearchQuery(normalizedRouteSymbol);
+  }, [normalizedRouteSymbol]);
+
+  React.useEffect(() => {
+    if (!requestedRouteSide) {
+      return;
+    }
+
+    setTradeSide(requestedRouteSide);
+  }, [requestedRouteSide]);
+
+  React.useEffect(() => {
+    void refreshSymbols();
+  }, [refreshSymbols]);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -432,6 +506,17 @@ export default function TransactionsTabScreen() {
           paddingBottom: insets.bottom + 24,
         }}
         showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handlePullToRefresh}
+            tintColor={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
+            colors={[isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple]}
+            progressBackgroundColor={
+              isDarkMode ? APP_COLORS.brand.purple : APP_COLORS.brand.white
+            }
+          />
+        }
       >
         <View className="gap-5">
           <View className="flex-row items-center justify-between">
@@ -462,20 +547,29 @@ export default function TransactionsTabScreen() {
               onChangeText={setSymbolSearchQuery}
               placeholder="Search symbol or company"
               placeholderTextColor={inputPlaceholderTextColor}
+              editable={!isSymbolLocked}
               className="mt-3 rounded-xl border border-app-highlight bg-brand-white px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark dark:bg-transparent dark:text-app-textDark"
             />
+
+            {isSymbolLocked ? (
+              <Text className="mt-2 text-xs font-semibold text-app-highlight dark:text-app-highlightDark">
+                Symbol is locked from portfolio action.
+              </Text>
+            ) : null}
 
             <View className="mt-3 gap-2">
               {filteredSymbols.map((symbolItem) => (
                 <TouchableOpacity
                   key={symbolItem.symbol}
                   activeOpacity={0.88}
+                  disabled={isSymbolLocked}
                   onPress={() => handleSelectSymbol(symbolItem.symbol)}
                   className={[
                     "rounded-xl border px-3 py-2",
                     selectedSymbol === symbolItem.symbol
                       ? "border-app-highlight bg-app-highlight dark:border-app-highlightDark dark:bg-app-highlightDark"
                       : "border-app-highlight bg-brand-white dark:border-app-highlightDark dark:bg-transparent",
+                    isSymbolLocked ? "opacity-60" : "",
                   ]
                     .filter(Boolean)
                     .join(" ")}
@@ -552,6 +646,7 @@ export default function TransactionsTabScreen() {
                 <ToggleChip
                   label="Sell"
                   selected={tradeSide === "sell"}
+                  selectedTone="danger"
                   onPress={() => setTradeSide("sell")}
                 />
               </View>
@@ -656,7 +751,7 @@ export default function TransactionsTabScreen() {
             <View className="mt-5">
               <AppButton
                 label={tradeSide === "buy" ? "Create Buy Order" : "Create Sell Order"}
-                variant={tradeSide === "buy" ? "primary" : "secondary"}
+                variant={tradeSide === "buy" ? "primary" : "danger"}
                 loading={isSubmittingOrder}
                 onPress={handleCreateOrder}
               />
