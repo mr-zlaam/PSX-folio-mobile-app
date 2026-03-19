@@ -15,6 +15,17 @@ export type TradeMutationEvent =
       createdAt: string;
     }
   | {
+      type: "deposit-created";
+      depositId: string;
+      createdAt: string;
+    }
+  | {
+      type: "bonus-share-created";
+      bonusShareId: string;
+      symbol: string;
+      createdAt: string;
+    }
+  | {
       type: "portfolio-reset";
       createdAt: string;
     };
@@ -59,6 +70,30 @@ export function emitDividendMutation(event: {
 export function emitPortfolioReset(event: { createdAt: string }): void {
   emitTradeMutation({
     type: "portfolio-reset",
+    createdAt: event.createdAt,
+  });
+}
+
+export function emitDepositMutation(event: {
+  depositId: string;
+  createdAt: string;
+}): void {
+  emitTradeMutation({
+    type: "deposit-created",
+    depositId: event.depositId,
+    createdAt: event.createdAt,
+  });
+}
+
+export function emitBonusShareMutation(event: {
+  bonusShareId: string;
+  symbol: string;
+  createdAt: string;
+}): void {
+  emitTradeMutation({
+    type: "bonus-share-created",
+    bonusShareId: event.bonusShareId,
+    symbol: event.symbol,
     createdAt: event.createdAt,
   });
 }

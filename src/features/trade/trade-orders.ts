@@ -1,4 +1,6 @@
 import * as FileSystem from "expo-file-system/legacy";
+import { getSavedBonusShareRecords } from "@/src/features/bonus-share/bonus-share-records";
+import { getPositionSnapshotForSymbol } from "@/src/features/portfolio/position-ledger";
 import { emitTradeMutation } from "@/src/features/trade/trade-events";
 
 export type TradeSide = "buy" | "sell";
@@ -46,59 +48,6 @@ const TRADE_ORDERS_FILE_URI = FileSystem.documentDirectory
 
 function normalizeSymbol(value: string): string {
   return value.trim().toUpperCase();
-}
-
-function sortOrdersChronologically(orders: TradeOrderRecord[]): TradeOrderRecord[] {
-  return [...orders].sort((firstOrder, secondOrder) => {
-    const firstTimestamp = new Date(firstOrder.tradedAt).getTime();
-    const secondTimestamp = new Date(secondOrder.tradedAt).getTime();
-
-    if (firstTimestamp !== secondTimestamp) {
-      return firstTimestamp - secondTimestamp;
-    }
-
-    return firstOrder.createdAt.localeCompare(secondOrder.createdAt);
-  });
-}
-
-function toSafeUnits(value: number): number {
-  if (!Number.isFinite(value) || value <= 0) {
-    return 0;
-  }
-  return value;
-}
-
-function getOpenUnitsForSymbol(
-  orders: TradeOrderRecord[],
-  symbol: string
-): number {
-  const normalizedSymbol = normalizeSymbol(symbol);
-  if (normalizedSymbol.length === 0) {
-    return 0;
-  }
-
-  let openUnits = 0;
-  const sortedOrders = sortOrdersChronologically(orders);
-  for (const order of sortedOrders) {
-    if (normalizeSymbol(order.symbol) !== normalizedSymbol) {
-      continue;
-    }
-
-    const safeUnits = toSafeUnits(order.units);
-    if (safeUnits === 0) {
-      continue;
-    }
-
-    if (order.side === "buy") {
-      openUnits += safeUnits;
-      continue;
-    }
-
-    const sellableUnits = Math.min(openUnits, safeUnits);
-    openUnits -= sellableUnits;
-  }
-
-  return openUnits;
 }
 
 function getSafeOrdersStore(value: unknown): TradeOrdersStore {
@@ -178,6 +127,7 @@ export async function saveTradeOrder(
   orderInput: TradeOrderInput
 ): Promise<TradeOrderRecord> {
   const store = await readStore();
+  const bonusShareRecords = await getSavedBonusShareRecords();
   const normalizedSymbol = normalizeSymbol(orderInput.symbol);
   const safePrice = orderInput.price;
   const safeUnits = orderInput.units;
@@ -194,7 +144,12 @@ export async function saveTradeOrder(
   }
 
   if (orderInput.side === "sell") {
-    const openUnits = getOpenUnitsForSymbol(store.orders, normalizedSymbol);
+    const positionSnapshot = getPositionSnapshotForSymbol(
+      store.orders,
+      bonusShareRecords,
+      normalizedSymbol
+    );
+    const openUnits = positionSnapshot.units;
     if (safeUnits > openUnits) {
       throw new InsufficientUnitsError(normalizedSymbol, openUnits, safeUnits);
     }

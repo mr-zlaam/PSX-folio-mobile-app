@@ -34,6 +34,8 @@ export default function RootLayout() {
           <Stack.Screen name="portfolio-sector" />
           <Stack.Screen name="broker-settings" />
           <Stack.Screen name="dividend" />
+          <Stack.Screen name="deposit" />
+          <Stack.Screen name="bonus-share" />
           <Stack.Screen name="transaction-history" />
         </Stack>
       </BottomSheetModalProvider>

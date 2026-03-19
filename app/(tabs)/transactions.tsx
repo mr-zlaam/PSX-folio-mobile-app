@@ -40,11 +40,14 @@ import {
 } from "@/src/lib/app-preferences";
 import { APP_COLORS } from "@/src/theme/colors";
 import {
+  getSavedBonusShareRecords,
+} from "@/src/features/bonus-share/bonus-share-records";
+import {
   InsufficientUnitsError,
   getSavedTradeOrders,
   saveTradeOrder,
-  TradeOrderRecord,
 } from "@/src/features/trade/trade-orders";
+import { getPositionSnapshotForSymbol } from "@/src/features/portfolio/position-ledger";
 
 const TRADE_QUOTE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -56,85 +59,11 @@ type TradeNoticeState = {
   message: string;
   tone: AppFeedbackModalTone;
 };
-type PositionSnapshot = {
-  units: number;
-  averageBuyPrice: number;
-};
 
 const CGT_RATE_BY_PROFILE: Record<TaxpayerProfile, number> = {
   filer: 15,
   nonFiler: 30,
 };
-
-function sortOrdersChronologically(orders: TradeOrderRecord[]): TradeOrderRecord[] {
-  return [...orders].sort((firstOrder, secondOrder) => {
-    const firstTimestamp = new Date(firstOrder.tradedAt).getTime();
-    const secondTimestamp = new Date(secondOrder.tradedAt).getTime();
-
-    if (firstTimestamp !== secondTimestamp) {
-      return firstTimestamp - secondTimestamp;
-    }
-
-    return firstOrder.createdAt.localeCompare(secondOrder.createdAt);
-  });
-}
-
-function toPositiveFiniteNumber(value: number): number {
-  if (!Number.isFinite(value) || value <= 0) {
-    return 0;
-  }
-
-  return value;
-}
-
-function getPositionSnapshotForSymbol(
-  orders: TradeOrderRecord[],
-  symbol: string
-): PositionSnapshot {
-  const normalizedSymbol = symbol.trim().toUpperCase();
-  if (normalizedSymbol.length === 0) {
-    return {
-      units: 0,
-      averageBuyPrice: 0,
-    };
-  }
-
-  const sortedOrders = sortOrdersChronologically(orders);
-  const position: PositionSnapshot = {
-    units: 0,
-    averageBuyPrice: 0,
-  };
-
-  for (const order of sortedOrders) {
-    if (order.symbol.trim().toUpperCase() !== normalizedSymbol) {
-      continue;
-    }
-
-    const safeUnits = toPositiveFiniteNumber(order.units);
-    const safePrice = toPositiveFiniteNumber(order.price);
-    if (safeUnits === 0 || safePrice === 0) {
-      continue;
-    }
-
-    if (order.side === "buy") {
-      const currentCost = position.units * position.averageBuyPrice;
-      const nextUnits = position.units + safeUnits;
-      const nextCost = currentCost + safeUnits * safePrice;
-      position.units = nextUnits;
-      position.averageBuyPrice = nextUnits > 0 ? nextCost / nextUnits : 0;
-      continue;
-    }
-
-    const sellableUnits = Math.min(position.units, safeUnits);
-    position.units -= sellableUnits;
-    if (position.units <= 0) {
-      position.units = 0;
-      position.averageBuyPrice = 0;
-    }
-  }
-
-  return position;
-}
 
 function getTaxpayerProfileLabel(profile: TaxpayerProfile): string {
   return profile === "filer" ? "Filer" : "Non-Filer";
@@ -559,8 +488,15 @@ export default function TransactionsTabScreen() {
     let isCgtApplied = false;
 
     if (tradeSide === "sell") {
-      const savedOrders = await getSavedTradeOrders();
-      const positionSnapshot = getPositionSnapshotForSymbol(savedOrders, normalizedSymbol);
+      const [savedOrders, bonusShareRecords] = await Promise.all([
+        getSavedTradeOrders(),
+        getSavedBonusShareRecords(),
+      ]);
+      const positionSnapshot = getPositionSnapshotForSymbol(
+        savedOrders,
+        bonusShareRecords,
+        normalizedSymbol
+      );
 
       if (positionSnapshot.units <= 0) {
         showTradeNotice(

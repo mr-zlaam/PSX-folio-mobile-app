@@ -18,9 +18,21 @@ import AppFeedbackModal from "@/components/ui/app-feedback-modal";
 import { APP_COLORS } from "@/src/theme/colors";
 import { getLatestKse100Summary } from "@/src/features/home/home-data";
 import { getLatestSymbols } from "@/src/features/trade/trade-data";
-import { clearSavedTradeOrders } from "@/src/features/trade/trade-orders";
-import { clearSavedDividendRecords } from "@/src/features/dividend/dividend-records";
-import { emitPortfolioReset } from "@/src/features/trade/trade-events";
+import {
+  clearSavedTradeOrders,
+} from "@/src/features/trade/trade-orders";
+import {
+  clearSavedDividendRecords,
+} from "@/src/features/dividend/dividend-records";
+import {
+  clearSavedDepositRecords,
+} from "@/src/features/deposit/deposit-records";
+import {
+  clearSavedBonusShareRecords,
+} from "@/src/features/bonus-share/bonus-share-records";
+import {
+  emitPortfolioReset,
+} from "@/src/features/trade/trade-events";
 import {
   AppTheme,
   BrokerSettings,
@@ -232,7 +244,12 @@ export default function SettingsTabScreen() {
     setResetErrorText(null);
 
     try {
-      await Promise.all([clearSavedTradeOrders(), clearSavedDividendRecords()]);
+      await Promise.all([
+        clearSavedTradeOrders(),
+        clearSavedDividendRecords(),
+        clearSavedDepositRecords(),
+        clearSavedBonusShareRecords(),
+      ]);
       emitPortfolioReset({
         createdAt: new Date().toISOString(),
       });
@@ -240,7 +257,8 @@ export default function SettingsTabScreen() {
       setIsResetModalVisible(false);
       setResetNotice({
         title: "Portfolio Reset Complete",
-        message: "All buy, sell, and dividend records were cleared from this device.",
+        message:
+          "All buy, sell, dividend, deposit, and bonus share records were cleared from this device.",
         tone: "success",
       });
     } catch {
@@ -365,7 +383,7 @@ export default function SettingsTabScreen() {
               Reset Portfolio
             </Text>
             <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
-              This permanently clears all buy, sell, and dividend records from this device.
+              This permanently clears all buy, sell, dividend, deposit, and bonus share records from this device.
             </Text>
 
             <View className="mt-4">
@@ -377,7 +395,6 @@ export default function SettingsTabScreen() {
               />
             </View>
           </View>
-
         </View>
       </ScrollView>
 

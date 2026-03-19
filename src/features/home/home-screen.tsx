@@ -1,5 +1,5 @@
 import AppButton from "@/components/ui/app-button";
-import AppFeedbackModal from "@/components/ui/app-feedback-modal";
+import { getTotalDepositAmount } from "@/src/features/deposit/deposit-records";
 import { getTotalDividendFinalAmount } from "@/src/features/dividend/dividend-records";
 import { InsightDisplayMode } from "@/src/features/home/home-data";
 import { formatPKRAmount } from "@/src/features/home/home-formatters";
@@ -134,15 +134,12 @@ export default function HomeScreen() {
   const [insightDisplayValues, setInsightDisplayValues] =
     React.useState<InsightDisplayValues>(DEFAULT_INSIGHT_DISPLAY_VALUES);
   const [totalDividendValue, setTotalDividendValue] = React.useState(0);
+  const [totalDepositValue, setTotalDepositValue] = React.useState(0);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [hasHydratedInsightMode, setHasHydratedInsightMode] =
     React.useState(false);
   const quickActionSheetRef = React.useRef<BottomSheetModal>(null);
   const quickActionSheetSnapPoints = React.useMemo(() => ["42%"], []);
-  const [quickActionNotice, setQuickActionNotice] = React.useState<{
-    title: string;
-    message: string;
-  } | null>(null);
 
   const handleTradePress = React.useCallback(() => {
     router.push({
@@ -162,9 +159,14 @@ export default function HomeScreen() {
   }, [router]);
 
   const applyHomeSnapshot = React.useCallback(
-    (holdings: PortfolioHolding[], totalDividendValue: number) => {
+    (
+      holdings: PortfolioHolding[],
+      totalDividendValue: number,
+      totalDepositValue: number
+    ) => {
       const nextHomeData = buildHomeSnapshotFromHoldings(holdings, {
-        portfolioCashAdjustment: totalDividendValue,
+        contributedCapitalAdjustment: totalDepositValue,
+        returnCashAdjustment: totalDividendValue,
       });
       setViewModel(buildHomeViewModel(nextHomeData.snapshot));
       setInsightDisplayValues(nextHomeData.insightDisplayValues);
@@ -173,20 +175,18 @@ export default function HomeScreen() {
   );
 
   const refreshHomeSnapshot = React.useCallback(async () => {
-    const [cachedHoldings, totalDividendValue] = await Promise.all([
+    const [cachedHoldings, totalDividendValue, totalDepositValue] = await Promise.all([
       getPortfolioHoldingsWithCachedQuotes(),
       getTotalDividendFinalAmount(),
+      getTotalDepositAmount(),
     ]);
     setTotalDividendValue(totalDividendValue);
-    applyHomeSnapshot(cachedHoldings, totalDividendValue);
+    setTotalDepositValue(totalDepositValue);
+    applyHomeSnapshot(cachedHoldings, totalDividendValue, totalDepositValue);
 
     const latestHoldings = await getPortfolioHoldingsWithLatestQuotes();
-    applyHomeSnapshot(latestHoldings, totalDividendValue);
+    applyHomeSnapshot(latestHoldings, totalDividendValue, totalDepositValue);
   }, [applyHomeSnapshot]);
-
-  const closeQuickActionNotice = React.useCallback(() => {
-    setQuickActionNotice(null);
-  }, []);
 
   const handleDismissQuickActionSheet = React.useCallback(() => {
     quickActionSheetRef.current?.dismiss();
@@ -202,21 +202,13 @@ export default function HomeScreen() {
       }
 
       if (action === "deposit") {
-        setQuickActionNotice({
-          title: "Add Deposit",
-          message:
-            "Deposit flow is added to actions and will be implemented next.",
-        });
+        router.push("/deposit");
         return;
       }
 
-      setQuickActionNotice({
-        title: "Bonus Share",
-        message:
-          "Bonus share flow is added to actions and will be implemented next.",
-      });
+      router.push("/bonus-share");
     },
-    [handleDismissQuickActionSheet, router],
+    [handleDismissQuickActionSheet, router]
   );
 
   const handleOpenQuickActionSheet = React.useCallback(() => {
@@ -387,6 +379,9 @@ export default function HomeScreen() {
             <Text className="mt-1 text-sm font-semibold text-success-green">
               Dividend: {formatPKRAmount(totalDividendValue)}
             </Text>
+            <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
+              Deposits: {formatPKRAmount(totalDepositValue)}
+            </Text>
           </View>
 
           <View className="flex-row items-center gap-3">
@@ -544,15 +539,6 @@ export default function HomeScreen() {
           </View>
         </BottomSheetView>
       </BottomSheetModal>
-
-      <AppFeedbackModal
-        visible={quickActionNotice !== null}
-        title={quickActionNotice?.title ?? ""}
-        message={quickActionNotice?.message ?? ""}
-        tone="info"
-        actionLabel="Done"
-        onClose={closeQuickActionNotice}
-      />
     </SafeAreaView>
   );
 }

@@ -11,6 +11,14 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useColorScheme } from "nativewind";
 import { formatPKRAmount } from "@/src/features/home/home-formatters";
 import {
+  BonusShareRecord,
+  getSavedBonusShareRecords,
+} from "@/src/features/bonus-share/bonus-share-records";
+import {
+  DepositRecord,
+  getSavedDepositRecords,
+} from "@/src/features/deposit/deposit-records";
+import {
   getSavedTradeOrders,
   TradeOrderRecord,
 } from "@/src/features/trade/trade-orders";
@@ -21,7 +29,7 @@ import {
 import { subscribeToTradeMutations } from "@/src/features/trade/trade-events";
 import { APP_COLORS } from "@/src/theme/colors";
 
-type TransactionEntryType = "buy" | "sell" | "dividend";
+type TransactionEntryType = "buy" | "sell" | "dividend" | "deposit" | "bonus";
 
 type TransactionEntry = {
   id: string;
@@ -89,6 +97,14 @@ function getTypeBadgeClassName(type: TransactionEntryType): string {
     return "bg-success-green/15";
   }
 
+  if (type === "deposit") {
+    return "bg-success-green/15";
+  }
+
+  if (type === "bonus") {
+    return "bg-app-highlight/15 dark:bg-app-highlightDark/15";
+  }
+
   return "bg-app-highlight/15 dark:bg-app-highlightDark/15";
 }
 
@@ -99,6 +115,14 @@ function getTypeBadgeTextClassName(type: TransactionEntryType): string {
 
   if (type === "sell") {
     return "text-success-green";
+  }
+
+  if (type === "deposit") {
+    return "text-success-green";
+  }
+
+  if (type === "bonus") {
+    return "text-app-highlight dark:text-app-highlightDark";
   }
 
   return "text-app-highlight dark:text-app-highlightDark";
@@ -143,6 +167,30 @@ function toDividendEntry(record: DividendRecord): TransactionEntry {
     subtitle: `${Math.round(record.shares)} shares`,
     amount: record.finalAmount,
     occurredAt: record.dividendDate || record.createdAt,
+  };
+}
+
+function toDepositEntry(record: DepositRecord): TransactionEntry {
+  return {
+    id: `deposit_${record.id}`,
+    type: "deposit",
+    symbol: "CASH",
+    title: "Deposit",
+    subtitle: record.note ? record.note : "Portfolio funding",
+    amount: record.amount,
+    occurredAt: record.depositedAt || record.createdAt,
+  };
+}
+
+function toBonusEntry(record: BonusShareRecord): TransactionEntry {
+  return {
+    id: `bonus_${record.id}`,
+    type: "bonus",
+    symbol: record.symbol.trim().toUpperCase(),
+    title: "Bonus Share",
+    subtitle: `${Math.round(record.units)} shares`,
+    amount: 0,
+    occurredAt: record.awardedAt || record.createdAt,
   };
 }
 
@@ -213,14 +261,18 @@ export default function TransactionHistoryScreen() {
   const [isRefreshing, setIsRefreshing] = React.useState(false);
 
   const loadTransactionHistory = React.useCallback(async () => {
-    const [savedOrders, savedDividends] = await Promise.all([
+    const [savedOrders, savedDividends, savedDeposits, savedBonuses] = await Promise.all([
       getSavedTradeOrders(),
       getSavedDividendRecords(),
+      getSavedDepositRecords(),
+      getSavedBonusShareRecords(),
     ]);
 
     const mappedEntries = [
       ...savedOrders.map(toTradeEntry),
       ...savedDividends.map(toDividendEntry),
+      ...savedDeposits.map(toDepositEntry),
+      ...savedBonuses.map(toBonusEntry),
     ];
     setEntries(sortEntriesByTimeDesc(mappedEntries));
   }, []);

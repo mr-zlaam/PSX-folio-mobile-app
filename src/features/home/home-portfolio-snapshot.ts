@@ -76,27 +76,40 @@ function getHoldingWithMinValue(
 export function buildHomeSnapshotFromHoldings(
   holdings: PortfolioHolding[],
   options?: {
-    portfolioCashAdjustment?: number;
+    contributedCapitalAdjustment?: number;
+    returnCashAdjustment?: number;
   }
 ): {
   snapshot: HomeSnapshot;
   insightDisplayValues: InsightDisplayValues;
 } {
-  const portfolioCashAdjustment =
+  const contributedCapitalAdjustment =
     options &&
-    typeof options.portfolioCashAdjustment === "number" &&
-    Number.isFinite(options.portfolioCashAdjustment) &&
-    options.portfolioCashAdjustment > 0
-      ? options.portfolioCashAdjustment
+    typeof options.contributedCapitalAdjustment === "number" &&
+    Number.isFinite(options.contributedCapitalAdjustment) &&
+    options.contributedCapitalAdjustment > 0
+      ? options.contributedCapitalAdjustment
       : 0;
+  const returnCashAdjustment =
+    options &&
+    typeof options.returnCashAdjustment === "number" &&
+    Number.isFinite(options.returnCashAdjustment) &&
+    options.returnCashAdjustment > 0
+      ? options.returnCashAdjustment
+      : 0;
+  const totalValueAdjustment = contributedCapitalAdjustment + returnCashAdjustment;
 
   if (holdings.length === 0) {
+    const invested = contributedCapitalAdjustment;
+    const value = totalValueAdjustment;
+    const profit = value - invested;
+
     return {
       snapshot: {
         summary: {
-          invested: 0,
-          value: portfolioCashAdjustment,
-          profit: portfolioCashAdjustment,
+          invested,
+          value,
+          profit,
           returnPct: 0,
         },
         insights: [
@@ -121,9 +134,11 @@ export function buildHomeSnapshotFromHoldings(
     };
   }
 
-  const invested = holdings.reduce((sum, holding) => sum + holding.invested, 0);
+  const invested =
+    holdings.reduce((sum, holding) => sum + holding.invested, 0) +
+    contributedCapitalAdjustment;
   const holdingsValue = holdings.reduce((sum, holding) => sum + holding.marketValue, 0);
-  const value = holdingsValue + portfolioCashAdjustment;
+  const value = holdingsValue + totalValueAdjustment;
   const profit = value - invested;
   const returnPct = invested === 0 ? 0 : (profit / invested) * 100;
 

@@ -1,4 +1,6 @@
-import { getSavedTradeOrders, TradeOrderRecord } from "@/src/features/trade/trade-orders";
+import { getSavedTradeOrders } from "@/src/features/trade/trade-orders";
+import { getSavedBonusShareRecords } from "@/src/features/bonus-share/bonus-share-records";
+import { getAllPositionSnapshots } from "@/src/features/portfolio/position-ledger";
 import {
   getCachedSymbols,
   getCachedSymbolQuote,
@@ -37,77 +39,6 @@ export type PortfolioHolding = {
   pnlPct: number;
   quoteSource: SymbolQuote["source"];
 };
-
-function sortOrdersChronologically(orders: TradeOrderRecord[]): TradeOrderRecord[] {
-  return [...orders].sort((firstOrder, secondOrder) => {
-    const firstTimestamp = new Date(firstOrder.tradedAt).getTime();
-    const secondTimestamp = new Date(secondOrder.tradedAt).getTime();
-
-    if (firstTimestamp !== secondTimestamp) {
-      return firstTimestamp - secondTimestamp;
-    }
-
-    return firstOrder.createdAt.localeCompare(secondOrder.createdAt);
-  });
-}
-
-function toPositiveFiniteNumber(value: number): number {
-  if (!Number.isFinite(value) || value <= 0) {
-    return 0;
-  }
-
-  return value;
-}
-
-function buildPositionAccumulators(
-  orders: TradeOrderRecord[]
-): PositionAccumulator[] {
-  const bySymbol = new Map<string, PositionAccumulator>();
-  const sortedOrders = sortOrdersChronologically(orders);
-
-  for (const order of sortedOrders) {
-    const normalizedSymbol = order.symbol.trim().toUpperCase();
-    if (normalizedSymbol.length === 0) {
-      continue;
-    }
-
-    const safeUnits = toPositiveFiniteNumber(order.units);
-    const safePrice = toPositiveFiniteNumber(order.price);
-    if (safeUnits === 0 || safePrice === 0) {
-      continue;
-    }
-
-    const currentPosition = bySymbol.get(normalizedSymbol) ?? {
-      symbol: normalizedSymbol,
-      units: 0,
-      averageBuyPrice: 0,
-    };
-
-    if (order.side === "buy") {
-      const existingCost = currentPosition.units * currentPosition.averageBuyPrice;
-      const nextUnits = currentPosition.units + safeUnits;
-      const nextCost = existingCost + safeUnits * safePrice;
-
-      currentPosition.units = nextUnits;
-      currentPosition.averageBuyPrice = nextUnits > 0 ? nextCost / nextUnits : 0;
-      bySymbol.set(normalizedSymbol, currentPosition);
-      continue;
-    }
-
-    // Sell reduces units against current holding. We cap at zero units.
-    const sellableUnits = Math.min(currentPosition.units, safeUnits);
-    currentPosition.units -= sellableUnits;
-
-    if (currentPosition.units <= 0) {
-      currentPosition.units = 0;
-      currentPosition.averageBuyPrice = 0;
-    }
-
-    bySymbol.set(normalizedSymbol, currentPosition);
-  }
-
-  return Array.from(bySymbol.values()).filter((position) => position.units > 0);
-}
 
 async function readQuoteForSymbol(
   symbol: string,
@@ -176,8 +107,11 @@ function buildHolding(
 async function getPortfolioHoldingsWithQuoteMode(
   quoteMode: QuoteMode
 ): Promise<PortfolioHolding[]> {
-  const savedOrders = await getSavedTradeOrders();
-  const positions = buildPositionAccumulators(savedOrders);
+  const [savedOrders, bonusShareRecords] = await Promise.all([
+    getSavedTradeOrders(),
+    getSavedBonusShareRecords(),
+  ]);
+  const positions = getAllPositionSnapshots(savedOrders, bonusShareRecords);
   if (positions.length === 0) {
     return [];
   }
