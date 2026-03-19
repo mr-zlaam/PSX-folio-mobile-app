@@ -1,3 +1,33 @@
+import AppButton from "@/components/ui/app-button";
+import AppFeedbackModal from "@/components/ui/app-feedback-modal";
+import { getTotalDividendFinalAmount } from "@/src/features/dividend/dividend-records";
+import { InsightDisplayMode } from "@/src/features/home/home-data";
+import { formatPKRAmount } from "@/src/features/home/home-formatters";
+import {
+  buildHomeSnapshotFromHoldings,
+  DEFAULT_INSIGHT_DISPLAY_VALUES,
+  InsightDisplayValues,
+} from "@/src/features/home/home-portfolio-snapshot";
+import { buildHomeViewModel } from "@/src/features/home/home-view-model";
+import { ValueTone } from "@/src/features/home/types";
+import {
+  getPortfolioHoldingsWithCachedQuotes,
+  getPortfolioHoldingsWithLatestQuotes,
+  PortfolioHolding,
+} from "@/src/features/portfolio/portfolio-data";
+import { subscribeToTradeMutations } from "@/src/features/trade/trade-events";
+import {
+  getHomeInsightDisplayModePreference,
+  setHomeInsightDisplayModePreference,
+} from "@/src/lib/app-preferences";
+import { APP_COLORS } from "@/src/theme/colors";
+import {
+  BottomSheetBackdrop,
+  BottomSheetModal,
+  BottomSheetView,
+} from "@gorhom/bottom-sheet";
+import { useRouter } from "expo-router";
+import { useColorScheme } from "nativewind";
 import React from "react";
 import {
   RefreshControl,
@@ -7,36 +37,9 @@ import {
   View,
 } from "react-native";
 import {
-  BottomSheetBackdrop,
-  BottomSheetModal,
-  BottomSheetView,
-} from "@gorhom/bottom-sheet";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { useRouter } from "expo-router";
-import { useColorScheme } from "nativewind";
-import AppButton from "@/components/ui/app-button";
-import AppFeedbackModal from "@/components/ui/app-feedback-modal";
-import { InsightDisplayMode } from "@/src/features/home/home-data";
-import { buildHomeViewModel } from "@/src/features/home/home-view-model";
-import { ValueTone } from "@/src/features/home/types";
-import { formatPKRAmount } from "@/src/features/home/home-formatters";
-import {
-  buildHomeSnapshotFromHoldings,
-  DEFAULT_INSIGHT_DISPLAY_VALUES,
-  InsightDisplayValues,
-} from "@/src/features/home/home-portfolio-snapshot";
-import {
-  getPortfolioHoldingsWithCachedQuotes,
-  getPortfolioHoldingsWithLatestQuotes,
-  PortfolioHolding,
-} from "@/src/features/portfolio/portfolio-data";
-import { getTotalDividendFinalAmount } from "@/src/features/dividend/dividend-records";
-import { subscribeToTradeMutations } from "@/src/features/trade/trade-events";
-import {
-  getHomeInsightDisplayModePreference,
-  setHomeInsightDisplayModePreference,
-} from "@/src/lib/app-preferences";
-import { APP_COLORS } from "@/src/theme/colors";
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
 const HOME_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -121,17 +124,19 @@ export default function HomeScreen() {
   const isDarkMode = colorScheme === "dark";
   const initialHomeData = React.useMemo(
     () => buildHomeSnapshotFromHoldings([]),
-    []
+    [],
   );
-  const [insightMode, setInsightMode] = React.useState<InsightDisplayMode>("percentage");
+  const [insightMode, setInsightMode] =
+    React.useState<InsightDisplayMode>("percentage");
   const [viewModel, setViewModel] = React.useState(() =>
-    buildHomeViewModel(initialHomeData.snapshot)
+    buildHomeViewModel(initialHomeData.snapshot),
   );
   const [insightDisplayValues, setInsightDisplayValues] =
     React.useState<InsightDisplayValues>(DEFAULT_INSIGHT_DISPLAY_VALUES);
   const [totalDividendValue, setTotalDividendValue] = React.useState(0);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
-  const [hasHydratedInsightMode, setHasHydratedInsightMode] = React.useState(false);
+  const [hasHydratedInsightMode, setHasHydratedInsightMode] =
+    React.useState(false);
   const quickActionSheetRef = React.useRef<BottomSheetModal>(null);
   const quickActionSheetSnapPoints = React.useMemo(() => ["42%"], []);
   const [quickActionNotice, setQuickActionNotice] = React.useState<{
@@ -164,7 +169,7 @@ export default function HomeScreen() {
       setViewModel(buildHomeViewModel(nextHomeData.snapshot));
       setInsightDisplayValues(nextHomeData.insightDisplayValues);
     },
-    []
+    [],
   );
 
   const refreshHomeSnapshot = React.useCallback(async () => {
@@ -199,17 +204,19 @@ export default function HomeScreen() {
       if (action === "deposit") {
         setQuickActionNotice({
           title: "Add Deposit",
-          message: "Deposit flow is added to actions and will be implemented next.",
+          message:
+            "Deposit flow is added to actions and will be implemented next.",
         });
         return;
       }
 
       setQuickActionNotice({
         title: "Bonus Share",
-        message: "Bonus share flow is added to actions and will be implemented next.",
+        message:
+          "Bonus share flow is added to actions and will be implemented next.",
       });
     },
-    [handleDismissQuickActionSheet, router]
+    [handleDismissQuickActionSheet, router],
   );
 
   const handleOpenQuickActionSheet = React.useCallback(() => {
@@ -225,7 +232,7 @@ export default function HomeScreen() {
         pressBehavior="close"
       />
     ),
-    []
+    [],
   );
 
   const handlePullToRefresh = React.useCallback(async () => {
@@ -286,19 +293,19 @@ export default function HomeScreen() {
 
   const profitSummaryItem = React.useMemo(
     () => viewModel.summaryItems.find((item) => item.key === "profit"),
-    [viewModel.summaryItems]
+    [viewModel.summaryItems],
   );
   const investedSummaryItem = React.useMemo(
     () => viewModel.summaryItems.find((item) => item.key === "invested"),
-    [viewModel.summaryItems]
+    [viewModel.summaryItems],
   );
   const valueSummaryItem = React.useMemo(
     () => viewModel.summaryItems.find((item) => item.key === "value"),
-    [viewModel.summaryItems]
+    [viewModel.summaryItems],
   );
   const returnSummaryItem = React.useMemo(
     () => viewModel.summaryItems.find((item) => item.key === "returnPct"),
-    [viewModel.summaryItems]
+    [viewModel.summaryItems],
   );
 
   return (
@@ -318,8 +325,12 @@ export default function HomeScreen() {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handlePullToRefresh}
-            tintColor={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
-            colors={[isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple]}
+            tintColor={
+              isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple
+            }
+            colors={[
+              isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple,
+            ]}
             progressBackgroundColor={
               isDarkMode ? APP_COLORS.brand.purple : APP_COLORS.brand.white
             }
@@ -329,7 +340,7 @@ export default function HomeScreen() {
         <View className="gap-7">
           <View className="flex-row items-center justify-between">
             <Text className="text-3xl font-extrabold text-app-text dark:text-app-textDark">
-              Home
+              PSX Portfolio
             </Text>
 
             <TouchableOpacity
@@ -428,8 +439,8 @@ export default function HomeScreen() {
                 const displayValues = insightDisplayValues[insight.label];
                 const displayValue =
                   insightMode === "price"
-                    ? displayValues?.price ?? insight.valueText
-                    : displayValues?.percentage ?? insight.valueText;
+                    ? (displayValues?.price ?? insight.valueText)
+                    : (displayValues?.percentage ?? insight.valueText);
 
                 return (
                   <View
