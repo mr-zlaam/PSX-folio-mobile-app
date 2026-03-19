@@ -58,7 +58,7 @@ describe("home-view-model", () => {
     expect(sanitized.insights[0]?.symbol).toBe("MEBL");
     expect(sanitized.insights[0]?.valueText).toBe("40%");
     expect(sanitized.insights[1]?.symbol).toBe("-");
-    expect(sanitized.insights[1]?.valueText).toBe("N/A");
+    expect(sanitized.insights[1]?.valueText).toBe("0");
     expect(sanitized.insights[2]?.symbol).toBe("LUCK");
     expect(sanitized.insights[2]?.valueText).toBe("-3%");
   });

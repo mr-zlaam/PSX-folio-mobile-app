@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  Alert,
   Platform,
   ScrollView,
   Text,
@@ -28,6 +29,7 @@ import {
   formatSignedPercentage,
 } from "@/src/features/home/home-formatters";
 import { APP_COLORS } from "@/src/theme/colors";
+import { saveTradeOrder } from "@/src/features/trade/trade-orders";
 
 const TRADE_QUOTE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const SAVED_BROKER_LABEL = "Saved broker (from settings)";
@@ -68,6 +70,10 @@ function getChangeTextClassName(change: number): string {
   }
 
   return "text-app-text dark:text-app-textDark";
+}
+
+function getTradeSideActionText(side: TradeSide): "bought" | "sold" {
+  return side === "buy" ? "bought" : "sold";
 }
 
 function ToggleChip({
@@ -155,10 +161,10 @@ export default function TransactionsTabScreen() {
   const [brokerMode, setBrokerMode] = React.useState<BrokerMode>("saved");
 
   const [symbols, setSymbols] = React.useState<PsxSymbol[]>([]);
-  const [symbolSearchQuery, setSymbolSearchQuery] = React.useState("SYS");
-  const [selectedSymbol, setSelectedSymbol] = React.useState("SYS");
+  const [symbolSearchQuery, setSymbolSearchQuery] = React.useState("");
+  const [selectedSymbol, setSelectedSymbol] = React.useState("");
   const [symbolQuote, setSymbolQuote] = React.useState<SymbolQuote>(
-    getSymbolQuoteFallback("SYS")
+    getSymbolQuoteFallback("")
   );
 
   const [priceInput, setPriceInput] = React.useState("");
@@ -173,12 +179,13 @@ export default function TransactionsTabScreen() {
   const [customBrokerNameInput, setCustomBrokerNameInput] = React.useState("");
   const [customBrokerFeePctInput, setCustomBrokerFeePctInput] = React.useState("");
   const [hasEditedPrice, setHasEditedPrice] = React.useState(false);
+  const [isSubmittingOrder, setIsSubmittingOrder] = React.useState(false);
 
   const filteredSymbols = React.useMemo(() => {
     const normalizedQuery = symbolSearchQuery.trim().toLowerCase();
 
     if (normalizedQuery.length === 0) {
-      return symbols.slice(0, 8);
+      return [];
     }
 
     return symbols
@@ -214,20 +221,30 @@ export default function TransactionsTabScreen() {
 
   React.useEffect(() => {
     let isMounted = true;
+    const normalizedSymbol = selectedSymbol.trim().toUpperCase();
+
+    if (normalizedSymbol.length === 0) {
+      setSymbolQuote(getSymbolQuoteFallback(""));
+      setHasEditedPrice(false);
+      setPriceInput("");
+      return () => {
+        isMounted = false;
+      };
+    }
 
     async function refreshQuote() {
-      const cachedQuote = await getCachedSymbolQuote(selectedSymbol);
+      const cachedQuote = await getCachedSymbolQuote(normalizedSymbol);
       if (isMounted && cachedQuote) {
         setSymbolQuote(cachedQuote);
       }
 
-      const latestQuote = await getLatestSymbolQuote(selectedSymbol);
+      const latestQuote = await getLatestSymbolQuote(normalizedSymbol);
       if (isMounted) {
         setSymbolQuote(latestQuote);
       }
     }
 
-    setSymbolQuote(getSymbolQuoteFallback(selectedSymbol));
+    setSymbolQuote(getSymbolQuoteFallback(normalizedSymbol));
     setHasEditedPrice(false);
 
     void refreshQuote();
@@ -251,6 +268,105 @@ export default function TransactionsTabScreen() {
     setSelectedSymbol(symbol);
     setSymbolSearchQuery(symbol);
   }, []);
+
+  const handleCreateOrder = React.useCallback(async () => {
+    const normalizedSymbol = selectedSymbol.trim().toUpperCase();
+    if (normalizedSymbol.length === 0) {
+      Alert.alert("Symbol Required", "Please select a symbol before creating order.");
+      return;
+    }
+
+    const parsedPrice = Number(priceInput.trim().replace(/,/g, ""));
+    if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
+      Alert.alert("Invalid Price", "Enter a valid price greater than 0.");
+      return;
+    }
+
+    const parsedUnits = Number(unitsInput.trim().replace(/,/g, ""));
+    if (!Number.isFinite(parsedUnits) || parsedUnits <= 0) {
+      Alert.alert("Invalid Units", "Enter units greater than 0.");
+      return;
+    }
+
+    if (!Number.isInteger(parsedUnits)) {
+      Alert.alert("Invalid Units", "Units must be a whole number.");
+      return;
+    }
+
+    let brokerName: string | null = null;
+    let brokerFeePct: number | null = null;
+
+    if (brokerMode === "custom") {
+      const normalizedBrokerName = customBrokerNameInput.trim();
+      if (normalizedBrokerName.length === 0) {
+        Alert.alert("Broker Required", "Enter your custom broker name.");
+        return;
+      }
+
+      const parsedBrokerFeePct = Number(
+        customBrokerFeePctInput.trim().replace(/,/g, "")
+      );
+      if (!Number.isFinite(parsedBrokerFeePct) || parsedBrokerFeePct < 0) {
+        Alert.alert(
+          "Invalid Broker Fee",
+          "Enter broker fee percentage (0 or above)."
+        );
+        return;
+      }
+
+      brokerName = normalizedBrokerName;
+      brokerFeePct = parsedBrokerFeePct;
+    }
+
+    setIsSubmittingOrder(true);
+    try {
+      const savedOrder = await saveTradeOrder({
+        side: tradeSide,
+        symbol: normalizedSymbol,
+        price: parsedPrice,
+        units: parsedUnits,
+        tradedAt: tradeDateTime.toISOString(),
+        brokerMode,
+        brokerName,
+        brokerFeePct,
+      });
+
+      Alert.alert(
+        tradeSide === "buy" ? "Bought Successfully" : "Sold Successfully",
+        `You have ${getTradeSideActionText(tradeSide)} ${
+          savedOrder.units
+        } shares of ${savedOrder.symbol} at ${formatPKRAmount(
+          savedOrder.price
+        )} per share.\nSaved locally on this device.`
+      );
+
+      setUnitsInput("");
+      setCustomBrokerNameInput("");
+      setCustomBrokerFeePctInput("");
+      setTradeDateTime(new Date());
+      setHasEditedPrice(false);
+      if (symbolQuote.lastPrice > 0) {
+        setPriceInput(formatEditablePrice(symbolQuote.lastPrice));
+      }
+    } catch {
+      Alert.alert(
+        "Trade Save Failed",
+        "Could not save this trade locally. Please try again."
+      );
+    } finally {
+      setIsSubmittingOrder(false);
+    }
+  }, [
+    brokerMode,
+    customBrokerFeePctInput,
+    customBrokerNameInput,
+    priceInput,
+    selectedSymbol,
+    symbolQuote.lastPrice,
+    tradeDateTime,
+    tradeSide,
+    unitsInput,
+  ]);
 
   const handleStartTradeDateTimeSelection = React.useCallback(() => {
     setTradeDateTimePickerMode("date");
@@ -393,9 +509,11 @@ export default function TransactionsTabScreen() {
               ))}
 
               {filteredSymbols.length === 0 ? (
-                <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
-                  No symbols found.
-                </Text>
+                symbolSearchQuery.trim().length > 0 ? (
+                  <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+                    No symbols found.
+                  </Text>
+                ) : null
               ) : null}
             </View>
 
@@ -539,9 +657,8 @@ export default function TransactionsTabScreen() {
               <AppButton
                 label={tradeSide === "buy" ? "Create Buy Order" : "Create Sell Order"}
                 variant={tradeSide === "buy" ? "primary" : "secondary"}
-                onPress={() => {
-                  // Wire order submit in next step.
-                }}
+                loading={isSubmittingOrder}
+                onPress={handleCreateOrder}
               />
             </View>
 

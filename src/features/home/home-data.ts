@@ -34,26 +34,26 @@ const MOCK_KSE100_SUMMARY: Kse100Summary = {
 
 export const HOME_PLACEHOLDER_SNAPSHOT: HomeSnapshot = {
   summary: {
-    invested: 100000,
-    value: 112000,
-    profit: 12000,
-    returnPct: 12,
+    invested: 0,
+    value: 0,
+    profit: 0,
+    returnPct: 0,
   },
   insights: [
     {
       label: "Top Stock",
-      symbol: "MEBL",
-      valueText: "38% of portfolio",
+      symbol: "-",
+      valueText: "0",
     },
     {
       label: "Best Gain",
-      symbol: "FFC",
-      valueText: "+8.0%",
+      symbol: "-",
+      valueText: "0",
     },
     {
       label: "Worst Loss",
-      symbol: "LUCK",
-      valueText: "-3.0%",
+      symbol: "-",
+      valueText: "0",
     },
   ],
 };

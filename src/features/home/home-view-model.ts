@@ -16,9 +16,9 @@ const DEFAULT_SUMMARY = {
 } as const;
 
 const DEFAULT_INSIGHTS: HomeInsightItem[] = [
-  { label: "Top Stock", symbol: "-", valueText: "N/A" },
-  { label: "Best Gain", symbol: "-", valueText: "N/A" },
-  { label: "Worst Loss", symbol: "-", valueText: "N/A" },
+  { label: "Top Stock", symbol: "-", valueText: "0" },
+  { label: "Best Gain", symbol: "-", valueText: "0" },
+  { label: "Worst Loss", symbol: "-", valueText: "0" },
 ];
 
 const INSIGHT_LABEL_ORDER: HomeInsightLabel[] = [
@@ -45,11 +45,11 @@ function getSafeSymbol(value: unknown): string {
 
 function getSafeValueText(value: unknown): string {
   if (typeof value !== "string") {
-    return "N/A";
+    return "0";
   }
 
   const normalized = value.trim();
-  return normalized.length > 0 ? normalized : "N/A";
+  return normalized.length > 0 ? normalized : "0";
 }
 
 function sanitizeInsight(
