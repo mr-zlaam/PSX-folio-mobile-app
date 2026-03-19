@@ -1,67 +1,140 @@
 import React from "react";
-import { Text, View } from "react-native";
+import { Appearance, Text, View } from "react-native";
 import { useColorScheme } from "nativewind";
 import AppButton from "@/components/ui/app-button";
-import "../global.css";
+import OnboardingFlow from "@/src/features/onboarding/onboarding-flow";
+import {
+  AppTheme,
+  clearThemePreference,
+  getOnboardingComplete,
+  getThemePreference,
+  setOnboardingComplete,
+  setThemePreference,
+} from "@/src/lib/app-preferences";
+import { ensureNotificationPermissionAtStartup } from "@/src/lib/notifications";
 
-export default function TabLayout() {
+function getDeviceTheme(): AppTheme {
+  return Appearance.getColorScheme() === "dark" ? "dark" : "light";
+}
+
+export default function IndexScreen() {
   const { colorScheme, setColorScheme } = useColorScheme();
-  const [loading, setLoading] = React.useState(false);
+  const [isBootstrapping, setIsBootstrapping] = React.useState(true);
+  const [hasCompletedOnboarding, setHasCompletedOnboarding] = React.useState(false);
+  const [selectedTheme, setSelectedTheme] = React.useState<AppTheme>(getDeviceTheme());
+  const hasBootstrappedRef = React.useRef(false);
 
-  const toggleMode = React.useCallback(() => {
-    const nextMode = colorScheme === "dark" ? "light" : "dark";
-    setColorScheme(nextMode);
-  }, [colorScheme, setColorScheme]);
+  const applyTheme = React.useCallback(
+    (theme: AppTheme) => {
+      setSelectedTheme(theme);
+      setColorScheme(theme);
+    },
+    [setColorScheme]
+  );
 
-  const handleReactivePress = React.useCallback(() => {
-    setLoading(true);
-    setTimeout(() => {
-      setLoading(false);
-    }, 900);
-  }, []);
+  React.useEffect(() => {
+    if (hasBootstrappedRef.current) {
+      return;
+    }
+    hasBootstrappedRef.current = true;
 
-  return (
-    <View className="flex-1 bg-brand-white px-5 py-10 dark:bg-brand-purple">
-      <View className="mb-8 gap-3">
-        <Text className="text-3xl font-extrabold tracking-tight text-brand-purple dark:text-brand-white">
-          PSX Portfolio
-        </Text>
-        <Text className="text-base text-text-light dark:text-text-dark">
-          Button component preview for our app-wide UI.
+    let isMounted = true;
+
+    async function bootstrap() {
+      try {
+        await ensureNotificationPermissionAtStartup();
+
+        const storedTheme = await getThemePreference();
+        const startupTheme = storedTheme ?? getDeviceTheme();
+        applyTheme(startupTheme);
+
+        const onboardingState = await getOnboardingComplete();
+        if (isMounted) {
+          setHasCompletedOnboarding(onboardingState);
+        }
+      } finally {
+        if (isMounted) {
+          setIsBootstrapping(false);
+        }
+      }
+    }
+
+    void bootstrap();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [applyTheme]);
+
+  const handleThemeSelect = React.useCallback(
+    async (theme: AppTheme) => {
+      applyTheme(theme);
+      await setThemePreference(theme);
+    },
+    [applyTheme]
+  );
+
+  const handleSkipOnboarding = React.useCallback(async () => {
+    const deviceTheme = getDeviceTheme();
+    await clearThemePreference();
+    await setOnboardingComplete(true);
+    applyTheme(deviceTheme);
+    setHasCompletedOnboarding(true);
+  }, [applyTheme]);
+
+  const handleCompleteOnboarding = React.useCallback(async () => {
+    await setThemePreference(selectedTheme);
+    await setOnboardingComplete(true);
+    setHasCompletedOnboarding(true);
+  }, [selectedTheme]);
+
+  if (isBootstrapping) {
+    return (
+      <View className="flex-1 items-center justify-center bg-app-bg px-6 dark:bg-app-bgDark">
+        <Text className="text-base font-semibold text-app-text dark:text-app-textDark">
+          Preparing PSX Portfolio...
         </Text>
       </View>
+    );
+  }
 
-      <View className="gap-4">
+  if (!hasCompletedOnboarding) {
+    return (
+      <OnboardingFlow
+        selectedTheme={selectedTheme}
+        onThemeSelect={handleThemeSelect}
+        onSkip={handleSkipOnboarding}
+        onComplete={handleCompleteOnboarding}
+      />
+    );
+  }
+
+  return (
+    <View className="flex-1 bg-app-bg px-5 py-12 dark:bg-app-bgDark">
+      <Text className="text-4xl font-extrabold text-app-text dark:text-app-textDark">
+        PSX Portfolio
+      </Text>
+      <Text className="mt-3 text-base text-app-text dark:text-app-textDark">
+        Onboarding is complete. Next we will build portfolio screens.
+      </Text>
+
+      <View className="mt-8 gap-4">
         <AppButton
-          label={`Switch to ${colorScheme === "dark" ? "Light" : "Dark"} Mode`}
+          label={`Theme: ${colorScheme === "dark" ? "Dark" : "Light"}`}
           variant="secondary"
           fullWidth={false}
-          onPress={toggleMode}
+          onPress={() => {
+            void handleThemeSelect(colorScheme === "dark" ? "light" : "dark");
+          }}
         />
 
         <AppButton
-          label="Primary Action"
-          variant="primary"
-          onPress={handleReactivePress}
-        />
-
-        <AppButton
-          label={loading ? "Processing..." : "Reactive Button Test"}
-          variant="primary"
-          loading={loading}
-          onPress={handleReactivePress}
-        />
-
-        <AppButton
-          label="Secondary Action"
-          variant="secondary"
-          onPress={toggleMode}
-        />
-
-        <AppButton
-          label="Delete Trade"
+          label="Reset Onboarding (Testing)"
           variant="danger"
-          onPress={handleReactivePress}
+          onPress={async () => {
+            await setOnboardingComplete(false);
+            setHasCompletedOnboarding(false);
+          }}
         />
       </View>
     </View>

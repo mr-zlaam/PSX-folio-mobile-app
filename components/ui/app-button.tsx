@@ -49,6 +49,9 @@ const textSizeClassMap: Record<ButtonSize, string> = {
   lg: "text-lg",
 };
 
+const AnimatedTouchableOpacity =
+  Animated.createAnimatedComponent(TouchableOpacity);
+
 function AppButton({
   label,
   variant = "primary",
@@ -95,7 +98,7 @@ function AppButton({
   );
 
   return (
-    <TouchableOpacity
+    <AnimatedTouchableOpacity
       accessibilityRole="button"
       accessibilityState={{ disabled: isDisabled, busy: loading }}
       disabled={isDisabled}
@@ -152,7 +155,7 @@ function AppButton({
           {rightSlot ? <View className="items-center">{rightSlot}</View> : null}
         </>
       )}
-    </TouchableOpacity>
+    </AnimatedTouchableOpacity>
   );
 }
 
