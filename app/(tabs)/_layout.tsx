@@ -77,7 +77,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="transactions"
         options={{
-          title: "Trades",
+          title: "Trade",
+          href: null,
         }}
       />
       <Tabs.Screen

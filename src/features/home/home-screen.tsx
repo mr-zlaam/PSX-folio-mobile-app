@@ -1,16 +1,28 @@
 import React from "react";
-import { ScrollView, Text, TouchableOpacity, View } from "react-native";
+import {
+  Animated,
+  Easing,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useRouter } from "expo-router";
 import {
+  getCachedKse100Summary,
   getHomeSnapshot,
   getInsightDisplayValue,
   InsightDisplayMode,
-  getLatestKse100PointsMock,
+  getLatestKse100Summary,
+  getLatestKse100SummaryMock,
+  Kse100Summary,
 } from "@/src/features/home/home-data";
 import { formatKse100Points } from "@/src/features/home/home-formatters";
 import { buildHomeViewModel } from "@/src/features/home/home-view-model";
 import { ValueTone } from "@/src/features/home/types";
+
+const KSE100_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 function getToneClassName(tone: ValueTone): string {
   if (tone === "positive") {
@@ -77,16 +89,92 @@ function HeaderActionButton({ label, selected, onPress }: HeaderActionButtonProp
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const initialKse100Summary = React.useMemo(
+    () => getLatestKse100SummaryMock(),
+    []
+  );
+  const animatedPoints = React.useRef(
+    new Animated.Value(initialKse100Summary.points)
+  ).current;
   const viewModel = React.useMemo(() => {
     const snapshot = getHomeSnapshot();
     return buildHomeViewModel(snapshot);
   }, []);
-  const kse100Points = React.useMemo(() => getLatestKse100PointsMock(), []);
+  const kse100SummaryRef = React.useRef<Kse100Summary>(initialKse100Summary);
+  const [displayedKse100Points, setDisplayedKse100Points] = React.useState<number>(
+    initialKse100Summary.points
+  );
   const [insightMode, setInsightMode] = React.useState<InsightDisplayMode>("percentage");
 
   const handleTradePress = React.useCallback(() => {
     router.push("/(tabs)/transactions");
   }, [router]);
+
+  const animateKse100Points = React.useCallback(
+    (toValue: number) => {
+      Animated.timing(animatedPoints, {
+        toValue,
+        duration: 520,
+        easing: Easing.out(Easing.cubic),
+        useNativeDriver: false,
+      }).start();
+    },
+    [animatedPoints]
+  );
+
+  const applyKse100Summary = React.useCallback(
+    (nextSummary: Kse100Summary) => {
+      const currentSummary = kse100SummaryRef.current;
+      const didPointsChange = currentSummary.points !== nextSummary.points;
+
+      if (!didPointsChange) {
+        return;
+      }
+
+      kse100SummaryRef.current = nextSummary;
+
+      animateKse100Points(nextSummary.points);
+    },
+    [animateKse100Points]
+  );
+
+  React.useEffect(() => {
+    const listenerId = animatedPoints.addListener(({ value }) => {
+      setDisplayedKse100Points(value);
+    });
+
+    return () => {
+      animatedPoints.removeListener(listenerId);
+    };
+  }, [animatedPoints]);
+
+  React.useEffect(() => {
+    let isMounted = true;
+
+    async function refreshKse100Summary() {
+      const cachedSummary = await getCachedKse100Summary();
+      if (isMounted && cachedSummary) {
+        applyKse100Summary(cachedSummary);
+      }
+
+      const latestSummary = await getLatestKse100Summary();
+      if (!isMounted) {
+        return;
+      }
+
+      applyKse100Summary(latestSummary);
+    }
+
+    void refreshKse100Summary();
+    const intervalId = setInterval(() => {
+      void refreshKse100Summary();
+    }, KSE100_REFRESH_INTERVAL_MS);
+
+    return () => {
+      isMounted = false;
+      clearInterval(intervalId);
+    };
+  }, [applyKse100Summary]);
 
   return (
     <SafeAreaView
@@ -108,7 +196,7 @@ export default function HomeScreen() {
               KSE-100
             </Text>
             <Text className="mt-2 text-4xl font-extrabold text-app-text dark:text-app-textDark">
-              {formatKse100Points(kse100Points)}
+              {formatKse100Points(displayedKse100Points)}
             </Text>
           </View>
 

@@ -20,6 +20,8 @@ module.exports = {
         text: {
           light: "#28282b",
           dark: "#FFFFFF",
+          placeholderLight: "rgba(40, 40, 43, 0.55)",
+          placeholderDark: "rgba(255, 255, 255, 0.62)",
         },
         app: {
           bg: "#FFFFFF",
