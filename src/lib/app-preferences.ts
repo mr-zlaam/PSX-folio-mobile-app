@@ -20,6 +20,7 @@ const STORAGE_KEYS = {
   taxpayerProfile: "@psx-portfolio/taxpayer-profile",
   brokerSettings: "@psx-portfolio/broker-settings",
   cashGuardEnabled: "@psx-portfolio/cash-guard-enabled",
+  dividendAutoReinvestEnabled: "@psx-portfolio/dividend-auto-reinvest-enabled",
 } as const;
 
 const HOME_INSIGHT_DISPLAY_MODE_VALUES: readonly HomeInsightDisplayModePreference[] = [
@@ -222,6 +223,22 @@ export async function setCashGuardEnabledPreference(
   enabled: boolean
 ): Promise<void> {
   await setStoredItem(STORAGE_KEYS.cashGuardEnabled, String(enabled));
+}
+
+export async function getDividendAutoReinvestEnabledPreference(): Promise<boolean> {
+  const storedValue = await getStoredItem(
+    STORAGE_KEYS.dividendAutoReinvestEnabled
+  );
+  return storedValue === "true";
+}
+
+export async function setDividendAutoReinvestEnabledPreference(
+  enabled: boolean
+): Promise<void> {
+  await setStoredItem(
+    STORAGE_KEYS.dividendAutoReinvestEnabled,
+    String(enabled)
+  );
 }
 
 export async function getHomeInsightDisplayModePreference(): Promise<HomeInsightDisplayModePreference> {

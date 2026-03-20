@@ -30,6 +30,7 @@ import {
   clearThemePreference,
   getBrokerSettings,
   getCashGuardEnabledPreference,
+  getDividendAutoReinvestEnabledPreference,
   getHomeInsightDisplayModePreference,
   getOnboardingComplete,
   getPortfolioDisplayModePreference,
@@ -38,6 +39,7 @@ import {
   getThemePreference,
   setBrokerSettings,
   setCashGuardEnabledPreference,
+  setDividendAutoReinvestEnabledPreference,
   setHomeInsightDisplayModePreference,
   setOnboardingComplete,
   setPortfolioDisplayModePreference,
@@ -223,6 +225,7 @@ async function readBackupSnapshot(): Promise<BackupSnapshot> {
     portfolioDisplayMode,
     taxpayerProfile,
     cashGuardEnabled,
+    dividendAutoReinvestEnabled,
     brokerSettings,
   ] = await Promise.all([
     getSavedTradeOrders(),
@@ -237,6 +240,7 @@ async function readBackupSnapshot(): Promise<BackupSnapshot> {
     getPortfolioDisplayModePreference(),
     getTaxpayerProfilePreference(),
     getCashGuardEnabledPreference(),
+    getDividendAutoReinvestEnabledPreference(),
     getBrokerSettings(),
   ]);
 
@@ -247,6 +251,7 @@ async function readBackupSnapshot(): Promise<BackupSnapshot> {
     portfolioDisplayMode,
     taxpayerProfile,
     cashGuardEnabled: String(cashGuardEnabled),
+    dividendAutoReinvestEnabled: String(dividendAutoReinvestEnabled),
   };
 
   if (themePreference) {
@@ -650,6 +655,10 @@ async function applyPreferences(preferences: Record<string, string>): Promise<vo
 
   const cashGuardEnabled = parseBoolean(preferences.cashGuardEnabled ?? "") ?? false;
   await setCashGuardEnabledPreference(cashGuardEnabled);
+
+  const dividendAutoReinvestEnabled =
+    parseBoolean(preferences.dividendAutoReinvestEnabled ?? "") ?? false;
+  await setDividendAutoReinvestEnabledPreference(dividendAutoReinvestEnabled);
 
   const brokerName = (preferences.brokerName ?? "").trim();
   const brokerFeePct = parseFiniteNumber(preferences.brokerFeePct ?? "");

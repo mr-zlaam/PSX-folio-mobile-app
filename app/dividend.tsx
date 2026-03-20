@@ -26,6 +26,7 @@ import {
   saveDividendRecord,
   updateDividendRecord,
 } from "@/src/features/dividend/dividend-records";
+import { maybeAutoReinvestDividend } from "@/src/features/dividend/dividend-auto-reinvest";
 import { APP_COLORS } from "@/src/theme/colors";
 import {
   getTaxpayerProfilePreference,
@@ -413,11 +414,33 @@ export default function DividendScreen() {
             dividendDate: dividendDate.toISOString(),
           });
 
+      let successMessage = `Dividend for ${savedRecord.symbol} ${
+        isEditingDividend ? "updated" : "saved"
+      } successfully.\nFinal amount ${formatPKRAmount(savedRecord.finalAmount)} is now added to portfolio worth.`;
+
+      if (!isEditingDividend) {
+        const autoReinvestResult = await maybeAutoReinvestDividend({
+          symbol: savedRecord.symbol,
+          finalAmount: savedRecord.finalAmount,
+          dividendDate: savedRecord.dividendDate,
+        });
+
+        if (autoReinvestResult.reinvested) {
+          successMessage += `\nAuto reinvested ${autoReinvestResult.unitsBought} shares @ ${formatPKRAmount(
+            autoReinvestResult.priceUsed
+          )}. Leftover cash: ${formatPKRAmount(autoReinvestResult.leftoverCash)}.`;
+        } else if (autoReinvestResult.reason === "amount-too-low") {
+          successMessage += "\nAuto reinvest skipped: dividend amount is below one share price. Full amount kept in free cash.";
+        } else if (autoReinvestResult.reason === "price-unavailable") {
+          successMessage += "\nAuto reinvest skipped: latest share price unavailable. Amount kept in free cash.";
+        } else if (autoReinvestResult.reason === "save-failed") {
+          successMessage += "\nAuto reinvest could not be saved. Amount kept in free cash.";
+        }
+      }
+
       showNotice(
         isEditingDividend ? "Dividend Updated" : "Dividend Added",
-        `Dividend for ${savedRecord.symbol} ${
-          isEditingDividend ? "updated" : "saved"
-        } successfully.\nFinal amount ${formatPKRAmount(savedRecord.finalAmount)} is now added to portfolio worth.`,
+        successMessage,
         "success"
       );
 

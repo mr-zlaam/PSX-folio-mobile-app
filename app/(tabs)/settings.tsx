@@ -38,9 +38,11 @@ import {
   AppTheme,
   BrokerSettings,
   getCashGuardEnabledPreference,
+  getDividendAutoReinvestEnabledPreference,
   getBrokerSettings,
   getTaxpayerProfilePreference,
   setCashGuardEnabledPreference,
+  setDividendAutoReinvestEnabledPreference,
   setTaxpayerProfilePreference,
   TaxpayerProfile,
   setThemePreference,
@@ -181,6 +183,8 @@ export default function SettingsTabScreen() {
   const [taxpayerProfile, setTaxpayerProfile] =
     React.useState<TaxpayerProfile>("nonFiler");
   const [cashGuardEnabled, setCashGuardEnabled] = React.useState(false);
+  const [dividendAutoReinvestEnabled, setDividendAutoReinvestEnabled] =
+    React.useState(false);
   const [isResetModalVisible, setIsResetModalVisible] = React.useState(false);
   const [resetChallenge, setResetChallenge] = React.useState<ResetChallenge>(() =>
     buildResetChallenge()
@@ -205,12 +209,23 @@ export default function SettingsTabScreen() {
     setCashGuardEnabled(isEnabled);
   }, []);
 
+  const loadDividendAutoReinvestPreference = React.useCallback(async () => {
+    const isEnabled = await getDividendAutoReinvestEnabledPreference();
+    setDividendAutoReinvestEnabled(isEnabled);
+  }, []);
+
   useFocusEffect(
     React.useCallback(() => {
       void loadBrokerSettings();
       void loadTaxpayerProfile();
       void loadCashGuardPreference();
-    }, [loadBrokerSettings, loadTaxpayerProfile, loadCashGuardPreference])
+      void loadDividendAutoReinvestPreference();
+    }, [
+      loadBrokerSettings,
+      loadTaxpayerProfile,
+      loadCashGuardPreference,
+      loadDividendAutoReinvestPreference,
+    ])
   );
 
   const handlePullToRefresh = React.useCallback(async () => {
@@ -222,11 +237,17 @@ export default function SettingsTabScreen() {
         loadBrokerSettings(),
         loadTaxpayerProfile(),
         loadCashGuardPreference(),
+        loadDividendAutoReinvestPreference(),
       ]);
     } finally {
       setIsRefreshing(false);
     }
-  }, [loadBrokerSettings, loadCashGuardPreference, loadTaxpayerProfile]);
+  }, [
+    loadBrokerSettings,
+    loadCashGuardPreference,
+    loadTaxpayerProfile,
+    loadDividendAutoReinvestPreference,
+  ]);
 
   const handleThemeChange = React.useCallback(
     async (theme: AppTheme) => {
@@ -260,6 +281,18 @@ export default function SettingsTabScreen() {
       // Keep selected value in UI even if persistence fails.
     }
   }, []);
+
+  const handleDividendAutoReinvestToggle = React.useCallback(
+    async (nextValue: boolean) => {
+      setDividendAutoReinvestEnabled(nextValue);
+      try {
+        await setDividendAutoReinvestEnabledPreference(nextValue);
+      } catch {
+        // Keep selected value in UI even if persistence fails.
+      }
+    },
+    []
+  );
 
   const handleOpenResetModal = React.useCallback(() => {
     setResetChallenge(buildResetChallenge());
@@ -405,13 +438,21 @@ export default function SettingsTabScreen() {
             <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
               Trading Rules
             </Text>
-            <View className="mt-3">
+            <View className="mt-3 gap-3">
               <SettingSwitchRow
                 label="Cash Guard"
                 description="Require available cash before creating buy orders."
                 value={cashGuardEnabled}
                 onValueChange={(nextValue) => {
                   void handleCashGuardToggle(nextValue);
+                }}
+              />
+              <SettingSwitchRow
+                label="Dividend Auto Reinvest"
+                description="Automatically buy same-stock units from dividend; any remainder stays as free cash."
+                value={dividendAutoReinvestEnabled}
+                onValueChange={(nextValue) => {
+                  void handleDividendAutoReinvestToggle(nextValue);
                 }}
               />
             </View>
