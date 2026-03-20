@@ -18,14 +18,17 @@ import {
 import { subscribeToTradeMutations } from "@/src/features/trade/trade-events";
 import {
   getHomeInsightDisplayModePreference,
+  getCashGuardEnabledPreference,
   setHomeInsightDisplayModePreference,
 } from "@/src/lib/app-preferences";
+import { getCashLedgerSnapshot } from "@/src/features/trade/cash-ledger";
 import { APP_COLORS } from "@/src/theme/colors";
 import {
   BottomSheetBackdrop,
   BottomSheetModal,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
+import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useColorScheme } from "nativewind";
 import React from "react";
@@ -135,6 +138,8 @@ export default function HomeScreen() {
     React.useState<InsightDisplayValues>(DEFAULT_INSIGHT_DISPLAY_VALUES);
   const [totalDividendValue, setTotalDividendValue] = React.useState(0);
   const [totalDepositValue, setTotalDepositValue] = React.useState(0);
+  const [cashGuardEnabled, setCashGuardEnabled] = React.useState(false);
+  const [availableFreeCash, setAvailableFreeCash] = React.useState(0);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [hasHydratedInsightMode, setHasHydratedInsightMode] =
     React.useState(false);
@@ -175,13 +180,23 @@ export default function HomeScreen() {
   );
 
   const refreshHomeSnapshot = React.useCallback(async () => {
-    const [cachedHoldings, totalDividendValue, totalDepositValue] = await Promise.all([
+    const [
+      cachedHoldings,
+      totalDividendValue,
+      totalDepositValue,
+      isCashGuardEnabled,
+      cashLedgerSnapshot,
+    ] = await Promise.all([
       getPortfolioHoldingsWithCachedQuotes(),
       getTotalDividendFinalAmount(),
       getTotalDepositAmount(),
+      getCashGuardEnabledPreference(),
+      getCashLedgerSnapshot(),
     ]);
     setTotalDividendValue(totalDividendValue);
     setTotalDepositValue(totalDepositValue);
+    setCashGuardEnabled(isCashGuardEnabled);
+    setAvailableFreeCash(cashLedgerSnapshot.availableCash);
     applyHomeSnapshot(cachedHoldings, totalDividendValue, totalDepositValue);
 
     const latestHoldings = await getPortfolioHoldingsWithLatestQuotes();
@@ -283,6 +298,12 @@ export default function HomeScreen() {
     return unsubscribe;
   }, [refreshHomeSnapshot]);
 
+  useFocusEffect(
+    React.useCallback(() => {
+      void refreshHomeSnapshot();
+    }, [refreshHomeSnapshot])
+  );
+
   const profitSummaryItem = React.useMemo(
     () => viewModel.summaryItems.find((item) => item.key === "profit"),
     [viewModel.summaryItems],
@@ -299,6 +320,14 @@ export default function HomeScreen() {
     () => viewModel.summaryItems.find((item) => item.key === "returnPct"),
     [viewModel.summaryItems],
   );
+  const freeCashText = React.useMemo(() => {
+    if (!cashGuardEnabled) {
+      return "Unlimited";
+    }
+
+    const normalizedFreeCash = Math.max(0, availableFreeCash);
+    return formatPKRAmount(normalizedFreeCash);
+  }, [availableFreeCash, cashGuardEnabled]);
 
   return (
     <SafeAreaView
@@ -381,6 +410,9 @@ export default function HomeScreen() {
             </Text>
             <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
               Deposits: {formatPKRAmount(totalDepositValue)}
+            </Text>
+            <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
+              Free Cash: {freeCashText}
             </Text>
           </View>
 

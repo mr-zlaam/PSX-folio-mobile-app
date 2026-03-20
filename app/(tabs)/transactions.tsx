@@ -34,6 +34,7 @@ import {
 } from "@/src/features/home/home-formatters";
 import {
   BrokerSettings,
+  getCashGuardEnabledPreference,
   getBrokerSettings,
   getTaxpayerProfilePreference,
   TaxpayerProfile,
@@ -49,6 +50,7 @@ import {
   saveTradeOrder,
   updateTradeOrder,
 } from "@/src/features/trade/trade-orders";
+import { getCashLedgerSnapshot } from "@/src/features/trade/cash-ledger";
 import { getPositionSnapshotForSymbol } from "@/src/features/portfolio/position-ledger";
 
 const TRADE_QUOTE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
@@ -227,6 +229,8 @@ export default function TransactionsTabScreen() {
     React.useState<BrokerSettings | null>(null);
   const [taxpayerProfile, setTaxpayerProfile] =
     React.useState<TaxpayerProfile>("nonFiler");
+  const [cashGuardEnabled, setCashGuardEnabled] = React.useState(false);
+  const [availableCash, setAvailableCash] = React.useState(0);
   const [deductCgtTaxOnSell, setDeductCgtTaxOnSell] = React.useState(true);
   const [hasEditedPrice, setHasEditedPrice] = React.useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = React.useState(false);
@@ -312,6 +316,17 @@ export default function TransactionsTabScreen() {
     setSymbolQuote(latestQuote);
   }, []);
 
+  const refreshCashLedger = React.useCallback(async () => {
+    const [isCashGuardEnabled, cashLedger] = await Promise.all([
+      getCashGuardEnabledPreference(),
+      getCashLedgerSnapshot({
+        excludeTradeId: isEditingTrade ? normalizedEditTradeId : undefined,
+      }),
+    ]);
+    setCashGuardEnabled(isCashGuardEnabled);
+    setAvailableCash(cashLedger.availableCash);
+  }, [isEditingTrade, normalizedEditTradeId]);
+
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
@@ -319,10 +334,11 @@ export default function TransactionsTabScreen() {
       await refreshQuoteForSymbol(selectedSymbol);
       const savedTaxpayerProfile = await getTaxpayerProfilePreference();
       setTaxpayerProfile(savedTaxpayerProfile);
+      await refreshCashLedger();
     } finally {
       setIsRefreshing(false);
     }
-  }, [refreshQuoteForSymbol, refreshSymbols, selectedSymbol]);
+  }, [refreshCashLedger, refreshQuoteForSymbol, refreshSymbols, selectedSymbol]);
 
   React.useEffect(() => {
     if (isEditingTrade || normalizedRouteSymbol.length === 0) {
@@ -345,6 +361,10 @@ export default function TransactionsTabScreen() {
     void refreshSymbols();
   }, [refreshSymbols]);
 
+  React.useEffect(() => {
+    void refreshCashLedger();
+  }, [refreshCashLedger]);
+
   const loadSavedBrokerSettings = React.useCallback(async () => {
     const brokerSettings = await getBrokerSettings();
     setSavedBrokerSettings(brokerSettings);
@@ -359,7 +379,8 @@ export default function TransactionsTabScreen() {
     React.useCallback(() => {
       void loadSavedBrokerSettings();
       void loadTaxpayerProfile();
-    }, [loadSavedBrokerSettings, loadTaxpayerProfile])
+      void refreshCashLedger();
+    }, [loadSavedBrokerSettings, loadTaxpayerProfile, refreshCashLedger])
   );
 
   React.useEffect(() => {
@@ -554,6 +575,27 @@ export default function TransactionsTabScreen() {
       brokerFeePct = parsedBrokerFeePct;
     }
 
+    if (cashGuardEnabled && tradeSide === "buy") {
+      const grossBuyAmount = parsedPrice * parsedUnits;
+      const feePct = brokerFeePct && brokerFeePct > 0 ? brokerFeePct : 0;
+      const estimatedBrokerFee = (grossBuyAmount * feePct) / 100;
+      const estimatedOrderCost = grossBuyAmount + estimatedBrokerFee;
+      const cashLedger = await getCashLedgerSnapshot({
+        excludeTradeId: isEditingTrade ? normalizedEditTradeId : undefined,
+      });
+
+      if (estimatedOrderCost > cashLedger.availableCash) {
+        showTradeNotice(
+          "Insufficient Cash",
+          `Cash Guard is enabled.\nAvailable cash: ${formatPKRAmount(
+            cashLedger.availableCash
+          )}.\nRequired for this buy: ${formatPKRAmount(estimatedOrderCost)}.`,
+          "error"
+        );
+        return;
+      }
+    }
+
     let sellGrossProfit = 0;
     let sellNetProfit = 0;
     let sellCgtRatePct = 0;
@@ -616,6 +658,7 @@ export default function TransactionsTabScreen() {
             brokerMode,
             brokerName,
             brokerFeePct,
+            cashGuardApplied: cashGuardEnabled,
           })
         : await saveTradeOrder({
             side: tradeSide,
@@ -626,6 +669,7 @@ export default function TransactionsTabScreen() {
             brokerMode,
             brokerName,
             brokerFeePct,
+            cashGuardApplied: cashGuardEnabled,
           });
 
       if (tradeSide === "sell") {
@@ -653,6 +697,7 @@ export default function TransactionsTabScreen() {
           messageLines.join("\n"),
           "success"
         );
+        await refreshCashLedger();
 
         if (isEditingTrade) {
           setShouldGoBackAfterNotice(true);
@@ -679,6 +724,7 @@ export default function TransactionsTabScreen() {
         )} per share.\nSaved locally on this device.`,
         "success"
       );
+      await refreshCashLedger();
 
       if (isEditingTrade) {
         setShouldGoBackAfterNotice(true);
@@ -728,6 +774,8 @@ export default function TransactionsTabScreen() {
     unitsInput,
     isEditingTrade,
     normalizedEditTradeId,
+    cashGuardEnabled,
+    refreshCashLedger,
     showTradeNotice,
   ]);
 
@@ -942,6 +990,20 @@ export default function TransactionsTabScreen() {
             </View>
 
             <View className="mt-4 gap-3">
+              {cashGuardEnabled ? (
+                <View className="rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5">
+                  <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                    Cash Guard
+                  </Text>
+                  <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
+                    {`Available Cash: ${formatPKRAmount(availableCash)}`}
+                  </Text>
+                  <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
+                    Buy orders cannot exceed available cash while Cash Guard is enabled.
+                  </Text>
+                </View>
+              ) : null}
+
               <View className="flex-row gap-3">
                 <FieldInput
                   label="Price"

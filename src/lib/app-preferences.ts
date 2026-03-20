@@ -19,6 +19,7 @@ const STORAGE_KEYS = {
   portfolioDisplayMode: "@psx-portfolio/portfolio-display-mode",
   taxpayerProfile: "@psx-portfolio/taxpayer-profile",
   brokerSettings: "@psx-portfolio/broker-settings",
+  cashGuardEnabled: "@psx-portfolio/cash-guard-enabled",
 } as const;
 
 const HOME_INSIGHT_DISPLAY_MODE_VALUES: readonly HomeInsightDisplayModePreference[] = [
@@ -210,6 +211,17 @@ export async function setThemePreference(theme: AppTheme): Promise<void> {
 
 export async function clearThemePreference(): Promise<void> {
   await removeStoredItem(STORAGE_KEYS.themePreference);
+}
+
+export async function getCashGuardEnabledPreference(): Promise<boolean> {
+  const storedValue = await getStoredItem(STORAGE_KEYS.cashGuardEnabled);
+  return storedValue === "true";
+}
+
+export async function setCashGuardEnabledPreference(
+  enabled: boolean
+): Promise<void> {
+  await setStoredItem(STORAGE_KEYS.cashGuardEnabled, String(enabled));
 }
 
 export async function getHomeInsightDisplayModePreference(): Promise<HomeInsightDisplayModePreference> {

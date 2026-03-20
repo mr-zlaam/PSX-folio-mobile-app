@@ -15,6 +15,7 @@ export type TradeOrderInput = {
   brokerMode: BrokerMode;
   brokerName: string | null;
   brokerFeePct: number | null;
+  cashGuardApplied?: boolean;
 };
 
 export type TradeOrderRecord = TradeOrderInput & {
@@ -76,6 +77,8 @@ function getSafeOrdersStore(value: unknown): TradeOrdersStore {
       (typeof order.brokerName === "string" || order.brokerName === null) &&
       (typeof order.brokerFeePct === "number" ||
         order.brokerFeePct === null) &&
+      (typeof order.cashGuardApplied === "boolean" ||
+        typeof order.cashGuardApplied === "undefined") &&
       typeof order.createdAt === "string"
   );
 
@@ -165,6 +168,10 @@ export async function saveTradeOrder(
     brokerMode: orderInput.brokerMode,
     brokerName: orderInput.brokerName,
     brokerFeePct: orderInput.brokerFeePct,
+    cashGuardApplied:
+      typeof orderInput.cashGuardApplied === "boolean"
+        ? orderInput.cashGuardApplied
+        : true,
     createdAt: new Date().toISOString(),
   };
 
@@ -257,6 +264,10 @@ export async function updateTradeOrder(
     brokerMode: orderInput.brokerMode,
     brokerName: orderInput.brokerName,
     brokerFeePct: orderInput.brokerFeePct,
+    cashGuardApplied:
+      typeof orderInput.cashGuardApplied === "boolean"
+        ? orderInput.cashGuardApplied
+        : (existingOrder.cashGuardApplied ?? true),
   };
 
   const nextOrders = [...store.orders];

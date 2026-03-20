@@ -4,6 +4,7 @@ import {
   Modal,
   RefreshControl,
   ScrollView,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -36,8 +37,10 @@ import {
 import {
   AppTheme,
   BrokerSettings,
+  getCashGuardEnabledPreference,
   getBrokerSettings,
   getTaxpayerProfilePreference,
+  setCashGuardEnabledPreference,
   setTaxpayerProfilePreference,
   TaxpayerProfile,
   setThemePreference,
@@ -115,6 +118,45 @@ function ToggleChip({
   );
 }
 
+function SettingSwitchRow({
+  label,
+  description,
+  value,
+  onValueChange,
+  disabled = false,
+}: {
+  label: string;
+  description: string;
+  value: boolean;
+  onValueChange: (nextValue: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <View className="rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5">
+      <View className="flex-row items-center justify-between gap-3">
+        <View className="flex-1">
+          <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+            {label}
+          </Text>
+          <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
+            {description}
+          </Text>
+        </View>
+        <Switch
+          value={value}
+          disabled={disabled}
+          onValueChange={onValueChange}
+          thumbColor={APP_COLORS.brand.white}
+          trackColor={{
+            true: APP_COLORS.app.highlight,
+            false: APP_COLORS.text.placeholderLight,
+          }}
+        />
+      </View>
+    </View>
+  );
+}
+
 function formatBrokerSummary(brokerSettings: BrokerSettings | null): string {
   if (!brokerSettings) {
     return "Not configured yet.";
@@ -138,6 +180,7 @@ export default function SettingsTabScreen() {
   );
   const [taxpayerProfile, setTaxpayerProfile] =
     React.useState<TaxpayerProfile>("nonFiler");
+  const [cashGuardEnabled, setCashGuardEnabled] = React.useState(false);
   const [isResetModalVisible, setIsResetModalVisible] = React.useState(false);
   const [resetChallenge, setResetChallenge] = React.useState<ResetChallenge>(() =>
     buildResetChallenge()
@@ -157,11 +200,17 @@ export default function SettingsTabScreen() {
     setTaxpayerProfile(savedTaxpayerProfile);
   }, []);
 
+  const loadCashGuardPreference = React.useCallback(async () => {
+    const isEnabled = await getCashGuardEnabledPreference();
+    setCashGuardEnabled(isEnabled);
+  }, []);
+
   useFocusEffect(
     React.useCallback(() => {
       void loadBrokerSettings();
       void loadTaxpayerProfile();
-    }, [loadBrokerSettings, loadTaxpayerProfile])
+      void loadCashGuardPreference();
+    }, [loadBrokerSettings, loadTaxpayerProfile, loadCashGuardPreference])
   );
 
   const handlePullToRefresh = React.useCallback(async () => {
@@ -172,11 +221,12 @@ export default function SettingsTabScreen() {
         getLatestSymbols(),
         loadBrokerSettings(),
         loadTaxpayerProfile(),
+        loadCashGuardPreference(),
       ]);
     } finally {
       setIsRefreshing(false);
     }
-  }, [loadBrokerSettings, loadTaxpayerProfile]);
+  }, [loadBrokerSettings, loadCashGuardPreference, loadTaxpayerProfile]);
 
   const handleThemeChange = React.useCallback(
     async (theme: AppTheme) => {
@@ -201,6 +251,15 @@ export default function SettingsTabScreen() {
     },
     []
   );
+
+  const handleCashGuardToggle = React.useCallback(async (nextValue: boolean) => {
+    setCashGuardEnabled(nextValue);
+    try {
+      await setCashGuardEnabledPreference(nextValue);
+    } catch {
+      // Keep selected value in UI even if persistence fails.
+    }
+  }, []);
 
   const handleOpenResetModal = React.useCallback(() => {
     setResetChallenge(buildResetChallenge());
@@ -303,31 +362,21 @@ export default function SettingsTabScreen() {
               Settings
             </Text>
             <Text className="mt-2 text-base text-app-text dark:text-app-textDark">
-              Manage app preferences and broker defaults.
+              Manage appearance, trading controls, and profile options.
             </Text>
           </View>
 
           <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
             <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-              Theme
+              Appearance
             </Text>
-            <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
-              Choose how app looks.
-            </Text>
-
-            <View className="mt-3 flex-row gap-2">
-              <ToggleChip
-                label="Light"
-                selected={currentTheme === "light"}
-                onPress={() => {
-                  void handleThemeChange("light");
-                }}
-              />
-              <ToggleChip
-                label="Dark"
-                selected={currentTheme === "dark"}
-                onPress={() => {
-                  void handleThemeChange("dark");
+            <View className="mt-3">
+              <SettingSwitchRow
+                label="Dark Mode"
+                description="Turn on dark mode for the whole app."
+                value={currentTheme === "dark"}
+                onValueChange={(nextValue) => {
+                  void handleThemeChange(nextValue ? "dark" : "light");
                 }}
               />
             </View>
@@ -335,7 +384,7 @@ export default function SettingsTabScreen() {
 
           <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
             <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-              Broker Settings
+              Broker
             </Text>
             <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
               {formatBrokerSummary(brokerSettings)}
@@ -350,6 +399,22 @@ export default function SettingsTabScreen() {
                 Open Broker Settings
               </Text>
             </TouchableOpacity>
+          </View>
+
+          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
+            <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+              Trading Rules
+            </Text>
+            <View className="mt-3">
+              <SettingSwitchRow
+                label="Cash Guard"
+                description="Require available cash before creating buy orders."
+                value={cashGuardEnabled}
+                onValueChange={(nextValue) => {
+                  void handleCashGuardToggle(nextValue);
+                }}
+              />
+            </View>
           </View>
 
           <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
@@ -380,7 +445,7 @@ export default function SettingsTabScreen() {
 
           <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
             <Text className="text-sm font-bold uppercase tracking-wide text-brand-red">
-              Reset Portfolio
+              Data
             </Text>
             <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
               This permanently clears all buy, sell, dividend, deposit, and bonus share records from this device.
