@@ -1,5 +1,5 @@
 import React from "react";
-import { GestureResponderEvent, LayoutChangeEvent, Text, View } from "react-native";
+import { LayoutChangeEvent, PanResponder, Text, View } from "react-native";
 import Svg, { Circle, Line, Polyline } from "react-native-svg";
 
 export type StockLineChartPoint = {
@@ -26,13 +26,20 @@ function clampToFinite(value: number, fallbackValue = 0): number {
   return value;
 }
 
-function buildPolylinePoints(
+type ChartCoordinate = {
+  index: number;
+  x: number;
+  y: number;
+  point: StockLineChartPoint;
+};
+
+function buildChartCoordinates(
   points: StockLineChartPoint[],
   width: number,
-  height: number
-): string {
-  if (points.length <= 1 || width <= 0 || height <= 0) {
-    return "";
+  height: number,
+): ChartCoordinate[] {
+  if (points.length === 0 || width <= 0 || height <= 0) {
+    return [];
   }
 
   const prices = points.map((point) => point.price);
@@ -41,15 +48,18 @@ function buildPolylinePoints(
   const range = maxPrice - minPrice;
   const safeRange = range === 0 ? 1 : range;
 
-  return points
-    .map((point, index) => {
-      const x =
-        points.length === 1 ? 0 : (index / (points.length - 1)) * clampToFinite(width);
-      const normalizedY = (point.price - minPrice) / safeRange;
-      const y = height - normalizedY * height;
-      return `${x.toFixed(2)},${clampToFinite(y).toFixed(2)}`;
-    })
-    .join(" ");
+  return points.map((point, index) => {
+    const x =
+      points.length === 1 ? 0 : (index / (points.length - 1)) * clampToFinite(width);
+    const normalizedY = (point.price - minPrice) / safeRange;
+    const y = height - normalizedY * height;
+    return {
+      index,
+      x: clampToFinite(x),
+      y: clampToFinite(y),
+      point,
+    };
+  });
 }
 
 function clamp(value: number, minValue: number, maxValue: number): number {
@@ -65,7 +75,7 @@ export default function StockLineChart({
   onPointSelected,
 }: StockLineChartProps) {
   const [width, setWidth] = React.useState(0);
-  const [selectedIndex, setSelectedIndex] = React.useState<number | null>(null);
+  const [selectedX, setSelectedX] = React.useState<number | null>(null);
 
   const handleLayout = React.useCallback((event: LayoutChangeEvent) => {
     setWidth(event.nativeEvent.layout.width);
@@ -76,65 +86,102 @@ export default function StockLineChart({
     [width]
   );
 
-  const polylinePoints = React.useMemo(
-    () => buildPolylinePoints(points, chartWidth, height),
+  const chartCoordinates = React.useMemo(
+    () => buildChartCoordinates(points, chartWidth, height),
     [chartWidth, height, points]
   );
 
+  const polylinePoints = React.useMemo(
+    () =>
+      chartCoordinates
+        .map((coordinate) => `${coordinate.x.toFixed(2)},${coordinate.y.toFixed(2)}`)
+        .join(" "),
+    [chartCoordinates]
+  );
+
   const selectedPoint = React.useMemo(() => {
-    if (
-      selectedIndex === null ||
-      selectedIndex < 0 ||
-      selectedIndex >= points.length
-    ) {
+    if (selectedX === null || chartCoordinates.length === 0) {
       return null;
     }
 
-    const point = points[selectedIndex];
-    const x =
-      points.length <= 1
-        ? 0
-        : (selectedIndex / (points.length - 1)) * chartWidth;
-    const prices = points.map((item) => item.price);
-    const minPrice = Math.min(...prices);
-    const maxPrice = Math.max(...prices);
-    const range = maxPrice - minPrice;
-    const safeRange = range === 0 ? 1 : range;
-    const normalizedY = (point.price - minPrice) / safeRange;
-    const y = height - normalizedY * height;
+    const clampedX = clamp(selectedX, 0, chartWidth);
+    if (chartCoordinates.length === 1) {
+      const coordinate = chartCoordinates[0];
+      return {
+        point: coordinate.point,
+        x: clampedX,
+        y: coordinate.y,
+      };
+    }
+
+    let rightIndex = chartCoordinates.findIndex(
+      (coordinate) => coordinate.x >= clampedX
+    );
+
+    if (rightIndex === -1) {
+      rightIndex = chartCoordinates.length - 1;
+    }
+
+    const leftIndex = Math.max(0, rightIndex - 1);
+    const left = chartCoordinates[leftIndex];
+    const right = chartCoordinates[rightIndex];
+    const segmentWidth = right.x - left.x;
+    const ratio =
+      segmentWidth <= 0 ? 0 : clamp((clampedX - left.x) / segmentWidth, 0, 1);
+    const interpolatedY = left.y + (right.y - left.y) * ratio;
+    const nearest =
+      Math.abs(clampedX - left.x) <= Math.abs(clampedX - right.x) ? left : right;
 
     return {
-      point,
-      x,
-      y,
+      point: nearest.point,
+      x: clampedX,
+      y: interpolatedY,
     };
-  }, [chartWidth, height, points, selectedIndex]);
+  }, [chartCoordinates, chartWidth, selectedX]);
 
-  const handleSelectAtLocation = React.useCallback(
-    (event: GestureResponderEvent) => {
-      if (points.length < 2 || chartWidth <= 0) {
-        setSelectedIndex(null);
+  const handleSelectAtRelativeX = React.useCallback(
+    (relativeX: number) => {
+      if (chartCoordinates.length < 2 || chartWidth <= 0) {
+        setSelectedX(null);
         return;
       }
 
-      const tappedX = event.nativeEvent.locationX - CHART_HORIZONTAL_PADDING;
-      const clampedX = clamp(tappedX, 0, chartWidth);
-      const index = Math.round((clampedX / chartWidth) * (points.length - 1));
-      setSelectedIndex(index);
+      setSelectedX(clamp(relativeX, 0, chartWidth));
     },
-    [chartWidth, points.length]
+    [chartCoordinates.length, chartWidth]
+  );
+
+  const panResponder = React.useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => true,
+        onMoveShouldSetPanResponder: () => true,
+        onPanResponderGrant: (event) => {
+          handleSelectAtRelativeX(event.nativeEvent.locationX);
+        },
+        onPanResponderMove: (event) => {
+          handleSelectAtRelativeX(event.nativeEvent.locationX);
+        },
+      }),
+    [handleSelectAtRelativeX]
   );
 
   React.useEffect(() => {
-    if (points.length === 0) {
-      setSelectedIndex(null);
+    if (chartCoordinates.length < 2) {
+      setSelectedX(null);
       return;
     }
 
-    if (selectedIndex !== null && selectedIndex >= points.length) {
-      setSelectedIndex(points.length - 1);
+    if (selectedX !== null) {
+      setSelectedX((previousValue) => {
+        if (previousValue === null) {
+          return previousValue;
+        }
+
+        return clamp(previousValue, 0, chartWidth);
+      });
     }
-  }, [points, selectedIndex]);
+  }, [chartCoordinates.length, chartWidth, selectedX]);
 
   React.useEffect(() => {
     if (!onPointSelected) {
@@ -147,65 +194,62 @@ export default function StockLineChart({
   return (
     <View className="w-full" onLayout={handleLayout}>
       {points.length < 2 || chartWidth <= 0 || polylinePoints.length === 0 ? (
-        <View className="h-[170px] items-center justify-center rounded-2xl bg-brand-white/70 dark:bg-brand-white/5">
+        <View
+          style={{ height }}
+          className="items-center justify-center rounded-2xl bg-text-light/5 dark:bg-brand-white/5"
+        >
           <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
             {emptyLabel}
           </Text>
         </View>
       ) : (
-        <View className="rounded-2xl bg-brand-white/70 p-3 dark:bg-brand-white/5">
-          <Svg width={chartWidth} height={height} onPress={handleSelectAtLocation}>
-            <Line
-              x1="0"
-              y1={String(height)}
-              x2={String(chartWidth)}
-              y2={String(height)}
-              stroke={gridColor}
-              strokeWidth="1"
+        <View className="rounded-2xl bg-text-light/5 p-3 dark:bg-brand-white/5">
+          <View
+            style={{ width: chartWidth, height }}
+            className="relative"
+          >
+            <Svg width={chartWidth} height={height}>
+              <Polyline
+                points={polylinePoints}
+                fill="none"
+                stroke={lineColor}
+                strokeWidth="2.5"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+              {selectedPoint ? (
+                <>
+                  <Line
+                    x1={String(selectedPoint.x)}
+                    y1="0"
+                    x2={String(selectedPoint.x)}
+                    y2={String(height)}
+                    stroke={gridColor}
+                    strokeWidth="1"
+                  />
+                  <Line
+                    x1="0"
+                    y1={String(selectedPoint.y)}
+                    x2={String(chartWidth)}
+                    y2={String(selectedPoint.y)}
+                    stroke={gridColor}
+                    strokeWidth="1"
+                  />
+                  <Circle
+                    cx={String(selectedPoint.x)}
+                    cy={String(selectedPoint.y)}
+                    r="4"
+                    fill={lineColor}
+                  />
+                </>
+              ) : null}
+            </Svg>
+
+            <View
+              {...panResponder.panHandlers}
+              className="absolute inset-0"
             />
-            <Line
-              x1="0"
-              y1={String(height * 0.5)}
-              x2={String(chartWidth)}
-              y2={String(height * 0.5)}
-              stroke={gridColor}
-              strokeWidth="1"
-            />
-            <Line
-              x1="0"
-              y1="0"
-              x2={String(chartWidth)}
-              y2="0"
-              stroke={gridColor}
-              strokeWidth="1"
-            />
-            <Polyline
-              points={polylinePoints}
-              fill="none"
-              stroke={lineColor}
-              strokeWidth="2.5"
-              strokeLinejoin="round"
-              strokeLinecap="round"
-            />
-            {selectedPoint ? (
-              <>
-                <Line
-                  x1={String(selectedPoint.x)}
-                  y1="0"
-                  x2={String(selectedPoint.x)}
-                  y2={String(height)}
-                  stroke={gridColor}
-                  strokeWidth="1"
-                />
-                <Circle
-                  cx={String(selectedPoint.x)}
-                  cy={String(selectedPoint.y)}
-                  r="4"
-                  fill={lineColor}
-                />
-              </>
-            ) : null}
-          </Svg>
+          </View>
         </View>
       )}
     </View>
