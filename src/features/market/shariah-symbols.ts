@@ -19,7 +19,7 @@ function normalizeSymbols(symbols: string[]): string[] {
 }
 
 function symbolsFromSnapshot(snapshot: {
-  items: Array<{ symbol: string }>;
+  items: { symbol: string }[];
 } | null): string[] {
   if (!snapshot) {
     return [];
@@ -113,4 +113,3 @@ export function useShariahSymbols(): {
     isShariahCompliantSymbol,
   };
 }
-

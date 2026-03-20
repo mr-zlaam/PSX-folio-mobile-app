@@ -52,8 +52,8 @@ export default function TabsLayout() {
           ? APP_COLORS.brand.white
           : APP_COLORS.brand.purple,
         tabBarInactiveTintColor: isDarkMode
-          ? APP_COLORS.brand.white
-          : APP_COLORS.text.light,
+          ? APP_COLORS.text.placeholderDark
+          : APP_COLORS.text.placeholderLight,
         tabBarStyle: {
           backgroundColor: isDarkMode
             ? APP_COLORS.brand.purple

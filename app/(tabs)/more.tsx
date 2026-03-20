@@ -19,7 +19,8 @@ type MoreGridItem = {
     | "/broker-settings"
     | "/dividend"
     | "/deposit"
-    | "/bonus-share";
+    | "/bonus-share"
+    | "/analytics";
 };
 
 const MORE_GRID_ITEMS: MoreGridItem[] = [
@@ -34,6 +35,12 @@ const MORE_GRID_ITEMS: MoreGridItem[] = [
     label: "History",
     icon: "history",
     route: "/transaction-history",
+  },
+  {
+    id: "analytics",
+    label: "Analytics",
+    icon: "chart-timeline-variant",
+    route: "/analytics",
   },
   {
     id: "stocks",

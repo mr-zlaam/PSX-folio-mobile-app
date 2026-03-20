@@ -1,4 +1,7 @@
-import { formatPKRAmount, formatSignedPercentage } from "@/src/features/home/home-formatters";
+import {
+  formatPKRAmount,
+  formatSignedPercentage,
+} from "@/src/features/home/home-formatters";
 import {
   HomeInsightItem,
   HomeInsightLabel,
@@ -55,28 +58,35 @@ function getSafeValueText(value: unknown): string {
 function sanitizeInsight(
   label: HomeInsightLabel,
   sourceInsight: Partial<HomeInsightItem> | undefined,
-  fallbackInsight: HomeInsightItem
+  fallbackInsight: HomeInsightItem,
 ): HomeInsightItem {
   return {
     label,
     symbol: getSafeSymbol(sourceInsight?.symbol ?? fallbackInsight.symbol),
-    valueText: getSafeValueText(sourceInsight?.valueText ?? fallbackInsight.valueText),
+    valueText: getSafeValueText(
+      sourceInsight?.valueText ?? fallbackInsight.valueText,
+    ),
   };
 }
 
 function getInsightByLabel(
   insights: Partial<HomeInsightItem>[] | undefined,
-  label: HomeInsightLabel
+  label: HomeInsightLabel,
 ): Partial<HomeInsightItem> | undefined {
   return insights?.find((insight) => insight.label === label);
 }
 
-export function sanitizeHomeSnapshot(input?: HomeSnapshotInput | null): HomeSnapshot {
+export function sanitizeHomeSnapshot(
+  input?: HomeSnapshotInput | null,
+): HomeSnapshot {
   const summary = {
     invested: getSafeNumber(input?.summary?.invested, DEFAULT_SUMMARY.invested),
     value: getSafeNumber(input?.summary?.value, DEFAULT_SUMMARY.value),
     profit: getSafeNumber(input?.summary?.profit, DEFAULT_SUMMARY.profit),
-    returnPct: getSafeNumber(input?.summary?.returnPct, DEFAULT_SUMMARY.returnPct),
+    returnPct: getSafeNumber(
+      input?.summary?.returnPct,
+      DEFAULT_SUMMARY.returnPct,
+    ),
   };
 
   const insights = INSIGHT_LABEL_ORDER.map((label, index) => {
@@ -100,11 +110,13 @@ export function getValueTone(value: number): ValueTone {
   return "neutral";
 }
 
-export function buildHomeViewModel(input?: HomeSnapshotInput | null): HomeViewModel {
+export function buildHomeViewModel(
+  input?: HomeSnapshotInput | null,
+): HomeViewModel {
   const snapshot = sanitizeHomeSnapshot(input);
 
   return {
-    title: "PSX Portfolio",
+    title: "PSX Folio",
     subtitle: "Know instantly whether your portfolio is in profit or loss.",
     summaryItems: [
       {
