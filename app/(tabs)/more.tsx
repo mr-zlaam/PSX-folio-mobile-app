@@ -111,7 +111,7 @@ export default function MoreTabScreen() {
         }}
         showsVerticalScrollIndicator={false}
       >
-        <View className="rounded-3xl bg-brand-white px-4 py-5 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+        <View className="rounded-3xl bg-brand-white px-4 py-5 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
           <Text className="text-center text-2xl font-extrabold text-app-text dark:text-app-textDark">
             More
           </Text>

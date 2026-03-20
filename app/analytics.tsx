@@ -422,7 +422,7 @@ export default function AnalyticsScreen() {
           </View>
 
           {isBootstrapping && !snapshot ? (
-            <View className="items-center rounded-3xl bg-brand-white/95 p-6 shadow-sm dark:bg-brand-white/10">
+            <View className="items-center rounded-3xl bg-brand-white/95 p-6 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
               <ActivityIndicator
                 size="small"
                 color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
@@ -432,7 +432,7 @@ export default function AnalyticsScreen() {
               </Text>
             </View>
           ) : !snapshot ? (
-            <View className="rounded-3xl bg-brand-white/95 p-5 shadow-sm dark:bg-brand-white/10">
+            <View className="rounded-3xl bg-brand-white/95 p-5 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
               <Text className="text-lg font-bold text-app-text dark:text-app-textDark">
                 Analytics unavailable
               </Text>
@@ -442,7 +442,7 @@ export default function AnalyticsScreen() {
             </View>
           ) : (
             <>
-              <View className="rounded-3xl bg-brand-white px-4 py-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+              <View className="rounded-3xl bg-brand-white px-4 py-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
                 <Text className="text-xs font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                   Portfolio Pulse
                 </Text>
@@ -490,7 +490,7 @@ export default function AnalyticsScreen() {
                 </Text>
               </View>
 
-              <View className="rounded-3xl bg-brand-white px-4 py-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+              <View className="rounded-3xl bg-brand-white px-4 py-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
                 <View className="flex-row items-center justify-between">
                   <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                     Equity Trend
@@ -522,7 +522,7 @@ export default function AnalyticsScreen() {
                 </View>
               </View>
 
-              <View className="rounded-3xl bg-brand-white px-4 py-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+              <View className="rounded-3xl bg-brand-white px-4 py-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
                 <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                   Benchmark Snapshot
                 </Text>
@@ -580,7 +580,7 @@ export default function AnalyticsScreen() {
               </View>
 
               <View className="flex-row gap-3">
-                <View className="flex-1 rounded-3xl bg-brand-white px-4 py-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+                <View className="flex-1 rounded-3xl bg-brand-white px-4 py-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
                   <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                     Best Performer
                   </Text>
@@ -599,7 +599,7 @@ export default function AnalyticsScreen() {
                   </Text>
                 </View>
 
-                <View className="flex-1 rounded-3xl bg-brand-white px-4 py-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+                <View className="flex-1 rounded-3xl bg-brand-white px-4 py-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
                   <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                     Weakest
                   </Text>
@@ -619,7 +619,7 @@ export default function AnalyticsScreen() {
                 </View>
               </View>
 
-              <View className="rounded-3xl bg-brand-white px-4 py-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+              <View className="rounded-3xl bg-brand-white px-4 py-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
                 <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                   Risk Meter
                 </Text>
@@ -673,7 +673,7 @@ export default function AnalyticsScreen() {
                 </View>
               </View>
 
-              <View className="rounded-3xl bg-brand-white px-4 py-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+              <View className="rounded-3xl bg-brand-white px-4 py-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
                 <View className="flex-row items-center justify-between">
                   <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                     Allocation

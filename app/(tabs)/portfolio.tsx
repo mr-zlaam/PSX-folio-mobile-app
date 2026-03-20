@@ -191,7 +191,7 @@ function CompactHoldingCard({
     <TouchableOpacity
       activeOpacity={0.9}
       onPress={onPress}
-      className="rounded-2xl bg-brand-white px-3 py-3 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
+      className="rounded-2xl bg-brand-white px-3 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
     >
       <View className="flex-row items-start justify-between">
         <View className="mr-2 flex-1">
@@ -292,7 +292,7 @@ function SectorCard({
     <TouchableOpacity
       activeOpacity={0.9}
       onPress={onPress}
-      className="rounded-2xl bg-brand-white px-3 py-3 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
+      className="rounded-2xl bg-brand-white px-3 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
     >
       <View className="flex-row items-start justify-between">
         <View className="mr-2 flex-1">
@@ -491,7 +491,7 @@ export default function PortfolioTabScreen() {
           </View>
 
           {isFilterPanelVisible ? (
-            <View className="rounded-2xl bg-brand-white p-3 shadow-sm dark:border dark:border-app-highlightDark/30 dark:bg-brand-white/10">
+            <View className="rounded-2xl bg-brand-white p-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/30 dark:bg-brand-white/10">
               <View className="flex-row items-center justify-between">
                 <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                   Filters
@@ -531,7 +531,7 @@ export default function PortfolioTabScreen() {
           ) : null}
 
           {holdings.length === 0 ? (
-            <View className="rounded-2xl bg-brand-white p-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+            <View className="rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
               <Text className="text-base font-semibold text-app-text dark:text-app-textDark">
                 No holdings yet.
               </Text>

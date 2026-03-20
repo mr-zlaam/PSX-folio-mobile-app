@@ -469,7 +469,7 @@ export default function DividendScreen() {
             <View className="w-14" />
           </View>
 
-          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
             <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
               Stock Symbol
             </Text>
@@ -525,7 +525,7 @@ export default function DividendScreen() {
             </View>
           </View>
 
-          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
             <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
               Dividend Form
             </Text>
@@ -609,7 +609,7 @@ export default function DividendScreen() {
             </View>
           </View>
 
-          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
             <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
               Final Amount
             </Text>

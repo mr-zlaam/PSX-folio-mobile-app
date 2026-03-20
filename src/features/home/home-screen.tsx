@@ -474,7 +474,7 @@ export default function HomeScreen() {
             </TouchableOpacity>
           </View>
 
-          <View className="rounded-3xl bg-brand-white px-4 py-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+          <View className="rounded-3xl bg-brand-white px-4 py-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
             <View className="flex-row items-start justify-between gap-3">
               <Text className="text-xs font-bold uppercase tracking-wider text-app-highlight dark:text-app-highlightDark">
                 Current Portfolio Worth
@@ -582,7 +582,7 @@ export default function HomeScreen() {
           <TouchableOpacity
             activeOpacity={0.94}
             onPress={handleOpenPortfolio}
-            className="rounded-3xl bg-brand-white p-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
+            className="rounded-3xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
           >
             <View className="flex-row items-center justify-between gap-3">
               <View className="self-start rounded-xl bg-app-highlight px-3 py-2 dark:bg-app-highlightDark">

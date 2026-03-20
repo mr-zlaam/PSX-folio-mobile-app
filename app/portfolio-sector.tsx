@@ -125,7 +125,7 @@ function SectorCompanyCard({
     <TouchableOpacity
       activeOpacity={0.9}
       onPress={onPress}
-      className="rounded-2xl bg-brand-white/95 px-3 py-3 shadow-sm dark:bg-brand-white/10"
+      className="rounded-2xl bg-brand-white/95 px-3 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10"
     >
       <View className="flex-row items-start justify-between">
         <View className="mr-2 flex-1">
@@ -360,7 +360,7 @@ export default function PortfolioSectorScreen() {
             <View className="w-14" />
           </View>
 
-          <View className="rounded-2xl bg-brand-white/95 p-3 shadow-sm dark:bg-brand-white/10">
+          <View className="rounded-2xl bg-brand-white/95 p-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
             <Text className="text-xs font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
               {normalizedSectorName || "UNKNOWN"}
             </Text>
@@ -382,7 +382,7 @@ export default function PortfolioSectorScreen() {
           </View>
 
           {isInitialLoading ? (
-            <View className="items-center rounded-3xl bg-brand-white/95 p-6 shadow-sm dark:bg-brand-white/10">
+            <View className="items-center rounded-3xl bg-brand-white/95 p-6 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
               <ActivityIndicator
                 size="small"
                 color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
@@ -392,7 +392,7 @@ export default function PortfolioSectorScreen() {
               </Text>
             </View>
           ) : holdings.length === 0 ? (
-            <View className="rounded-2xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
+            <View className="rounded-2xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
               <Text className="text-base font-semibold text-app-text dark:text-app-textDark">
                 No companies found in this sector.
               </Text>

@@ -745,7 +745,7 @@ export default function StockDetailScreen() {
           </View>
 
           {isInitialLoading ? (
-            <View className="items-center rounded-3xl bg-brand-white/95 p-6 shadow-sm dark:bg-brand-white/10">
+            <View className="items-center rounded-3xl bg-brand-white/95 p-6 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
               <ActivityIndicator
                 size="small"
                 color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
@@ -755,7 +755,7 @@ export default function StockDetailScreen() {
               </Text>
             </View>
           ) : normalizedSymbol.length === 0 ? (
-            <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
+            <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
               <Text className="text-lg font-bold text-app-text dark:text-app-textDark">
                 Invalid symbol
               </Text>
@@ -765,7 +765,7 @@ export default function StockDetailScreen() {
             </View>
           ) : (
             <>
-              <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
+              <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
                 <View className="flex-row items-center gap-2">
                   <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                     {normalizedSymbol}
@@ -798,7 +798,7 @@ export default function StockDetailScreen() {
                 </Text>
               </View>
 
-              <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
+              <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
                 <View className="flex-row items-center justify-between">
                   <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                     Performance
@@ -844,7 +844,7 @@ export default function StockDetailScreen() {
                 </View>
               </View>
 
-              <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
+              <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
                 <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                   Stats
                 </Text>
@@ -867,7 +867,7 @@ export default function StockDetailScreen() {
               </View>
 
               {shouldLoadCompanyDetail ? (
-                <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
+                <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
                   <View className="flex-row items-center justify-between gap-3">
                     <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                       Company Details

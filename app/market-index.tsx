@@ -517,7 +517,7 @@ export default function MarketIndexScreen() {
           </View>
 
           {isInitialLoading ? (
-            <View className="items-center rounded-2xl bg-brand-white p-6 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+            <View className="items-center rounded-2xl bg-brand-white p-6 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
               <ActivityIndicator
                 size="small"
                 color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
@@ -527,7 +527,7 @@ export default function MarketIndexScreen() {
               </Text>
             </View>
           ) : !detail ? (
-            <View className="rounded-2xl bg-brand-white p-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+            <View className="rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
               <Text className="text-lg font-bold text-app-text dark:text-app-textDark">
                 Index not found
               </Text>
@@ -537,7 +537,7 @@ export default function MarketIndexScreen() {
             </View>
           ) : (
             <>
-              <View className="rounded-2xl bg-brand-white p-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+              <View className="rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
                 <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                   {detail.snapshot.displayCode}
                 </Text>
@@ -561,7 +561,7 @@ export default function MarketIndexScreen() {
                 </Text>
               </View>
 
-              <View className="rounded-2xl bg-brand-white p-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+              <View className="rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
                 <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                   Performance
                 </Text>
@@ -656,7 +656,7 @@ export default function MarketIndexScreen() {
                 ) : null}
               </View>
 
-              <View className="rounded-2xl bg-brand-white p-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+              <View className="rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
                 <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                   Index Stats
                 </Text>
@@ -697,7 +697,7 @@ export default function MarketIndexScreen() {
                 </View>
               </View>
 
-              <View className="rounded-2xl bg-brand-white p-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+              <View className="rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
                 <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                   Day&apos;s Range
                 </Text>
@@ -730,7 +730,7 @@ export default function MarketIndexScreen() {
                 </Text>
               </View>
 
-              <View className="rounded-2xl bg-brand-white p-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+              <View className="rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
                 <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                   52-Week Range
                 </Text>
@@ -763,7 +763,7 @@ export default function MarketIndexScreen() {
                 </Text>
               </View>
 
-              <View className="rounded-2xl bg-brand-white p-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+              <View className="rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
                 <View className="flex-row items-center justify-between">
                   <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                     Constituents

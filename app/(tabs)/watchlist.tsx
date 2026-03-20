@@ -487,7 +487,7 @@ export default function WatchlistTabScreen() {
           </View>
         ) : (
           <View className="gap-3">
-            <View className="rounded-2xl bg-brand-white/95 px-4 py-3 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+            <View className="rounded-2xl bg-brand-white/95 px-4 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
               <View className="flex-row items-center justify-between">
                 <Text className="text-2xl font-extrabold text-app-text dark:text-app-textDark">
                   Watchlist
@@ -499,7 +499,7 @@ export default function WatchlistTabScreen() {
             </View>
 
             {shouldShowRowsLoader ? (
-              <View className="rounded-2xl bg-brand-white/95 p-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+              <View className="rounded-2xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
                 <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
                   Loading latest prices...
                 </Text>
@@ -518,7 +518,7 @@ export default function WatchlistTabScreen() {
                       },
                     });
                   }}
-                  className="rounded-2xl bg-brand-white/95 px-3 py-3 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
+                  className="rounded-2xl bg-brand-white/95 px-3 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
                 >
                   <View className="flex-row items-start justify-between gap-2">
                     <View className="flex-1 pr-2">
@@ -603,7 +603,7 @@ export default function WatchlistTabScreen() {
         <TouchableOpacity
           activeOpacity={0.9}
           onPress={openAddSheet}
-          className="absolute right-5 h-14 w-14 items-center justify-center rounded-full bg-app-highlight shadow-sm dark:bg-app-highlightDark"
+          className="absolute right-5 h-14 w-14 items-center justify-center rounded-full bg-app-highlight shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-app-highlightDark"
           style={{
             bottom: Math.max(12, insets.bottom + 8),
           }}

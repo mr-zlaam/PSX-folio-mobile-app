@@ -42,7 +42,7 @@ const StockRow = React.memo(function StockRow({
     <TouchableOpacity
       activeOpacity={0.88}
       onPress={() => onPress(symbolItem.symbol)}
-      className="h-[88px] rounded-2xl bg-brand-white px-4 py-3 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
+      className="h-[88px] rounded-2xl bg-brand-white px-4 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
     >
       <View className="flex-row items-start justify-between gap-3">
         <View className="flex-1">

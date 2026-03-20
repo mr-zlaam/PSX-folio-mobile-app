@@ -398,7 +398,7 @@ export default function TransactionHistoryScreen() {
             <View className="w-14" />
           </View>
 
-          <View className="rounded-2xl bg-brand-white/95 p-3 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+          <View className="rounded-2xl bg-brand-white/95 p-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
             <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
               Range Filter
             </Text>
@@ -427,7 +427,7 @@ export default function TransactionHistoryScreen() {
           </View>
 
           {filteredEntries.length === 0 ? (
-            <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+            <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
               <Text className="text-lg font-bold text-app-text dark:text-app-textDark">
                 No transactions in this range
               </Text>
@@ -440,7 +440,7 @@ export default function TransactionHistoryScreen() {
               {filteredEntries.map((entry) => (
                 <View
                   key={entry.id}
-                  className="rounded-2xl bg-brand-white/95 px-4 py-3 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
+                  className="rounded-2xl bg-brand-white/95 px-4 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
                 >
                   <View className="flex-row items-start justify-between gap-3">
                     <View className="flex-1">

@@ -306,7 +306,7 @@ export default function MarketTabScreen() {
         }
       >
         <View className="gap-3">
-          <View className="rounded-2xl bg-brand-white px-4 py-3 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+          <View className="rounded-2xl bg-brand-white px-4 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
             <Text className="text-3xl font-extrabold text-app-text dark:text-app-textDark">
               Market
             </Text>
@@ -376,7 +376,7 @@ export default function MarketTabScreen() {
           </View>
 
           {isBootstrapping && !hasLiveData ? (
-            <View className="rounded-2xl bg-brand-white p-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+            <View className="rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
               <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
                 Loading market indices...
               </Text>
@@ -384,7 +384,7 @@ export default function MarketTabScreen() {
           ) : null}
 
           {!isBootstrapping && !hasLiveData ? (
-            <View className="rounded-2xl bg-brand-white p-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+            <View className="rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
               <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
                 No market data available right now. Pull to refresh.
               </Text>
@@ -397,7 +397,7 @@ export default function MarketTabScreen() {
                 key={indexItem.code}
                 activeOpacity={0.92}
                 onPress={() => handleOpenIndexDetail(indexItem.code)}
-                className="rounded-2xl bg-brand-white px-3 py-3 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
+                className="rounded-2xl bg-brand-white px-3 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
               >
                 <View className="flex-row items-start justify-between gap-2">
                   <View className="flex-1 pr-2">

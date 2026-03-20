@@ -357,7 +357,7 @@ export default function SettingsTabScreen() {
         }
       >
         <View className="gap-4">
-          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
+          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
             <Text className="text-3xl font-extrabold text-app-text dark:text-app-textDark">
               Settings
             </Text>
@@ -366,7 +366,7 @@ export default function SettingsTabScreen() {
             </Text>
           </View>
 
-          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
+          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
             <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
               Appearance
             </Text>
@@ -382,7 +382,7 @@ export default function SettingsTabScreen() {
             </View>
           </View>
 
-          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
+          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
             <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
               Broker
             </Text>
@@ -401,7 +401,7 @@ export default function SettingsTabScreen() {
             </TouchableOpacity>
           </View>
 
-          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
+          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
             <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
               Trading Rules
             </Text>
@@ -417,7 +417,7 @@ export default function SettingsTabScreen() {
             </View>
           </View>
 
-          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
+          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
             <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
               Tax Profile
             </Text>
@@ -443,7 +443,7 @@ export default function SettingsTabScreen() {
             </View>
           </View>
 
-          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
+          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
             <Text className="text-sm font-bold uppercase tracking-wide text-brand-red">
               Data
             </Text>
@@ -471,7 +471,7 @@ export default function SettingsTabScreen() {
         onRequestClose={handleCloseResetModal}
       >
         <View className="flex-1 items-center justify-center bg-brand-purple/70 px-6">
-          <View className="w-full max-w-md rounded-3xl border border-app-highlight/20 bg-app-bg p-5 shadow-sm dark:border-app-highlightDark/20 dark:bg-app-bgDark">
+          <View className="w-full max-w-md rounded-3xl border border-app-highlight/20 bg-app-bg p-5 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border-app-highlightDark/20 dark:bg-app-bgDark">
             <Text className="text-sm font-bold uppercase tracking-wide text-brand-red">
               Confirm Reset
             </Text>

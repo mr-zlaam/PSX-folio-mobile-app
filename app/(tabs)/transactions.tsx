@@ -913,7 +913,7 @@ export default function TransactionsTabScreen() {
             <View className="w-14" />
           </View>
 
-          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
+          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
             <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
               Symbol Search
             </Text>
@@ -1012,7 +1012,7 @@ export default function TransactionsTabScreen() {
             </View>
           </View>
 
-          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
+          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
             <View className="flex-row items-center justify-between">
               <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                 Trade Form
