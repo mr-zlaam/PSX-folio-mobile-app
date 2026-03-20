@@ -1,8 +1,10 @@
 import StockLineChart from "@/components/charts/stock-line-chart";
+import ShariahChip from "@/components/ui/shariah-chip";
 import {
   formatPKRAmount,
   formatSignedPercentage,
 } from "@/src/features/home/home-formatters";
+import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
 import {
   getCachedMarketIndexConstituents,
   getCachedMarketIndexDetail,
@@ -239,6 +241,7 @@ function RangeBar({
 
 export default function MarketIndexScreen() {
   const router = useRouter();
+  const { isShariahCompliantSymbol } = useShariahSymbols();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
@@ -833,9 +836,14 @@ export default function MarketIndexScreen() {
                       >
                         <View className="flex-row items-start justify-between gap-3">
                           <View className="flex-1">
-                            <Text className="text-base font-extrabold text-app-text dark:text-app-textDark">
-                              {item.symbol}
-                            </Text>
+                            <View className="flex-row items-center gap-2">
+                              <Text className="text-base font-extrabold text-app-text dark:text-app-textDark">
+                                {item.symbol}
+                              </Text>
+                              {isShariahCompliantSymbol(item.symbol) ? (
+                                <ShariahChip compact />
+                              ) : null}
+                            </View>
                             <Text
                               className="mt-0.5 text-xs font-semibold text-app-text dark:text-app-textDark"
                               numberOfLines={1}

@@ -1,8 +1,10 @@
 import StockLineChart from "@/components/charts/stock-line-chart";
+import ShariahChip from "@/components/ui/shariah-chip";
 import {
   formatPKRAmount,
   formatSignedPercentage,
 } from "@/src/features/home/home-formatters";
+import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
 import {
   getCachedSymbols,
   getLatestSymbols,
@@ -165,6 +167,7 @@ function StatRow({ label, value }: { label: string; value: string }) {
 
 export default function StockDetailScreen() {
   const router = useRouter();
+  const { isShariahCompliantSymbol } = useShariahSymbols();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
@@ -411,9 +414,14 @@ export default function StockDetailScreen() {
           ) : (
             <>
               <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
-                <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                  {normalizedSymbol}
-                </Text>
+                <View className="flex-row items-center gap-2">
+                  <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                    {normalizedSymbol}
+                  </Text>
+                  {isShariahCompliantSymbol(normalizedSymbol) ? (
+                    <ShariahChip compact />
+                  ) : null}
+                </View>
                 <Text className="mt-1 text-xl font-extrabold text-app-text dark:text-app-textDark">
                   {companyName}
                 </Text>

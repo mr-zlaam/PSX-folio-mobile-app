@@ -1,4 +1,5 @@
 import AppButton from "@/components/ui/app-button";
+import ShariahChip from "@/components/ui/shariah-chip";
 import { getTotalDepositAmount } from "@/src/features/deposit/deposit-records";
 import { getTotalDividendFinalAmount } from "@/src/features/dividend/dividend-records";
 import { InsightDisplayMode } from "@/src/features/home/home-data";
@@ -32,6 +33,7 @@ import {
   getCachedMarketIndexDetail,
   getLatestMarketIndexDetail,
 } from "@/src/features/market/market-data";
+import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
 import { evaluatePsxMarketStatus } from "@/src/features/market/market-status";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
@@ -148,6 +150,7 @@ function HeaderActionButton({
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
+  const { isShariahCompliantSymbol } = useShariahSymbols();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
   const initialHomeData = React.useMemo(
@@ -618,9 +621,14 @@ export default function HomeScreen() {
                       <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
                         {insight.label}
                       </Text>
-                      <Text className="mt-1 text-base font-bold text-app-text dark:text-app-textDark">
-                        {insight.symbol}
-                      </Text>
+                      <View className="mt-1 flex-row items-center gap-2">
+                        <Text className="text-base font-bold text-app-text dark:text-app-textDark">
+                          {insight.symbol}
+                        </Text>
+                        {isShariahCompliantSymbol(insight.symbol) ? (
+                          <ShariahChip compact />
+                        ) : null}
+                      </View>
                     </View>
 
                     <Text

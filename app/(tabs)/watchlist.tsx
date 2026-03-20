@@ -2,6 +2,8 @@ import AppButton from "@/components/ui/app-button";
 import AppFeedbackModal, {
   AppFeedbackModalTone,
 } from "@/components/ui/app-feedback-modal";
+import ShariahChip from "@/components/ui/shariah-chip";
+import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
 import {
   getCachedSymbolQuote,
   getCachedSymbols,
@@ -159,6 +161,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 
 export default function WatchlistTabScreen() {
   const router = useRouter();
+  const { isShariahCompliantSymbol } = useShariahSymbols();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
@@ -518,9 +521,12 @@ export default function WatchlistTabScreen() {
                 >
                   <View className="flex-row items-start justify-between gap-2">
                     <View className="flex-1 pr-2">
-                      <Text className="text-xl font-extrabold text-app-text dark:text-app-textDark">
-                        {row.symbol}
-                      </Text>
+                      <View className="flex-row items-center gap-2">
+                        <Text className="text-xl font-extrabold text-app-text dark:text-app-textDark">
+                          {row.symbol}
+                        </Text>
+                        {isShariahCompliantSymbol(row.symbol) ? <ShariahChip compact /> : null}
+                      </View>
                       <Text
                         className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark"
                         numberOfLines={2}
@@ -682,9 +688,14 @@ export default function WatchlistTabScreen() {
                     >
                       <View className="flex-row items-center justify-between gap-2">
                         <View className="flex-1">
-                          <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
-                            {symbol.symbol}
-                          </Text>
+                          <View className="flex-row items-center gap-2">
+                            <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                              {symbol.symbol}
+                            </Text>
+                            {isShariahCompliantSymbol(symbol.symbol) ? (
+                              <ShariahChip compact />
+                            ) : null}
+                          </View>
                           <Text
                             className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark"
                             numberOfLines={1}

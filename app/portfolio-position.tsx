@@ -11,11 +11,13 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import AppButton from "@/components/ui/app-button";
+import ShariahChip from "@/components/ui/shariah-chip";
 import StockLineChart from "@/components/charts/stock-line-chart";
 import {
   getPortfolioHoldingBySymbol,
   PortfolioHolding,
 } from "@/src/features/portfolio/portfolio-data";
+import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
 import {
   formatPKRAmount,
   formatSignedPercentage,
@@ -130,6 +132,7 @@ function ChartRangeChip({
 
 export default function PortfolioPositionScreen() {
   const router = useRouter();
+  const { isShariahCompliantSymbol } = useShariahSymbols();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
@@ -356,9 +359,14 @@ export default function PortfolioPositionScreen() {
           ) : (
             <>
               <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
-                <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                  {holding.symbol}
-                </Text>
+                <View className="flex-row items-center gap-2">
+                  <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                    {holding.symbol}
+                  </Text>
+                  {isShariahCompliantSymbol(holding.symbol) ? (
+                    <ShariahChip compact />
+                  ) : null}
+                </View>
                 <Text className="mt-1 text-xl font-extrabold text-app-text dark:text-app-textDark">
                   {holding.companyName}
                 </Text>

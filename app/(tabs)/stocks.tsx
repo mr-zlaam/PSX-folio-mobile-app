@@ -11,6 +11,8 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import ShariahChip from "@/components/ui/shariah-chip";
+import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
 import { APP_COLORS } from "@/src/theme/colors";
 import {
   getCachedSymbols,
@@ -29,9 +31,11 @@ function sortSymbolsAlphabetically(symbols: PsxSymbol[]): PsxSymbol[] {
 
 const StockRow = React.memo(function StockRow({
   symbolItem,
+  isShariahCompliant,
   onPress,
 }: {
   symbolItem: PsxSymbol;
+  isShariahCompliant: boolean;
   onPress: (symbol: string) => void;
 }) {
   return (
@@ -42,9 +46,12 @@ const StockRow = React.memo(function StockRow({
     >
       <View className="flex-row items-start justify-between gap-3">
         <View className="flex-1">
-          <Text className="text-lg font-extrabold text-app-text dark:text-app-textDark">
-            {symbolItem.symbol}
-          </Text>
+          <View className="flex-row items-center gap-2">
+            <Text className="text-lg font-extrabold text-app-text dark:text-app-textDark">
+              {symbolItem.symbol}
+            </Text>
+            {isShariahCompliant ? <ShariahChip compact /> : null}
+          </View>
           <Text
             className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark"
             numberOfLines={1}
@@ -66,11 +73,13 @@ const StockRow = React.memo(function StockRow({
   previousProps.symbolItem.symbol === nextProps.symbolItem.symbol &&
   previousProps.symbolItem.name === nextProps.symbolItem.name &&
   previousProps.symbolItem.sectorName === nextProps.symbolItem.sectorName &&
+  previousProps.isShariahCompliant === nextProps.isShariahCompliant &&
   previousProps.onPress === nextProps.onPress
 );
 
 export default function StocksTabScreen() {
   const router = useRouter();
+  const { isShariahCompliantSymbol } = useShariahSymbols();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
@@ -140,9 +149,13 @@ export default function StocksTabScreen() {
 
   const renderItem = React.useCallback(
     ({ item }: { item: PsxSymbol }) => (
-      <StockRow symbolItem={item} onPress={handleOpenStockDetail} />
+      <StockRow
+        symbolItem={item}
+        isShariahCompliant={isShariahCompliantSymbol(item.symbol)}
+        onPress={handleOpenStockDetail}
+      />
     ),
-    [handleOpenStockDetail]
+    [handleOpenStockDetail, isShariahCompliantSymbol]
   );
   const keyExtractor = React.useCallback((item: PsxSymbol) => item.symbol, []);
 

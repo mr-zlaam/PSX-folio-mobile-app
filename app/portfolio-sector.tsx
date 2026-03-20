@@ -10,6 +10,8 @@ import {
 import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
+import ShariahChip from "@/components/ui/shariah-chip";
+import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
 import {
   getPortfolioHoldingsWithCachedQuotes,
   getPortfolioHoldingsWithLatestQuotes,
@@ -97,11 +99,13 @@ function SectorCompanyCard({
   holding,
   displayMode,
   portfolioTotalValue,
+  isShariahCompliant,
   onPress,
 }: {
   holding: PortfolioHolding;
   displayMode: PortfolioDisplayMode;
   portfolioTotalValue: number;
+  isShariahCompliant: boolean;
   onPress: () => void;
 }) {
   const sharePct =
@@ -124,9 +128,12 @@ function SectorCompanyCard({
     >
       <View className="flex-row items-start justify-between">
         <View className="mr-2 flex-1">
-          <Text className="text-xl font-extrabold text-app-text dark:text-app-textDark">
-            {holding.symbol}
-          </Text>
+          <View className="flex-row items-center gap-2">
+            <Text className="text-xl font-extrabold text-app-text dark:text-app-textDark">
+              {holding.symbol}
+            </Text>
+            {isShariahCompliant ? <ShariahChip compact /> : null}
+          </View>
           <Text
             className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark"
             numberOfLines={1}
@@ -172,6 +179,7 @@ function SectorCompanyCard({
 
 export default function PortfolioSectorScreen() {
   const router = useRouter();
+  const { isShariahCompliantSymbol } = useShariahSymbols();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
@@ -404,6 +412,7 @@ export default function PortfolioSectorScreen() {
                   holding={holding}
                   displayMode={displayMode}
                   portfolioTotalValue={portfolioTotalValue}
+                  isShariahCompliant={isShariahCompliantSymbol(holding.symbol)}
                   onPress={() => handleOpenCompany(holding.symbol)}
                 />
               ))}

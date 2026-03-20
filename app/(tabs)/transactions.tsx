@@ -19,6 +19,7 @@ import AppButton from "@/components/ui/app-button";
 import AppFeedbackModal, {
   AppFeedbackModalTone,
 } from "@/components/ui/app-feedback-modal";
+import ShariahChip from "@/components/ui/shariah-chip";
 import {
   getCachedSymbolQuote,
   getCachedSymbols,
@@ -32,6 +33,7 @@ import {
   formatPKRAmount,
   formatSignedPercentage,
 } from "@/src/features/home/home-formatters";
+import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
 import {
   BrokerSettings,
   getCashGuardEnabledPreference,
@@ -192,6 +194,7 @@ function FieldInput({
 
 export default function TransactionsTabScreen() {
   const router = useRouter();
+  const { isShariahCompliantSymbol } = useShariahSymbols();
   const searchParams = useLocalSearchParams<{
     symbol?: string | string[];
     side?: string | string[];
@@ -911,18 +914,23 @@ export default function TransactionsTabScreen() {
                     .filter(Boolean)
                     .join(" ")}
                 >
-                  <Text
-                    className={[
-                      "text-sm font-bold",
-                      selectedSymbol === symbolItem.symbol
-                        ? "text-brand-white dark:text-brand-purple"
-                        : "text-app-text dark:text-app-textDark",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                  >
-                    {symbolItem.symbol}
-                  </Text>
+                  <View className="flex-row items-center gap-2">
+                    <Text
+                      className={[
+                        "text-sm font-bold",
+                        selectedSymbol === symbolItem.symbol
+                          ? "text-brand-white dark:text-brand-purple"
+                          : "text-app-text dark:text-app-textDark",
+                      ]
+                        .filter(Boolean)
+                        .join(" ")}
+                    >
+                      {symbolItem.symbol}
+                    </Text>
+                    {isShariahCompliantSymbol(symbolItem.symbol) ? (
+                      <ShariahChip compact />
+                    ) : null}
+                  </View>
                   <Text
                     className={[
                       "mt-1 text-xs",
