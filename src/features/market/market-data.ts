@@ -2,6 +2,7 @@ import * as FileSystem from "expo-file-system/legacy";
 
 export type MarketEndpointType = "int" | "eod";
 type MarketSource = "live" | "cache" | "fallback";
+type ConstituentsSource = "live" | "cache" | "fallback";
 
 export type MarketIndexDefinition = {
   code: string;
@@ -50,13 +51,49 @@ export type MarketIndexDetailSnapshot = {
   week52High: number;
 };
 
+export type MarketIndexConstituent = {
+  symbol: string;
+  name: string;
+  ldcp: number;
+  current: number;
+  change: number;
+  changePct: number;
+  idxWeightPct: number;
+  idxPoint: number;
+  volume: number;
+  freeFloatM: number;
+  marketCapM: number;
+  trend: "up" | "down" | "flat";
+};
+
+export type MarketIndexConstituentSnapshot = {
+  indexCode: string;
+  endpointCode: string | null;
+  asOf: string | null;
+  items: MarketIndexConstituent[];
+  source: ConstituentsSource;
+};
+
 type MarketSnapshotStore = {
   version: 1;
   updatedAt: string;
   items: MarketIndexSnapshot[];
 };
 
+type ConstituentsCacheEntry = {
+  asOf: string;
+  endpointCode: string;
+  items: MarketIndexConstituent[];
+};
+
+type ConstituentsCacheStore = {
+  version: 1;
+  updatedAt: string;
+  byCode: Record<string, ConstituentsCacheEntry>;
+};
+
 const PSX_TIMESERIES_BASE_URL = "https://dps.psx.com.pk/timeseries";
+const PSX_INDICES_BASE_URL = "https://dps.psx.com.pk/indices";
 
 const MARKET_INDEX_DEFINITIONS: MarketIndexDefinition[] = [
   { code: "KSE100", displayCode: "KSE100", name: "KSE 100 INDEX", endpointType: "int" },
@@ -111,6 +148,29 @@ const MARKET_INDEX_DEFINITIONS: MarketIndexDefinition[] = [
 const MARKET_CACHE_FILE_URI = FileSystem.documentDirectory
   ? `${FileSystem.documentDirectory}psx-market-indices-cache.json`
   : null;
+const MARKET_CONSTITUENTS_CACHE_FILE_URI = FileSystem.documentDirectory
+  ? `${FileSystem.documentDirectory}psx-market-constituents-cache.json`
+  : null;
+
+const INDEX_CONSTITUENT_ENDPOINT_CANDIDATES: Record<string, string[]> = {
+  KSE100: ["KSE100PR", "KSE100"],
+  ALLSHR: ["KSEALL", "ALLSHR"],
+  KSE30: ["KSE30"],
+  KMI30: ["KMI30"],
+  MII30: ["MII30"],
+  KMIALLSHR: ["KMIALLSHR", "KMIALL"],
+  PSXDIV20: ["PSXDIV20"],
+  BKTI: ["BKTI"],
+  OGTI: ["OGTI"],
+  UPP9: ["UPP9"],
+  NITPGI: ["NITPGI"],
+  NBPPGI: ["NBPPGI"],
+  MZNPI: ["MZNPI"],
+  JSMFI: ["JSMFI"],
+  ACI: ["ACI"],
+  JSGBKTI: ["JSGBKTI"],
+  HBLTTI: ["HBLTTI"],
+};
 
 function getFallbackSnapshot(
   definition: MarketIndexDefinition,
@@ -130,6 +190,77 @@ function getFallbackSnapshot(
     asOf: null,
     source,
   };
+}
+
+function getFallbackConstituentSnapshot(
+  code: string,
+  source: ConstituentsSource = "fallback"
+): MarketIndexConstituentSnapshot {
+  return {
+    indexCode: code,
+    endpointCode: null,
+    asOf: null,
+    items: [],
+    source,
+  };
+}
+
+function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&nbsp;/g, " ");
+}
+
+function stripHtmlTags(value: string): string {
+  return value.replace(/<[^>]*>/g, " ");
+}
+
+function normalizeText(value: string): string {
+  return decodeHtmlEntities(stripHtmlTags(value)).replace(/\s+/g, " ").trim();
+}
+
+function parseNumberText(value: string): number {
+  const normalized = normalizeText(value)
+    .replace(/,/g, "")
+    .replace(/%/g, "")
+    .trim();
+  if (normalized.length === 0) {
+    return 0;
+  }
+
+  const parsed = Number.parseFloat(normalized);
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function parseNumberFromCell(cellHtml: string): number {
+  const dataOrderMatch = cellHtml.match(/data-order\s*=\s*"([^"]+)"/i);
+  if (dataOrderMatch && dataOrderMatch[1]) {
+    const parsed = Number.parseFloat(dataOrderMatch[1].replace(/,/g, "").trim());
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+
+  return parseNumberText(cellHtml);
+}
+
+function parseSymbolFromCell(cellHtml: string): string {
+  const dataOrderMatch = cellHtml.match(/data-order\s*=\s*"([^"]+)"/i);
+  if (dataOrderMatch && dataOrderMatch[1]) {
+    return dataOrderMatch[1].trim().toUpperCase();
+  }
+
+  const text = normalizeText(cellHtml);
+  if (text.length === 0) {
+    return "";
+  }
+
+  const symbolToken = text.split(" ")[0] ?? "";
+  return symbolToken.trim().toUpperCase();
 }
 
 function normalizeRows(rawRows: unknown): MarketTimeseriesRow[] {
@@ -214,6 +345,61 @@ function mapEodRowsToTimeseriesRows(rows: MarketEodRow[]): MarketTimeseriesRow[]
     price: row.closePrice,
     volume: row.volume,
   }));
+}
+
+function parseConstituentRowsFromHtml(html: string): MarketIndexConstituent[] {
+  const tbodyMatch = html.match(/<tbody[^>]*>([\s\S]*?)<\/tbody>/i);
+  if (!tbodyMatch || !tbodyMatch[1]) {
+    return [];
+  }
+
+  const rowMatches = tbodyMatch[1].match(/<tr\b[\s\S]*?<\/tr>/gi) ?? [];
+  return rowMatches
+    .map((rowHtml) => {
+      const cellMatches = rowHtml.match(/<td\b[\s\S]*?<\/td>/gi) ?? [];
+      if (cellMatches.length < 11) {
+        return null;
+      }
+
+      const symbol = parseSymbolFromCell(cellMatches[0]!);
+      if (symbol.length === 0) {
+        return null;
+      }
+
+      const change = parseNumberFromCell(cellMatches[4]!);
+      let trend: "up" | "down" | "flat" = "flat";
+      if (change > 0) {
+        trend = "up";
+      } else if (change < 0) {
+        trend = "down";
+      }
+
+      return {
+        symbol,
+        name: normalizeText(cellMatches[1]!),
+        ldcp: parseNumberFromCell(cellMatches[2]!),
+        current: parseNumberFromCell(cellMatches[3]!),
+        change,
+        changePct: parseNumberFromCell(cellMatches[5]!),
+        idxWeightPct: parseNumberFromCell(cellMatches[6]!),
+        idxPoint: parseNumberFromCell(cellMatches[7]!),
+        volume: parseNumberFromCell(cellMatches[8]!),
+        freeFloatM: parseNumberFromCell(cellMatches[9]!),
+        marketCapM: parseNumberFromCell(cellMatches[10]!),
+        trend,
+      } satisfies MarketIndexConstituent;
+    })
+    .filter((item): item is MarketIndexConstituent => item !== null);
+}
+
+function getConstituentEndpointCandidates(code: string): string[] {
+  const normalizedCode = code.trim().toUpperCase();
+  const fromMap = INDEX_CONSTITUENT_ENDPOINT_CANDIDATES[normalizedCode] ?? [];
+  const candidates = [...fromMap, normalizedCode]
+    .map((item) => item.trim().toUpperCase())
+    .filter((item) => item.length > 0);
+
+  return [...new Set(candidates)];
 }
 
 function toSnapshot(
@@ -325,10 +511,139 @@ async function writeStore(store: MarketSnapshotStore): Promise<void> {
   await FileSystem.writeAsStringAsync(MARKET_CACHE_FILE_URI, JSON.stringify(store));
 }
 
+function getSafeConstituentsStore(rawValue: unknown): ConstituentsCacheStore {
+  if (!rawValue || typeof rawValue !== "object" || Array.isArray(rawValue)) {
+    return {
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      byCode: {},
+    };
+  }
+
+  const parsedStore = rawValue as Partial<ConstituentsCacheStore>;
+  const rawByCode =
+    parsedStore.byCode && typeof parsedStore.byCode === "object" && !Array.isArray(parsedStore.byCode)
+      ? parsedStore.byCode
+      : {};
+
+  const byCodeEntries = Object.entries(rawByCode).flatMap(([code, entry]) => {
+    if (!entry || typeof entry !== "object" || Array.isArray(entry)) {
+      return [];
+    }
+
+    const typedEntry = entry as Partial<ConstituentsCacheEntry>;
+    if (typeof typedEntry.endpointCode !== "string" || !Array.isArray(typedEntry.items)) {
+      return [];
+    }
+
+    const items = typedEntry.items
+      .filter(
+        (item): item is MarketIndexConstituent =>
+          Boolean(item) &&
+          typeof item.symbol === "string" &&
+          typeof item.name === "string" &&
+          typeof item.ldcp === "number" &&
+          typeof item.current === "number" &&
+          typeof item.change === "number" &&
+          typeof item.changePct === "number" &&
+          typeof item.idxWeightPct === "number" &&
+          typeof item.idxPoint === "number" &&
+          typeof item.volume === "number" &&
+          typeof item.freeFloatM === "number" &&
+          typeof item.marketCapM === "number" &&
+          (item.trend === "up" || item.trend === "down" || item.trend === "flat")
+      )
+      .map((item) => ({
+        ...item,
+        symbol: item.symbol.trim().toUpperCase(),
+      }));
+
+    return [
+      [
+        code.trim().toUpperCase(),
+        {
+          asOf:
+            typeof typedEntry.asOf === "string"
+              ? typedEntry.asOf
+              : new Date().toISOString(),
+          endpointCode: typedEntry.endpointCode.trim().toUpperCase(),
+          items,
+        } satisfies ConstituentsCacheEntry,
+      ] as const,
+    ];
+  });
+
+  return {
+    version: 1,
+    updatedAt:
+      typeof parsedStore.updatedAt === "string"
+        ? parsedStore.updatedAt
+        : new Date().toISOString(),
+    byCode: Object.fromEntries(byCodeEntries),
+  };
+}
+
+async function readConstituentsStore(): Promise<ConstituentsCacheStore> {
+  if (!MARKET_CONSTITUENTS_CACHE_FILE_URI) {
+    return {
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      byCode: {},
+    };
+  }
+
+  try {
+    const rawStore = await FileSystem.readAsStringAsync(MARKET_CONSTITUENTS_CACHE_FILE_URI);
+    return getSafeConstituentsStore(JSON.parse(rawStore));
+  } catch {
+    return {
+      version: 1,
+      updatedAt: new Date().toISOString(),
+      byCode: {},
+    };
+  }
+}
+
+async function writeConstituentsStore(store: ConstituentsCacheStore): Promise<void> {
+  if (!MARKET_CONSTITUENTS_CACHE_FILE_URI) {
+    return;
+  }
+
+  await FileSystem.writeAsStringAsync(
+    MARKET_CONSTITUENTS_CACHE_FILE_URI,
+    JSON.stringify(store)
+  );
+}
+
 async function fetchRowsFromApi(
   definition: MarketIndexDefinition
 ): Promise<MarketTimeseriesRow[]> {
   return fetchTimeseriesRowsFromApi(definition.code, definition.endpointType);
+}
+
+async function fetchConstituentRowsFromApi(
+  endpointCode: string
+): Promise<MarketIndexConstituent[]> {
+  const endpointUrl = `${PSX_INDICES_BASE_URL}/${encodeURIComponent(endpointCode)}`;
+  const response = await fetch(endpointUrl, {
+    headers: {
+      Accept: "text/html",
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(
+      `Indices endpoint failed for ${endpointCode} with status ${response.status}`
+    );
+  }
+
+  const html = await response.text();
+  const parsedItems = parseConstituentRowsFromHtml(html);
+  if (parsedItems.length === 0) {
+    throw new Error(`Indices endpoint returned empty rows for ${endpointCode}`);
+  }
+
+  return parsedItems;
 }
 
 async function fetchTimeseriesRowsFromApi(
@@ -421,6 +736,33 @@ async function upsertCachedSnapshot(snapshot: MarketIndexSnapshot): Promise<void
   };
 
   await writeStore(nextStore);
+}
+
+async function upsertConstituentsCache(
+  snapshot: MarketIndexConstituentSnapshot
+): Promise<void> {
+  const store = await readConstituentsStore();
+  const normalizedCode = snapshot.indexCode.trim().toUpperCase();
+  const normalizedEndpointCode =
+    snapshot.endpointCode?.trim().toUpperCase() ?? normalizedCode;
+
+  const nextStore: ConstituentsCacheStore = {
+    version: 1,
+    updatedAt: new Date().toISOString(),
+    byCode: {
+      ...store.byCode,
+      [normalizedCode]: {
+        asOf: snapshot.asOf ?? new Date().toISOString(),
+        endpointCode: normalizedEndpointCode,
+        items: snapshot.items.map((item) => ({
+          ...item,
+          symbol: item.symbol.trim().toUpperCase(),
+        })),
+      },
+    },
+  };
+
+  await writeConstituentsStore(nextStore);
 }
 
 function buildMarketIndexDetail(
@@ -568,4 +910,60 @@ export async function getLatestMarketIndexDetail(
   } catch {
     return cachedDetail;
   }
+}
+
+export async function getCachedMarketIndexConstituents(
+  code: string
+): Promise<MarketIndexConstituentSnapshot | null> {
+  const definition = getMarketIndexDefinitionByCodeInternal(code);
+  if (!definition) {
+    return null;
+  }
+
+  const store = await readConstituentsStore();
+  const cachedEntry = store.byCode[definition.code];
+  if (!cachedEntry) {
+    return getFallbackConstituentSnapshot(definition.code);
+  }
+
+  return {
+    indexCode: definition.code,
+    endpointCode: cachedEntry.endpointCode,
+    asOf: cachedEntry.asOf,
+    items: cachedEntry.items,
+    source: "cache",
+  };
+}
+
+export async function getLatestMarketIndexConstituents(
+  code: string
+): Promise<MarketIndexConstituentSnapshot | null> {
+  const definition = getMarketIndexDefinitionByCodeInternal(code);
+  if (!definition) {
+    return null;
+  }
+
+  const cachedSnapshot =
+    (await getCachedMarketIndexConstituents(definition.code)) ??
+    getFallbackConstituentSnapshot(definition.code);
+  const endpointCandidates = getConstituentEndpointCandidates(definition.code);
+
+  for (const endpointCode of endpointCandidates) {
+    try {
+      const liveItems = await fetchConstituentRowsFromApi(endpointCode);
+      const liveSnapshot: MarketIndexConstituentSnapshot = {
+        indexCode: definition.code,
+        endpointCode,
+        asOf: new Date().toISOString(),
+        items: liveItems,
+        source: "live",
+      };
+      await upsertConstituentsCache(liveSnapshot);
+      return liveSnapshot;
+    } catch {
+      // Try next candidate endpoint code.
+    }
+  }
+
+  return cachedSnapshot;
 }

@@ -61,7 +61,13 @@ const StockRow = React.memo(function StockRow({
       </View>
     </TouchableOpacity>
   );
-});
+},
+(previousProps, nextProps) =>
+  previousProps.symbolItem.symbol === nextProps.symbolItem.symbol &&
+  previousProps.symbolItem.name === nextProps.symbolItem.name &&
+  previousProps.symbolItem.sectorName === nextProps.symbolItem.sectorName &&
+  previousProps.onPress === nextProps.onPress
+);
 
 export default function StocksTabScreen() {
   const router = useRouter();
@@ -138,6 +144,7 @@ export default function StocksTabScreen() {
     ),
     [handleOpenStockDetail]
   );
+  const keyExtractor = React.useCallback((item: PsxSymbol) => item.symbol, []);
 
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
@@ -148,59 +155,65 @@ export default function StocksTabScreen() {
     }
   }, [loadSymbols]);
 
-  const listHeader = (
-    <View className="pb-4">
-      <Text className="text-3xl font-extrabold text-app-text dark:text-app-textDark">
-        Stocks
-      </Text>
-      <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
-        A-Z listing of PSX symbols
-      </Text>
+  const listHeader = React.useMemo(
+    () => (
+      <View className="pb-4">
+        <Text className="text-3xl font-extrabold text-app-text dark:text-app-textDark">
+          Stocks
+        </Text>
+        <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
+          A-Z listing of PSX symbols
+        </Text>
 
-      <TextInput
-        value={searchQuery}
-        onChangeText={setSearchQuery}
-        placeholder="Search by symbol, company, or sector"
-        placeholderTextColor={inputPlaceholderTextColor}
-        autoCorrect={false}
-        autoCapitalize="characters"
-        className="mt-3 rounded-2xl border border-app-highlight bg-brand-white px-4 py-3 text-sm font-semibold text-app-text dark:border-app-highlightDark dark:bg-transparent dark:text-app-textDark"
-      />
-    </View>
+        <TextInput
+          value={searchQuery}
+          onChangeText={setSearchQuery}
+          placeholder="Search by symbol, company, or sector"
+          placeholderTextColor={inputPlaceholderTextColor}
+          autoCorrect={false}
+          autoCapitalize="characters"
+          className="mt-3 rounded-2xl border border-app-highlight bg-brand-white px-4 py-3 text-sm font-semibold text-app-text dark:border-app-highlightDark dark:bg-transparent dark:text-app-textDark"
+        />
+      </View>
+    ),
+    [inputPlaceholderTextColor, searchQuery]
   );
 
-  const emptyState = (
-    <View className="flex-1 items-center justify-center px-5 pb-8 pt-6">
-      {isBootstrapping ? (
-        <>
-          <ActivityIndicator
-            size="small"
-            color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
-          />
-          <Text className="mt-3 text-sm font-semibold text-app-text dark:text-app-textDark">
-            Loading stocks...
-          </Text>
-        </>
-      ) : symbols.length === 0 ? (
-        <>
-          <Text className="text-base font-bold text-app-text dark:text-app-textDark">
-            No stocks available
-          </Text>
-          <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
-            Pull down to retry loading symbols.
-          </Text>
-        </>
-      ) : (
-        <>
-          <Text className="text-base font-bold text-app-text dark:text-app-textDark">
-            No match found
-          </Text>
-          <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
-            Try another symbol, company, or sector keyword.
-          </Text>
-        </>
-      )}
-    </View>
+  const emptyState = React.useMemo(
+    () => (
+      <View className="flex-1 items-center justify-center px-5 pb-8 pt-6">
+        {isBootstrapping ? (
+          <>
+            <ActivityIndicator
+              size="small"
+              color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
+            />
+            <Text className="mt-3 text-sm font-semibold text-app-text dark:text-app-textDark">
+              Loading stocks...
+            </Text>
+          </>
+        ) : symbols.length === 0 ? (
+          <>
+            <Text className="text-base font-bold text-app-text dark:text-app-textDark">
+              No stocks available
+            </Text>
+            <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
+              Pull down to retry loading symbols.
+            </Text>
+          </>
+        ) : (
+          <>
+            <Text className="text-base font-bold text-app-text dark:text-app-textDark">
+              No match found
+            </Text>
+            <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
+              Try another symbol, company, or sector keyword.
+            </Text>
+          </>
+        )}
+      </View>
+    ),
+    [isBootstrapping, isDarkMode, symbols.length]
   );
 
   return (
@@ -210,7 +223,7 @@ export default function StocksTabScreen() {
     >
       <FlatList
         data={filteredSymbols}
-        keyExtractor={(item) => item.symbol}
+        keyExtractor={keyExtractor}
         renderItem={renderItem}
         ListHeaderComponent={listHeader}
         ListEmptyComponent={emptyState}
@@ -223,11 +236,13 @@ export default function StocksTabScreen() {
         }}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
-        initialNumToRender={24}
-        maxToRenderPerBatch={24}
-        windowSize={15}
+        keyboardDismissMode="on-drag"
+        initialNumToRender={16}
+        maxToRenderPerBatch={16}
+        windowSize={9}
         updateCellsBatchingPeriod={30}
         removeClippedSubviews
+        onEndReachedThreshold={0.4}
         getItemLayout={(_, index) => ({
           length: STOCK_ROW_HEIGHT + STOCK_ROW_SPACING,
           offset: (STOCK_ROW_HEIGHT + STOCK_ROW_SPACING) * index,
@@ -248,4 +263,3 @@ export default function StocksTabScreen() {
     </SafeAreaView>
   );
 }
-

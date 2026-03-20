@@ -25,6 +25,7 @@ import {
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
 import React from "react";
 import {
   RefreshControl,
@@ -157,6 +158,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 export default function WatchlistTabScreen() {
+  const router = useRouter();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
@@ -501,8 +503,17 @@ export default function WatchlistTabScreen() {
               </View>
             ) : (
               rows.map((row) => (
-                <View
+                <TouchableOpacity
                   key={row.symbol}
+                  activeOpacity={0.9}
+                  onPress={() => {
+                    router.push({
+                      pathname: "/stock-detail",
+                      params: {
+                        symbol: row.symbol,
+                      },
+                    });
+                  }}
                   className="rounded-2xl bg-brand-white/95 px-3 py-3 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
                 >
                   <View className="flex-row items-start justify-between gap-2">
@@ -527,7 +538,8 @@ export default function WatchlistTabScreen() {
                     <View className="items-end">
                       <TouchableOpacity
                         activeOpacity={0.88}
-                        onPress={() => {
+                        onPress={(event) => {
+                          event.stopPropagation();
                           void handleRemoveSymbol(row.symbol);
                         }}
                         className="rounded-lg border border-brand-red/60 px-2 py-1"
@@ -573,7 +585,7 @@ export default function WatchlistTabScreen() {
                   <Text className="mt-2 text-[11px] font-semibold text-app-text dark:text-app-textDark">
                     Updated: {formatQuoteAsOf(row.quote)}
                   </Text>
-                </View>
+                </TouchableOpacity>
               ))
             )}
           </View>
