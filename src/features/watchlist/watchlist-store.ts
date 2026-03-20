@@ -169,3 +169,15 @@ export async function removeSymbolFromWatchlist(symbol: string): Promise<void> {
 
   await writeStore(nextStore);
 }
+
+export async function replaceSavedWatchlistItems(
+  items: WatchlistItem[]
+): Promise<void> {
+  const normalizedStore = getSafeStore({
+    version: 1,
+    items,
+    updatedAt: new Date().toISOString(),
+  });
+
+  await writeStore(normalizedStore);
+}

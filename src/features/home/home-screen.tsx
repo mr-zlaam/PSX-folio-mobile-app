@@ -165,7 +165,6 @@ export default function HomeScreen() {
   const [insightDisplayValues, setInsightDisplayValues] =
     React.useState<InsightDisplayValues>(DEFAULT_INSIGHT_DISPLAY_VALUES);
   const [totalDividendValue, setTotalDividendValue] = React.useState(0);
-  const [totalDepositValue, setTotalDepositValue] = React.useState(0);
   const [cashGuardEnabled, setCashGuardEnabled] = React.useState(false);
   const [availableFreeCash, setAvailableFreeCash] = React.useState(0);
   const [marketAsOf, setMarketAsOf] = React.useState<string | null>(null);
@@ -227,7 +226,6 @@ export default function HomeScreen() {
       getCachedMarketIndexDetail("KSE100"),
     ]);
     setTotalDividendValue(totalDividendValue);
-    setTotalDepositValue(totalDepositValue);
     setCashGuardEnabled(isCashGuardEnabled);
     setAvailableFreeCash(cashLedgerSnapshot.availableCash);
     setMarketAsOf(cachedMarketDetail?.snapshot.asOf ?? null);
@@ -546,9 +544,6 @@ export default function HomeScreen() {
             </Text>
             <Text className="mt-1 text-sm font-semibold text-success-green">
               Dividend: {formatPKRAmount(totalDividendValue)}
-            </Text>
-            <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
-              Deposits: {formatPKRAmount(totalDepositValue)}
             </Text>
             <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
               Free Cash: {freeCashText}

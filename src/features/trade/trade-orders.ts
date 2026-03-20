@@ -305,3 +305,15 @@ export async function clearSavedTradeOrders(): Promise<void> {
 
   await writeStore(clearedStore);
 }
+
+export async function replaceSavedTradeOrders(
+  orders: TradeOrderRecord[]
+): Promise<void> {
+  const normalizedStore = getSafeOrdersStore({
+    version: 1,
+    orders,
+    updatedAt: new Date().toISOString(),
+  });
+
+  await writeStore(normalizedStore);
+}

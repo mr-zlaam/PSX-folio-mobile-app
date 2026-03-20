@@ -2,9 +2,18 @@ import React from "react";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native";
 import { useRouter } from "expo-router";
+import * as DocumentPicker from "expo-document-picker";
+import * as Sharing from "expo-sharing";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
+import AppFeedbackModal, {
+  AppFeedbackModalTone,
+} from "@/components/ui/app-feedback-modal";
 import ShariahChip from "@/components/ui/shariah-chip";
+import {
+  exportPortfolioCsvBackup,
+  importPortfolioCsvBackupFromFile,
+} from "@/src/features/backup/portfolio-csv-backup";
 import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
 import {
   getPortfolioHoldingsWithCachedQuotes,
@@ -28,6 +37,11 @@ const PORTFOLIO_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 type PortfolioGroupingMode = "companies" | "sectors";
 type PortfolioDisplayMode = "price" | "percentage";
+type BackupNoticeState = {
+  title: string;
+  message: string;
+  tone: AppFeedbackModalTone;
+};
 
 type SectorAggregate = {
   sectorName: string;
@@ -339,8 +353,12 @@ export default function PortfolioTabScreen() {
   const [holdings, setHoldings] = React.useState<PortfolioHolding[]>([]);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [isFilterPanelVisible, setIsFilterPanelVisible] = React.useState(false);
+  const [isBackupBusy, setIsBackupBusy] = React.useState(false);
   const [groupingMode, setGroupingMode] = React.useState<PortfolioGroupingMode>("sectors");
   const [displayMode, setDisplayMode] = React.useState<PortfolioDisplayMode>("percentage");
+  const [backupNotice, setBackupNotice] = React.useState<BackupNoticeState | null>(
+    null
+  );
   const [hasHydratedViewPreferences, setHasHydratedViewPreferences] =
     React.useState(false);
   const sectorAggregates = React.useMemo(() => buildSectorAggregates(holdings), [holdings]);
@@ -444,6 +462,107 @@ export default function PortfolioTabScreen() {
     [displayMode, router]
   );
 
+  const handleCloseBackupNotice = React.useCallback(() => {
+    setBackupNotice(null);
+  }, []);
+
+  const handleExportCsv = React.useCallback(async () => {
+    if (isBackupBusy) {
+      return;
+    }
+
+    setIsBackupBusy(true);
+    try {
+      const exportSummary = await exportPortfolioCsvBackup();
+      const sharingAvailable = await Sharing.isAvailableAsync();
+
+      if (sharingAvailable) {
+        await Sharing.shareAsync(exportSummary.fileUri, {
+          mimeType: "text/csv",
+          dialogTitle: "Export Portfolio CSV Backup",
+          UTI: "public.comma-separated-values-text",
+        });
+      }
+
+      setBackupNotice({
+        title: "CSV Backup Ready",
+        message: sharingAvailable
+          ? `Backup file prepared with ${exportSummary.rows} rows.`
+          : `Backup file saved at:\n${exportSummary.fileUri}`,
+        tone: "success",
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim().length > 0
+          ? error.message
+          : "Unable to export CSV backup right now.";
+      setBackupNotice({
+        title: "Export Failed",
+        message,
+        tone: "error",
+      });
+    } finally {
+      setIsBackupBusy(false);
+    }
+  }, [isBackupBusy]);
+
+  const handleImportCsv = React.useCallback(async () => {
+    if (isBackupBusy) {
+      return;
+    }
+
+    setIsBackupBusy(true);
+    try {
+      const pickerResult = await DocumentPicker.getDocumentAsync({
+        type: [
+          "text/csv",
+          "text/comma-separated-values",
+          "public.comma-separated-values-text",
+          "public.plain-text",
+        ],
+        copyToCacheDirectory: true,
+        multiple: false,
+      });
+
+      if (pickerResult.canceled) {
+        return;
+      }
+
+      const selectedAsset = pickerResult.assets[0];
+      if (!selectedAsset?.uri) {
+        throw new Error("Selected file is not accessible.");
+      }
+
+      const importSummary = await importPortfolioCsvBackupFromFile(selectedAsset.uri);
+      await refreshPortfolio();
+
+      setBackupNotice({
+        title: "CSV Imported",
+        message: [
+          `Trades: ${importSummary.trades}`,
+          `Deposits: ${importSummary.deposits}`,
+          `Dividends: ${importSummary.dividends}`,
+          `Bonus Shares: ${importSummary.bonuses}`,
+          `Watchlist: ${importSummary.watchlist}`,
+          `Preferences: ${importSummary.preferences}`,
+        ].join("\n"),
+        tone: "success",
+      });
+    } catch (error) {
+      const message =
+        error instanceof Error && error.message.trim().length > 0
+          ? error.message
+          : "Unable to import CSV backup.";
+      setBackupNotice({
+        title: "Import Failed",
+        message,
+        tone: "error",
+      });
+    } finally {
+      setIsBackupBusy(false);
+    }
+  }, [isBackupBusy, refreshPortfolio]);
+
   return (
     <SafeAreaView
       edges={["top", "left", "right"]}
@@ -474,20 +593,54 @@ export default function PortfolioTabScreen() {
             <Text className="text-3xl font-extrabold text-app-text dark:text-app-textDark">
               Portfolio
             </Text>
-            <TouchableOpacity
-              activeOpacity={0.88}
-              onPress={() => setIsFilterPanelVisible((currentValue) => !currentValue)}
-              className="flex-row items-center gap-1 rounded-xl bg-app-highlight/10 px-3 py-2 dark:bg-brand-white/10"
-            >
-              <MaterialCommunityIcons
-                name={isFilterPanelVisible ? "close" : "filter-variant"}
-                size={18}
-                color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
-              />
-              <Text className="text-sm font-semibold text-app-highlight dark:text-app-highlightDark">
-                Filter
-              </Text>
-            </TouchableOpacity>
+            <View className="flex-row items-center gap-2">
+              <TouchableOpacity
+                activeOpacity={0.88}
+                disabled={isBackupBusy}
+                onPress={handleExportCsv}
+                className={[
+                  "rounded-xl bg-app-highlight/10 px-3 py-2 dark:bg-brand-white/10",
+                  isBackupBusy ? "opacity-50" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
+                <Text className="text-sm font-semibold text-app-highlight dark:text-app-highlightDark">
+                  Export
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.88}
+                disabled={isBackupBusy}
+                onPress={handleImportCsv}
+                className={[
+                  "rounded-xl bg-app-highlight/10 px-3 py-2 dark:bg-brand-white/10",
+                  isBackupBusy ? "opacity-50" : "",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
+                <Text className="text-sm font-semibold text-app-highlight dark:text-app-highlightDark">
+                  Import
+                </Text>
+              </TouchableOpacity>
+
+              <TouchableOpacity
+                activeOpacity={0.88}
+                onPress={() => setIsFilterPanelVisible((currentValue) => !currentValue)}
+                className="flex-row items-center gap-1 rounded-xl bg-app-highlight/10 px-3 py-2 dark:bg-brand-white/10"
+              >
+                <MaterialCommunityIcons
+                  name={isFilterPanelVisible ? "close" : "filter-variant"}
+                  size={18}
+                  color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
+                />
+                <Text className="text-sm font-semibold text-app-highlight dark:text-app-highlightDark">
+                  Filter
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
 
           {isFilterPanelVisible ? (
@@ -566,6 +719,14 @@ export default function PortfolioTabScreen() {
           )}
         </View>
       </ScrollView>
+
+      <AppFeedbackModal
+        visible={backupNotice !== null}
+        title={backupNotice?.title ?? ""}
+        message={backupNotice?.message ?? ""}
+        tone={backupNotice?.tone ?? "info"}
+        onClose={handleCloseBackupNotice}
+      />
     </SafeAreaView>
   );
 }

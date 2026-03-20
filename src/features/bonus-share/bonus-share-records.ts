@@ -148,3 +148,14 @@ export async function clearSavedBonusShareRecords(): Promise<void> {
   await writeStore(clearedStore);
 }
 
+export async function replaceSavedBonusShareRecords(
+  records: BonusShareRecord[]
+): Promise<void> {
+  const normalizedStore = getSafeStore({
+    version: 1,
+    records,
+    updatedAt: new Date().toISOString(),
+  });
+
+  await writeStore(normalizedStore);
+}

@@ -294,3 +294,15 @@ export async function clearSavedDividendRecords(): Promise<void> {
 
   await writeStore(clearedStore);
 }
+
+export async function replaceSavedDividendRecords(
+  records: DividendRecord[]
+): Promise<void> {
+  const normalizedStore = getSafeStore({
+    version: 1,
+    records,
+    updatedAt: new Date().toISOString(),
+  });
+
+  await writeStore(normalizedStore);
+}

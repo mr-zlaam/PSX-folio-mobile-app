@@ -211,3 +211,15 @@ export async function clearSavedDepositRecords(): Promise<void> {
 
   await writeStore(clearedStore);
 }
+
+export async function replaceSavedDepositRecords(
+  records: DepositRecord[]
+): Promise<void> {
+  const normalizedStore = getSafeStore({
+    version: 1,
+    records,
+    updatedAt: new Date().toISOString(),
+  });
+
+  await writeStore(normalizedStore);
+}

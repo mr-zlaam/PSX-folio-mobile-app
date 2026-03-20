@@ -307,3 +307,7 @@ export async function setBrokerSettings(
     })
   );
 }
+
+export async function clearBrokerSettings(): Promise<void> {
+  await removeStoredItem(STORAGE_KEYS.brokerSettings);
+}
