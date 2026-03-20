@@ -10,7 +10,7 @@ type TabIconName =
   | "briefcase-outline"
   | "eye-outline"
   | "swap-horizontal"
-  | "cog-outline";
+  | "menu";
 
 function getTabIconName(routeName: string): TabIconName {
   if (routeName === "home") {
@@ -33,7 +33,7 @@ function getTabIconName(routeName: string): TabIconName {
     return "swap-horizontal";
   }
 
-  return "cog-outline";
+  return "menu";
 }
 
 export default function TabsLayout() {
@@ -90,9 +90,9 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="market"
+        name="portfolio"
         options={{
-          title: "Market",
+          title: "Portfolio",
         }}
       />
       <Tabs.Screen
@@ -102,9 +102,9 @@ export default function TabsLayout() {
         }}
       />
       <Tabs.Screen
-        name="portfolio"
+        name="market"
         options={{
-          title: "Portfolio",
+          title: "Market",
         }}
       />
       <Tabs.Screen
@@ -118,6 +118,13 @@ export default function TabsLayout() {
         name="settings"
         options={{
           title: "Settings",
+          href: null,
+        }}
+      />
+      <Tabs.Screen
+        name="more"
+        options={{
+          title: "More",
         }}
       />
     </Tabs>
