@@ -9,6 +9,7 @@ import {
 import { useRouter } from "expo-router";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
+import AppBackIconButton from "@/components/ui/app-back-icon-button";
 import { formatPKRAmount } from "@/src/features/home/home-formatters";
 import {
   BonusShareRecord,
@@ -388,15 +389,7 @@ export default function TransactionHistoryScreen() {
       >
         <View className="gap-5">
           <View className="flex-row items-center justify-between">
-            <TouchableOpacity
-              activeOpacity={0.88}
-              onPress={() => router.back()}
-              className="rounded-xl border border-app-highlight px-3 py-2 dark:border-app-highlightDark"
-            >
-              <Text className="text-sm font-semibold text-app-highlight dark:text-app-highlightDark">
-                Back
-              </Text>
-            </TouchableOpacity>
+            <AppBackIconButton onPress={() => router.back()} />
 
             <Text className="text-2xl font-extrabold text-app-text dark:text-app-textDark">
               Transactions

@@ -1,4 +1,5 @@
 import StockLineChart from "@/components/charts/stock-line-chart";
+import AppBackIconButton from "@/components/ui/app-back-icon-button";
 import {
   AnalyticsAllocationItem,
   AnalyticsSnapshot,
@@ -413,15 +414,7 @@ export default function AnalyticsScreen() {
       >
         <View className="gap-4">
           <View className="flex-row items-center justify-between">
-            <TouchableOpacity
-              activeOpacity={0.88}
-              onPress={() => router.back()}
-              className="rounded-xl border border-app-highlight px-3 py-2 dark:border-app-highlightDark"
-            >
-              <Text className="text-sm font-semibold text-app-highlight dark:text-app-highlightDark">
-                Back
-              </Text>
-            </TouchableOpacity>
+            <AppBackIconButton onPress={() => router.back()} />
             <Text className="text-3xl font-extrabold text-app-text dark:text-app-textDark">
               Analytics
             </Text>

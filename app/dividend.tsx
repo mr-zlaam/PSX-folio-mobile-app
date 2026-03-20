@@ -14,6 +14,7 @@ import DateTimePicker, {
 } from "@react-native-community/datetimepicker";
 import { useColorScheme } from "nativewind";
 import AppButton from "@/components/ui/app-button";
+import AppBackIconButton from "@/components/ui/app-back-icon-button";
 import AppFeedbackModal from "@/components/ui/app-feedback-modal";
 import { formatPKRAmount } from "@/src/features/home/home-formatters";
 import {
@@ -459,15 +460,7 @@ export default function DividendScreen() {
       >
         <View className="gap-5">
           <View className="flex-row items-center justify-between">
-            <TouchableOpacity
-              activeOpacity={0.88}
-              onPress={() => router.back()}
-              className="rounded-xl border border-app-highlight px-3 py-2 dark:border-app-highlightDark"
-            >
-              <Text className="text-sm font-semibold text-app-highlight dark:text-app-highlightDark">
-                Back
-              </Text>
-            </TouchableOpacity>
+            <AppBackIconButton onPress={() => router.back()} />
 
             <Text className="text-2xl font-extrabold text-app-text dark:text-app-textDark">
               {isEditingDividend ? "Edit Dividend" : "Add Dividend"}
