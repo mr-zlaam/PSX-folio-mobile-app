@@ -37,6 +37,7 @@ import { useColorScheme } from "nativewind";
 import React from "react";
 import {
   ActivityIndicator,
+  Linking,
   RefreshControl,
   ScrollView,
   Text,
@@ -132,6 +133,37 @@ function formatUpdatedAt(value: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+function extractUrlFromText(value: string): string | null {
+  const httpMatch = value.match(/https?:\/\/[^\s)]+/i);
+  if (httpMatch && httpMatch[0]) {
+    return httpMatch[0];
+  }
+
+  const wwwMatch = value.match(/www\.[^\s)]+/i);
+  if (wwwMatch && wwwMatch[0]) {
+    return `https://${wwwMatch[0]}`;
+  }
+
+  return null;
+}
+
+function normalizeExternalUrl(rawUrl: string): string {
+  const trimmedUrl = rawUrl.trim();
+  if (trimmedUrl.length === 0) {
+    return trimmedUrl;
+  }
+
+  if (/^https?:\/\//i.test(trimmedUrl)) {
+    return trimmedUrl;
+  }
+
+  if (trimmedUrl.startsWith("//")) {
+    return `https:${trimmedUrl}`;
+  }
+
+  return `https://${trimmedUrl}`;
 }
 
 function ChartRangeChip({
@@ -246,9 +278,11 @@ function CompanyDetailTabChip({
 function CompanyMetricRows({
   metrics,
   emptyText,
+  onOpenUrl,
 }: {
   metrics: CompanyDetailMetric[];
   emptyText: string;
+  onOpenUrl?: (url: string) => void;
 }) {
   if (metrics.length === 0) {
     return (
@@ -260,13 +294,44 @@ function CompanyMetricRows({
 
   return (
     <View className="gap-2">
-      {metrics.map((metricItem) => (
-        <StatRow
-          key={`${metricItem.label}-${metricItem.value}`}
-          label={metricItem.label}
-          value={metricItem.value}
-        />
-      ))}
+      {metrics.map((metricItem) => {
+        const detectedUrl = extractUrlFromText(metricItem.value);
+        const canOpenUrl = Boolean(detectedUrl) && Boolean(onOpenUrl);
+
+        return (
+          <View
+            key={`${metricItem.label}-${metricItem.value}`}
+            className="rounded-xl bg-brand-white/70 px-3 py-2 dark:bg-brand-white/5"
+          >
+            <Text className="text-[11px] font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+              {metricItem.label}
+            </Text>
+            {canOpenUrl ? (
+              <TouchableOpacity
+                activeOpacity={0.86}
+                onPress={() => {
+                  if (detectedUrl && onOpenUrl) {
+                    onOpenUrl(detectedUrl);
+                  }
+                }}
+                className="mt-1"
+              >
+                <Text
+                  numberOfLines={1}
+                  ellipsizeMode="middle"
+                  className="text-sm font-bold text-app-highlight underline dark:text-app-highlightDark"
+                >
+                  {metricItem.value}
+                </Text>
+              </TouchableOpacity>
+            ) : (
+              <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
+                {metricItem.value}
+              </Text>
+            )}
+          </View>
+        );
+      })}
     </View>
   );
 }
@@ -294,42 +359,38 @@ function CompanyMatrixTableCard({
         {table.title}
       </Text>
 
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2">
-        <View>
-          <View className="flex-row border-b border-app-highlight/20 pb-2 dark:border-brand-white/20">
-            <Text className="w-36 text-[11px] font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
-              {table.rowLabel}
+      <View className="mt-2 gap-2">
+        {visibleRows.map((rowItem, rowIndex) => (
+          <View
+            key={`${rowItem.label}-${rowIndex}`}
+            className="rounded-xl bg-brand-white/75 p-3 dark:bg-brand-white/10"
+          >
+            <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+              {rowItem.label}
             </Text>
-            {table.columns.map((columnLabel) => (
-              <Text
-                key={columnLabel}
-                className="w-24 text-right text-[11px] font-bold uppercase tracking-wide text-app-text dark:text-app-textDark"
-              >
-                {columnLabel}
-              </Text>
-            ))}
-          </View>
 
-          {visibleRows.map((rowItem, rowIndex) => (
-            <View
-              key={`${rowItem.label}-${rowIndex}`}
-              className="mt-2 flex-row items-start"
-            >
-              <Text className="w-36 pr-2 text-[11px] font-semibold text-app-text dark:text-app-textDark">
-                {rowItem.label}
-              </Text>
+            <View className="mt-2 flex-row flex-wrap">
               {table.columns.map((columnLabel, columnIndex) => (
-                <Text
+                <View
                   key={`${columnLabel}-${rowItem.label}-${columnIndex}`}
-                  className="w-24 text-right text-[11px] font-semibold text-app-text dark:text-app-textDark"
+                  className="w-1/2 pb-2 pr-2"
                 >
-                  {rowItem.values[columnIndex] ?? "--"}
-                </Text>
+                  <Text className="text-[10px] font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                    {columnLabel}
+                  </Text>
+                  <Text
+                    numberOfLines={1}
+                    ellipsizeMode="tail"
+                    className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark"
+                  >
+                    {rowItem.values[columnIndex] ?? "--"}
+                  </Text>
+                </View>
               ))}
             </View>
-          ))}
-        </View>
-      </ScrollView>
+          </View>
+        ))}
+      </View>
 
       {table.rows.length > visibleRows.length ? (
         <Text className="mt-2 text-[10px] font-semibold text-app-text dark:text-app-textDark">
@@ -568,6 +629,40 @@ export default function StockDetailScreen() {
     refreshQuote,
     shouldLoadCompanyDetail,
   ]);
+
+  const handleOpenExternalUrl = React.useCallback(async (rawUrl: string) => {
+    const normalizedUrl = normalizeExternalUrl(rawUrl);
+    if (normalizedUrl.length === 0) {
+      return;
+    }
+
+    try {
+      await Linking.openURL(normalizedUrl);
+    } catch {
+      // Ignore URL open failures to avoid breaking the screen interaction.
+    }
+  }, []);
+
+  const handleOpenPdfInApp = React.useCallback(
+    (pdfUrl: string, announcementTitle: string) => {
+      const normalizedUrl = normalizeExternalUrl(pdfUrl);
+      if (normalizedUrl.length === 0) {
+        return;
+      }
+
+      router.push({
+        pathname: "/pdf-viewer",
+        params: {
+          url: normalizedUrl,
+          title:
+            announcementTitle.trim().length > 0
+              ? announcementTitle
+              : `${normalizedSymbol} PDF`,
+        },
+      });
+    },
+    [normalizedSymbol, router]
+  );
 
   const chartToneValue = React.useMemo(() => {
     if (chartSeries.points.length < 2) {
@@ -837,6 +932,7 @@ export default function StockDetailScreen() {
                                 <CompanyMetricRows
                                   metrics={companyDetail.profileMetrics}
                                   emptyText="No profile facts available."
+                                  onOpenUrl={handleOpenExternalUrl}
                                 />
                               </View>
                             </View>
@@ -852,11 +948,17 @@ export default function StockDetailScreen() {
                               ) : (
                                 <View className="mt-2 gap-2">
                                   {companyDetail.keyPeople.map((person, personIndex) => (
-                                    <StatRow
+                                    <View
                                       key={`${person.name}-${person.role}-${personIndex}`}
-                                      label={person.name}
-                                      value={person.role}
-                                    />
+                                      className="flex-row items-start justify-between gap-3 rounded-xl bg-brand-white/70 px-3 py-2 dark:bg-brand-white/5"
+                                    >
+                                      <Text className="flex-1 text-sm font-semibold text-app-text dark:text-app-textDark">
+                                        {person.name}
+                                      </Text>
+                                      <Text className="w-32 text-right text-sm font-bold text-app-text dark:text-app-textDark">
+                                        {person.role}
+                                      </Text>
+                                    </View>
                                   ))}
                                 </View>
                               )}
@@ -873,6 +975,7 @@ export default function StockDetailScreen() {
                               <CompanyMetricRows
                                 metrics={companyDetail.equityMetrics}
                                 emptyText="No equity metrics available."
+                                onOpenUrl={handleOpenExternalUrl}
                               />
                             </View>
                           </View>
@@ -925,6 +1028,22 @@ export default function StockDetailScreen() {
                                     <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
                                       {announcement.document}
                                     </Text>
+                                    {announcement.pdfUrl ? (
+                                      <TouchableOpacity
+                                        activeOpacity={0.86}
+                                        onPress={() => {
+                                          handleOpenPdfInApp(
+                                            announcement.pdfUrl ?? "",
+                                            announcement.title
+                                          );
+                                        }}
+                                        className="mt-2 self-start rounded-xl bg-app-highlight px-3 py-2 dark:bg-app-highlightDark"
+                                      >
+                                        <Text className="text-xs font-bold uppercase tracking-wide text-brand-white dark:text-brand-purple">
+                                          View PDF
+                                        </Text>
+                                      </TouchableOpacity>
+                                    ) : null}
                                   </View>
                                 )
                               )}

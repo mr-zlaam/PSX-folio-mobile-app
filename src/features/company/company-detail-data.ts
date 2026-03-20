@@ -37,6 +37,7 @@ export type CompanyDetailAnnouncement = {
   date: string;
   title: string;
   document: string;
+  pdfUrl: string | null;
 };
 
 export type CompanyDetailMatrixRow = {
@@ -267,25 +268,51 @@ function parseBusinessDescription(profileSection: string): string | null {
 }
 
 function parseProfileMetrics(profileSection: string): CompanyDetailMetric[] {
-  const metricMatches = Array.from(
-    profileSection.matchAll(
-      /<div class="item__head">([\s\S]*?)<\/div>\s*<p>([\s\S]*?)<\/p>/gi
-    )
+  const headMatches = Array.from(
+    profileSection.matchAll(/<div class="item__head">([\s\S]*?)<\/div>/gi)
   );
+  const metrics: CompanyDetailMetric[] = [];
 
-  const metrics: CompanyDetailMetric[] = metricMatches
-    .map((metricMatch) => {
-      const label = normalizeText(metricMatch[1] ?? "");
-      const value = normalizeText(metricMatch[2] ?? "");
-      return { label, value };
-    })
-    .filter((metricItem) => {
-      if (metricItem.label.length === 0 || metricItem.value.length === 0) {
-        return false;
-      }
+  headMatches.forEach((headMatch, headIndex) => {
+    const label = normalizeText(headMatch[1] ?? "");
+    if (label.length === 0) {
+      return;
+    }
 
-      return metricItem.label.toLowerCase() !== "business description";
+    const currentIndex = headMatch.index ?? -1;
+    if (currentIndex < 0) {
+      return;
+    }
+
+    const nextHeadIndex =
+      headMatches[headIndex + 1]?.index ?? profileSection.length;
+    const sliceAfterHead = profileSection.slice(
+      currentIndex + headMatch[0].length,
+      nextHeadIndex
+    );
+    const valueMatch = sliceAfterHead.match(/<p>([\s\S]*?)<\/p>/i);
+    if (!valueMatch || !valueMatch[1]) {
+      return;
+    }
+
+    const value = normalizeText(valueMatch[1]);
+    if (value.length === 0) {
+      return;
+    }
+
+    const normalizedLabel = label.toLowerCase();
+    if (
+      normalizedLabel === "business description" ||
+      normalizedLabel === "key people"
+    ) {
+      return;
+    }
+
+    metrics.push({
+      label,
+      value,
     });
+  });
 
   return dedupeMetrics(metrics);
 }
@@ -366,44 +393,6 @@ function extractPanelHtml(
   return sectionHtml.slice(panelStartIndex, panelEndIndex);
 }
 
-function parseAnnouncements(
-  announcementsSection: string
-): CompanyDetailAnnouncement[] {
-  const announcementItems: CompanyDetailAnnouncement[] = [];
-
-  for (const panelName of ANNOUNCEMENT_PANEL_NAMES) {
-    const panelHtml = extractPanelHtml(
-      announcementsSection,
-      panelName,
-      ANNOUNCEMENT_PANEL_NAMES
-    );
-    if (panelHtml.length === 0) {
-      continue;
-    }
-
-    const tableHtml = extractFirstTable(panelHtml);
-    if (!tableHtml) {
-      continue;
-    }
-
-    const panelRows = parseTableBodyRows(tableHtml);
-    panelRows.forEach((rowCells) => {
-      if (rowCells.length < 2) {
-        return;
-      }
-
-      announcementItems.push({
-        category: panelName,
-        date: rowCells[0] ?? "--",
-        title: rowCells[1] ?? "--",
-        document: rowCells[2] ?? "--",
-      });
-    });
-  }
-
-  return announcementItems;
-}
-
 function parseFinancialPanel(
   financialsSection: string,
   panelName: CompanyPanelName
@@ -423,6 +412,27 @@ function parseFinancialPanel(
   }
 
   return parseMatrixTable(tableHtml, panelName);
+}
+
+function resolvePsxUrl(rawUrl: string): string | null {
+  const trimmedUrl = rawUrl.trim();
+  if (trimmedUrl.length === 0 || trimmedUrl.toLowerCase().startsWith("javascript")) {
+    return null;
+  }
+
+  if (/^https?:\/\//i.test(trimmedUrl)) {
+    return trimmedUrl;
+  }
+
+  if (trimmedUrl.startsWith("//")) {
+    return `https:${trimmedUrl}`;
+  }
+
+  if (trimmedUrl.startsWith("/")) {
+    return `https://dps.psx.com.pk${trimmedUrl}`;
+  }
+
+  return `https://dps.psx.com.pk/${trimmedUrl.replace(/^\.?\//, "")}`;
 }
 
 function parseReportItems(reportsSection: string): CompanyDetailMetric[] {
@@ -505,6 +515,67 @@ function parseCompanyDetailHtml(
     updatedAt: new Date().toISOString(),
     source,
   };
+}
+
+function parseAnnouncements(
+  announcementsSection: string
+): CompanyDetailAnnouncement[] {
+  const announcementItems: CompanyDetailAnnouncement[] = [];
+
+  for (const panelName of ANNOUNCEMENT_PANEL_NAMES) {
+    const panelHtml = extractPanelHtml(
+      announcementsSection,
+      panelName,
+      ANNOUNCEMENT_PANEL_NAMES
+    );
+    if (panelHtml.length === 0) {
+      continue;
+    }
+
+    const tableHtml = extractFirstTable(panelHtml);
+    if (!tableHtml) {
+      continue;
+    }
+
+    const tableBodyMatch = tableHtml.match(/<tbody[^>]*>([\s\S]*?)<\/tbody>/i);
+    const sourceHtml = tableBodyMatch?.[1] ?? tableHtml;
+    const rowMatches = sourceHtml.match(/<tr\b[\s\S]*?<\/tr>/gi) ?? [];
+
+    rowMatches.forEach((rowHtml) => {
+      const cellMatches = rowHtml.match(/<td\b[\s\S]*?<\/td>/gi) ?? [];
+      if (cellMatches.length < 2) {
+        return;
+      }
+
+      const dateText = normalizeText(cellMatches[0] ?? "");
+      const titleText = normalizeText(cellMatches[1] ?? "");
+      const documentCellHtml = cellMatches[2] ?? "";
+      const documentText = normalizeText(documentCellHtml);
+
+      const pdfHrefMatch =
+        documentCellHtml.match(
+          /<a\b[^>]*href="([^"]+\.pdf(?:\?[^"]*)?)"[^>]*>/i
+        ) ??
+        documentCellHtml.match(
+          /<a\b[^>]*href="([^"]+)"[^>]*>\s*PDF\s*<\/a>/i
+        );
+      const pdfUrl = pdfHrefMatch?.[1] ? resolvePsxUrl(pdfHrefMatch[1]) : null;
+
+      if (dateText.length === 0 && titleText.length === 0) {
+        return;
+      }
+
+      announcementItems.push({
+        category: panelName,
+        date: dateText.length > 0 ? dateText : "--",
+        title: titleText.length > 0 ? titleText : "--",
+        document: documentText.length > 0 ? documentText : "--",
+        pdfUrl,
+      });
+    });
+  }
+
+  return announcementItems;
 }
 
 async function writeCompanyDetailToCache(

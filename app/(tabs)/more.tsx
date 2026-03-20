@@ -45,7 +45,7 @@ const MORE_GRID_ITEMS: MoreGridItem[] = [
   {
     id: "stocks",
     label: "Stocks",
-    icon: "format-list-bulleted",
+    icon: "finance",
     route: "/(tabs)/stocks",
   },
   {
