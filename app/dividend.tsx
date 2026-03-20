@@ -99,7 +99,7 @@ function FieldInput({
         placeholderTextColor={placeholderTextColor}
         keyboardType={keyboardType}
         editable={editable}
-        className="mt-1 rounded-xl border border-app-highlight bg-brand-white px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark dark:bg-transparent dark:text-app-textDark"
+        className="mt-1 rounded-xl border border-app-text/10 bg-brand-white/90 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/20 dark:bg-brand-white/10 dark:text-app-textDark"
       />
     </View>
   );
@@ -124,7 +124,7 @@ export default function DividendScreen() {
   const [sharesInput, setSharesInput] = React.useState("");
   const [dividendPerShareInput, setDividendPerShareInput] = React.useState("");
   const [taxDeductionPctInput, setTaxDeductionPctInput] = React.useState("30");
-  const [zakatAmountInput, setZakatAmountInput] = React.useState("");
+  const [zakatPctInput, setZakatPctInput] = React.useState("");
   const [dividendDate, setDividendDate] = React.useState(new Date());
   const [isDatePickerVisible, setIsDatePickerVisible] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
@@ -144,6 +144,10 @@ export default function DividendScreen() {
     return (rawEditDividendId ?? "").trim();
   }, [searchParams.editDividendId]);
   const isEditingDividend = normalizedEditDividendId.length > 0;
+  const cardClassName =
+    "rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/25 dark:shadow-none dark:bg-brand-white/10";
+  const softInputClassName =
+    "mt-3 rounded-xl border border-app-text/10 bg-brand-white/90 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/20 dark:bg-brand-white/10 dark:text-app-textDark";
 
   const loadFormContext = React.useCallback(async () => {
     const [cachedHoldings, savedTaxpayerProfile] = await Promise.all([
@@ -217,7 +221,11 @@ export default function DividendScreen() {
       setDividendPerShareInput(formatEditableNumber(existingRecord.dividendPerShare));
       setTaxDeductionPctInput(formatEditableNumber(existingRecord.taxDeductionPct));
       setHasManuallyEditedTaxPct(true);
-      setZakatAmountInput(formatEditableNumber(existingRecord.zakatAmount));
+      const zakatPct =
+        existingRecord.grossAmount > 0
+          ? (existingRecord.zakatAmount / existingRecord.grossAmount) * 100
+          : 0;
+      setZakatPctInput(formatEditableNumber(zakatPct));
       setTaxpayerProfile(existingRecord.taxpayerProfile);
 
       const parsedDividendDate = new Date(existingRecord.dividendDate);
@@ -264,15 +272,19 @@ export default function DividendScreen() {
     () => parseNonNegativeNumber(taxDeductionPctInput),
     [taxDeductionPctInput]
   );
-  const zakatAmount = React.useMemo(
-    () => parseNonNegativeNumber(zakatAmountInput),
-    [zakatAmountInput]
+  const zakatPct = React.useMemo(
+    () => parseNonNegativeNumber(zakatPctInput),
+    [zakatPctInput]
   );
 
   const grossAmount = React.useMemo(() => shares * dividendPerShare, [dividendPerShare, shares]);
   const taxDeductionAmount = React.useMemo(
     () => (grossAmount * taxDeductionPct) / 100,
     [grossAmount, taxDeductionPct]
+  );
+  const zakatAmount = React.useMemo(
+    () => (grossAmount * zakatPct) / 100,
+    [grossAmount, zakatPct]
   );
   const finalAmount = React.useMemo(
     () => grossAmount - taxDeductionAmount - zakatAmount,
@@ -358,8 +370,8 @@ export default function DividendScreen() {
       return;
     }
 
-    if (zakatAmount < 0) {
-      showNotice("Invalid Zakat", "Zakat cannot be negative.", "error");
+    if (zakatPct < 0) {
+      showNotice("Invalid Zakat", "Zakat % cannot be negative.", "error");
       return;
     }
 
@@ -413,7 +425,7 @@ export default function DividendScreen() {
         setShouldGoBackAfterNotice(true);
       } else {
         setDividendPerShareInput("");
-        setZakatAmountInput("");
+        setZakatPctInput("");
         setDividendDate(new Date());
       }
     } catch {
@@ -433,6 +445,7 @@ export default function DividendScreen() {
     shares,
     dividendPerShare,
     taxDeductionPct,
+    zakatPct,
     zakatAmount,
     finalAmount,
     taxDeductionAmount,
@@ -469,7 +482,7 @@ export default function DividendScreen() {
             <View className="w-14" />
           </View>
 
-          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+          <View className={cardClassName}>
             <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
               Stock Symbol
             </Text>
@@ -478,7 +491,7 @@ export default function DividendScreen() {
               onChangeText={setSymbolSearchQuery}
               placeholder="Search from your holdings"
               placeholderTextColor={inputPlaceholderTextColor}
-              className="mt-3 rounded-xl border border-app-highlight bg-brand-white px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark dark:bg-transparent dark:text-app-textDark"
+              className={softInputClassName}
             />
 
             <View className="mt-3 gap-2">
@@ -491,7 +504,7 @@ export default function DividendScreen() {
                     "rounded-xl border px-3 py-2",
                     selectedSymbol === holding.symbol
                       ? "border-app-highlight bg-app-highlight dark:border-app-highlightDark dark:bg-app-highlightDark"
-                      : "border-app-highlight bg-brand-white dark:border-app-highlightDark dark:bg-transparent",
+                      : "border-app-text/10 bg-brand-white/90 dark:border-app-highlightDark/20 dark:bg-brand-white/10",
                   ]
                     .filter(Boolean)
                     .join(" ")}
@@ -525,7 +538,7 @@ export default function DividendScreen() {
             </View>
           </View>
 
-          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+          <View className={cardClassName}>
             <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
               Dividend Form
             </Text>
@@ -572,10 +585,10 @@ export default function DividendScreen() {
                     Optional
                   </Text>
                   <FieldInput
-                    label="Zakat"
-                    value={zakatAmountInput}
-                    onChangeText={setZakatAmountInput}
-                    placeholder="0"
+                    label="Zakat %"
+                    value={zakatPctInput}
+                    onChangeText={setZakatPctInput}
+                    placeholder="e.g. 2.5"
                     placeholderTextColor={inputPlaceholderTextColor}
                     keyboardType="numeric"
                   />
@@ -589,14 +602,14 @@ export default function DividendScreen() {
                 <TouchableOpacity
                   activeOpacity={0.88}
                   onPress={() => setIsDatePickerVisible(true)}
-                  className="mt-1 rounded-xl border border-app-highlight bg-brand-white px-3 py-2 dark:border-app-highlightDark dark:bg-transparent"
+                  className="mt-1 rounded-xl border border-app-text/10 bg-brand-white/90 px-3 py-2 dark:border-app-highlightDark/20 dark:bg-brand-white/10"
                 >
                   <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
                     {formatDateInput(dividendDate)}
                   </Text>
                 </TouchableOpacity>
                 {isDatePickerVisible ? (
-                  <View className="mt-3 rounded-xl border border-app-highlight bg-brand-white p-2 dark:border-app-highlightDark dark:bg-transparent">
+                  <View className="mt-3 rounded-xl border border-app-text/10 bg-brand-white/90 p-2 dark:border-app-highlightDark/20 dark:bg-brand-white/10">
                     <DateTimePicker
                       value={dividendDate}
                       mode="date"
@@ -609,7 +622,7 @@ export default function DividendScreen() {
             </View>
           </View>
 
-          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+          <View className={cardClassName}>
             <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
               Final Amount
             </Text>
@@ -632,7 +645,9 @@ export default function DividendScreen() {
               </View>
               <View className="flex-row items-center justify-between">
                 <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
-                  Zakat
+                  {zakatPct > 0
+                    ? `Zakat (${formatEditableNumber(zakatPct)}%)`
+                    : "Zakat"}
                 </Text>
                 <Text className="text-sm font-bold text-brand-red">
                   {formatPKRAmount(-zakatAmount)}

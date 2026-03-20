@@ -90,6 +90,15 @@ export default function DepositScreen() {
   }, [searchParams.editDepositId]);
   const isEditingDeposit = normalizedEditDepositId.length > 0;
 
+  const cardClassName =
+    "rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/25 dark:shadow-none dark:bg-brand-white/10";
+  const fieldClassName =
+    "mt-1 rounded-xl border border-app-text/10 bg-brand-white/90 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/20 dark:bg-brand-white/10 dark:text-app-textDark";
+  const pickerTriggerClassName =
+    "mt-1 rounded-xl border border-app-text/10 bg-brand-white/90 px-3 py-2 dark:border-app-highlightDark/20 dark:bg-brand-white/10";
+  const pickerSheetClassName =
+    "mt-3 rounded-xl border border-app-text/10 bg-brand-white/90 p-2 dark:border-app-highlightDark/20 dark:bg-brand-white/10";
+
   const parsedAmount = React.useMemo(() => parsePositiveNumber(amountInput), [amountInput]);
 
   React.useEffect(() => {
@@ -274,7 +283,7 @@ export default function DepositScreen() {
             <View className="w-14" />
           </View>
 
-          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+          <View className={cardClassName}>
             <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
               Deposit Form
             </Text>
@@ -290,7 +299,7 @@ export default function DepositScreen() {
                   placeholder="e.g. 10000"
                   placeholderTextColor={inputPlaceholderTextColor}
                   keyboardType="numeric"
-                  className="mt-1 rounded-xl border border-app-highlight bg-brand-white px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark dark:bg-transparent dark:text-app-textDark"
+                  className={fieldClassName}
                 />
               </View>
 
@@ -303,7 +312,7 @@ export default function DepositScreen() {
                   onChangeText={setNoteInput}
                   placeholder="Optional note"
                   placeholderTextColor={inputPlaceholderTextColor}
-                  className="mt-1 rounded-xl border border-app-highlight bg-brand-white px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark dark:bg-transparent dark:text-app-textDark"
+                  className={fieldClassName}
                 />
               </View>
 
@@ -314,7 +323,7 @@ export default function DepositScreen() {
                 <TouchableOpacity
                   activeOpacity={0.88}
                   onPress={handleStartDateTimeSelection}
-                  className="mt-1 rounded-xl border border-app-highlight bg-brand-white px-3 py-2 dark:border-app-highlightDark dark:bg-transparent"
+                  className={pickerTriggerClassName}
                 >
                   <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
                     {formatDateTimeInput(depositedAt)}
@@ -322,7 +331,7 @@ export default function DepositScreen() {
                 </TouchableOpacity>
 
                 {isPickerVisible ? (
-                  <View className="mt-3 rounded-xl border border-app-highlight bg-brand-white p-2 dark:border-app-highlightDark dark:bg-transparent">
+                  <View className={pickerSheetClassName}>
                     <Text className="px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                       {isAwaitingTimeSelection ? "Pick Time" : "Pick Date"}
                     </Text>
@@ -339,7 +348,7 @@ export default function DepositScreen() {
             </View>
           </View>
 
-          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+          <View className={cardClassName}>
             <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
               Preview
             </Text>
