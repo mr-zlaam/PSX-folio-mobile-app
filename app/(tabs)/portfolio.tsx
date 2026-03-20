@@ -11,9 +11,9 @@ import AppFeedbackModal, {
 } from "@/components/ui/app-feedback-modal";
 import ShariahChip from "@/components/ui/shariah-chip";
 import {
-  exportPortfolioCsvBackup,
-  importPortfolioCsvBackupFromFile,
-} from "@/src/features/backup/portfolio-csv-backup";
+  exportPortfolioWorkbookBackup,
+  importPortfolioWorkbookBackupFromFile,
+} from "@/src/features/backup/portfolio-workbook-backup";
 import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
 import {
   getPortfolioHoldingsWithCachedQuotes,
@@ -466,26 +466,26 @@ export default function PortfolioTabScreen() {
     setBackupNotice(null);
   }, []);
 
-  const handleExportCsv = React.useCallback(async () => {
+  const handleExportBackup = React.useCallback(async () => {
     if (isBackupBusy) {
       return;
     }
 
     setIsBackupBusy(true);
     try {
-      const exportSummary = await exportPortfolioCsvBackup();
+      const exportSummary = await exportPortfolioWorkbookBackup();
       const sharingAvailable = await Sharing.isAvailableAsync();
 
       if (sharingAvailable) {
         await Sharing.shareAsync(exportSummary.fileUri, {
-          mimeType: "text/csv",
-          dialogTitle: "Export Portfolio CSV Backup",
-          UTI: "public.comma-separated-values-text",
+          mimeType: "application/vnd.ms-excel",
+          dialogTitle: "Export Portfolio XLS Backup",
+          UTI: "com.microsoft.excel.xls",
         });
       }
 
       setBackupNotice({
-        title: "CSV Backup Ready",
+        title: "Backup Ready (.xls)",
         message: sharingAvailable
           ? `Backup file prepared with ${exportSummary.rows} rows.`
           : `Backup file saved at:\n${exportSummary.fileUri}`,
@@ -495,7 +495,7 @@ export default function PortfolioTabScreen() {
       const message =
         error instanceof Error && error.message.trim().length > 0
           ? error.message
-          : "Unable to export CSV backup right now.";
+          : "Unable to export backup right now.";
       setBackupNotice({
         title: "Export Failed",
         message,
@@ -506,7 +506,7 @@ export default function PortfolioTabScreen() {
     }
   }, [isBackupBusy]);
 
-  const handleImportCsv = React.useCallback(async () => {
+  const handleImportBackup = React.useCallback(async () => {
     if (isBackupBusy) {
       return;
     }
@@ -515,9 +515,9 @@ export default function PortfolioTabScreen() {
     try {
       const pickerResult = await DocumentPicker.getDocumentAsync({
         type: [
-          "text/csv",
-          "text/comma-separated-values",
-          "public.comma-separated-values-text",
+          "application/vnd.ms-excel",
+          "application/xls",
+          "application/octet-stream",
           "public.plain-text",
         ],
         copyToCacheDirectory: true,
@@ -533,18 +533,18 @@ export default function PortfolioTabScreen() {
         throw new Error("Selected file is not accessible.");
       }
 
-      const importSummary = await importPortfolioCsvBackupFromFile(selectedAsset.uri);
+      const importSummary = await importPortfolioWorkbookBackupFromFile(
+        selectedAsset.uri
+      );
       await refreshPortfolio();
 
       setBackupNotice({
-        title: "CSV Imported",
+        title: "Backup Imported",
         message: [
           `Trades: ${importSummary.trades}`,
           `Deposits: ${importSummary.deposits}`,
           `Dividends: ${importSummary.dividends}`,
           `Bonus Shares: ${importSummary.bonuses}`,
-          `Watchlist: ${importSummary.watchlist}`,
-          `Preferences: ${importSummary.preferences}`,
         ].join("\n"),
         tone: "success",
       });
@@ -552,7 +552,7 @@ export default function PortfolioTabScreen() {
       const message =
         error instanceof Error && error.message.trim().length > 0
           ? error.message
-          : "Unable to import CSV backup.";
+          : "Unable to import backup.";
       setBackupNotice({
         title: "Import Failed",
         message,
@@ -597,7 +597,7 @@ export default function PortfolioTabScreen() {
               <TouchableOpacity
                 activeOpacity={0.88}
                 disabled={isBackupBusy}
-                onPress={handleExportCsv}
+                onPress={handleExportBackup}
                 className={[
                   "rounded-xl bg-app-highlight/10 px-3 py-2 dark:bg-brand-white/10",
                   isBackupBusy ? "opacity-50" : "",
@@ -613,7 +613,7 @@ export default function PortfolioTabScreen() {
               <TouchableOpacity
                 activeOpacity={0.88}
                 disabled={isBackupBusy}
-                onPress={handleImportCsv}
+                onPress={handleImportBackup}
                 className={[
                   "rounded-xl bg-app-highlight/10 px-3 py-2 dark:bg-brand-white/10",
                   isBackupBusy ? "opacity-50" : "",

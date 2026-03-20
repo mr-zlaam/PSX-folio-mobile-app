@@ -458,7 +458,7 @@ export default function HomeScreen() {
         <View className="gap-7">
           <View className="flex-row items-center justify-between">
             <Text className="text-3xl font-extrabold text-app-text dark:text-app-textDark">
-              PSX Folio
+              PSX <Text className="text-red-600">Folio</Text>
             </Text>
 
             <TouchableOpacity
