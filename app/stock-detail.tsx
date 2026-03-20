@@ -2,6 +2,14 @@ import StockLineChart from "@/components/charts/stock-line-chart";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
 import ShariahChip from "@/components/ui/shariah-chip";
 import {
+  CompanyDetailAnnouncement,
+  CompanyDetailMatrixTable,
+  CompanyDetailMetric,
+  CompanyDetailSnapshot,
+  getCachedCompanyDetail,
+  getLatestCompanyDetail,
+} from "@/src/features/company/company-detail-data";
+import {
   formatPKRAmount,
   formatSignedPercentage,
 } from "@/src/features/home/home-formatters";
@@ -47,6 +55,17 @@ const CHART_RANGE_OPTIONS: StockChartRange[] = [
   "3Y",
   "5Y",
 ];
+
+const COMPANY_DETAIL_ALLOWED_ORIGINS = new Set(["market", "watchlist", "stocks"]);
+const COMPANY_DETAIL_TAB_KEYS = [
+  "profile",
+  "equity",
+  "financials",
+  "ratios",
+  "announcements",
+] as const;
+
+type CompanyDetailTabKey = (typeof COMPANY_DETAIL_TAB_KEYS)[number];
 
 function getValueToneClassName(value: number): string {
   if (value > 0) {
@@ -166,19 +185,184 @@ function StatRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function getCompanyDetailTabLabel(tabKey: CompanyDetailTabKey): string {
+  if (tabKey === "profile") {
+    return "Profile";
+  }
+
+  if (tabKey === "equity") {
+    return "Equity";
+  }
+
+  if (tabKey === "financials") {
+    return "Financials";
+  }
+
+  if (tabKey === "ratios") {
+    return "Ratios";
+  }
+
+  return "Announcements";
+}
+
+function CompanyDetailTabChip({
+  tabKey,
+  selected,
+  onPress,
+}: {
+  tabKey: CompanyDetailTabKey;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.88}
+      onPress={onPress}
+      className={[
+        "rounded-xl border px-3 py-2",
+        selected
+          ? "border-app-highlight bg-app-highlight dark:border-app-highlightDark dark:bg-app-highlightDark"
+          : "border-app-highlight bg-button-neutral dark:border-app-highlightDark dark:bg-transparent",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <Text
+        className={[
+          "text-xs font-bold uppercase tracking-wide",
+          selected
+            ? "text-brand-white dark:text-brand-purple"
+            : "text-app-highlight dark:text-app-highlightDark",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        {getCompanyDetailTabLabel(tabKey)}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
+function CompanyMetricRows({
+  metrics,
+  emptyText,
+}: {
+  metrics: CompanyDetailMetric[];
+  emptyText: string;
+}) {
+  if (metrics.length === 0) {
+    return (
+      <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+        {emptyText}
+      </Text>
+    );
+  }
+
+  return (
+    <View className="gap-2">
+      {metrics.map((metricItem) => (
+        <StatRow
+          key={`${metricItem.label}-${metricItem.value}`}
+          label={metricItem.label}
+          value={metricItem.value}
+        />
+      ))}
+    </View>
+  );
+}
+
+function CompanyMatrixTableCard({
+  table,
+  emptyText,
+}: {
+  table: CompanyDetailMatrixTable | null;
+  emptyText: string;
+}) {
+  if (!table || table.rows.length === 0 || table.columns.length === 0) {
+    return (
+      <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+        {emptyText}
+      </Text>
+    );
+  }
+
+  const visibleRows = table.rows.slice(0, 10);
+
+  return (
+    <View className="rounded-2xl bg-brand-white/70 p-3 dark:bg-brand-white/5">
+      <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+        {table.title}
+      </Text>
+
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} className="mt-2">
+        <View>
+          <View className="flex-row border-b border-app-highlight/20 pb-2 dark:border-brand-white/20">
+            <Text className="w-36 text-[11px] font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
+              {table.rowLabel}
+            </Text>
+            {table.columns.map((columnLabel) => (
+              <Text
+                key={columnLabel}
+                className="w-24 text-right text-[11px] font-bold uppercase tracking-wide text-app-text dark:text-app-textDark"
+              >
+                {columnLabel}
+              </Text>
+            ))}
+          </View>
+
+          {visibleRows.map((rowItem, rowIndex) => (
+            <View
+              key={`${rowItem.label}-${rowIndex}`}
+              className="mt-2 flex-row items-start"
+            >
+              <Text className="w-36 pr-2 text-[11px] font-semibold text-app-text dark:text-app-textDark">
+                {rowItem.label}
+              </Text>
+              {table.columns.map((columnLabel, columnIndex) => (
+                <Text
+                  key={`${columnLabel}-${rowItem.label}-${columnIndex}`}
+                  className="w-24 text-right text-[11px] font-semibold text-app-text dark:text-app-textDark"
+                >
+                  {rowItem.values[columnIndex] ?? "--"}
+                </Text>
+              ))}
+            </View>
+          ))}
+        </View>
+      </ScrollView>
+
+      {table.rows.length > visibleRows.length ? (
+        <Text className="mt-2 text-[10px] font-semibold text-app-text dark:text-app-textDark">
+          Showing latest {visibleRows.length} rows.
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 export default function StockDetailScreen() {
   const router = useRouter();
   const { isShariahCompliantSymbol } = useShariahSymbols();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
-  const searchParams = useLocalSearchParams<{ symbol?: string | string[] }>();
+  const searchParams = useLocalSearchParams<{
+    symbol?: string | string[];
+    origin?: string | string[];
+  }>();
   const normalizedSymbol = React.useMemo(() => {
     const rawSymbol = Array.isArray(searchParams.symbol)
       ? searchParams.symbol[0]
       : searchParams.symbol;
     return (rawSymbol ?? "").trim().toUpperCase();
   }, [searchParams.symbol]);
+  const normalizedOrigin = React.useMemo(() => {
+    const rawOrigin = Array.isArray(searchParams.origin)
+      ? searchParams.origin[0]
+      : searchParams.origin;
+    return (rawOrigin ?? "").trim().toLowerCase();
+  }, [searchParams.origin]);
+  const shouldLoadCompanyDetail = COMPANY_DETAIL_ALLOWED_ORIGINS.has(normalizedOrigin);
 
   const [symbolMeta, setSymbolMeta] = React.useState<PsxSymbol | null>(null);
   const [quote, setQuote] = React.useState<SymbolQuote>(() =>
@@ -193,7 +377,13 @@ export default function StockDetailScreen() {
   const [isChartLoading, setIsChartLoading] = React.useState(true);
   const [selectedChartPoint, setSelectedChartPoint] =
     React.useState<StockChartPoint | null>(null);
+  const [companyDetail, setCompanyDetail] =
+    React.useState<CompanyDetailSnapshot | null>(null);
+  const [isCompanyDetailLoading, setIsCompanyDetailLoading] = React.useState(false);
+  const [selectedCompanyTab, setSelectedCompanyTab] =
+    React.useState<CompanyDetailTabKey>("profile");
   const chartRequestIdRef = React.useRef(0);
+  const companyDetailRequestIdRef = React.useRef(0);
 
   const hydrateSymbolMeta = React.useCallback(async () => {
     if (normalizedSymbol.length === 0) {
@@ -279,6 +469,42 @@ export default function StockDetailScreen() {
     [normalizedSymbol]
   );
 
+  const refreshCompanyDetail = React.useCallback(
+    async (showLoader = false) => {
+      const requestId = companyDetailRequestIdRef.current + 1;
+      companyDetailRequestIdRef.current = requestId;
+
+      if (!shouldLoadCompanyDetail || normalizedSymbol.length === 0) {
+        if (requestId === companyDetailRequestIdRef.current) {
+          setCompanyDetail(null);
+          setIsCompanyDetailLoading(false);
+        }
+        return;
+      }
+
+      if (showLoader) {
+        setIsCompanyDetailLoading(true);
+      }
+
+      try {
+        const cachedDetail = await getCachedCompanyDetail(normalizedSymbol);
+        if (cachedDetail && requestId === companyDetailRequestIdRef.current) {
+          setCompanyDetail(cachedDetail);
+        }
+
+        const latestDetail = await getLatestCompanyDetail(normalizedSymbol);
+        if (latestDetail && requestId === companyDetailRequestIdRef.current) {
+          setCompanyDetail(latestDetail);
+        }
+      } finally {
+        if (showLoader && requestId === companyDetailRequestIdRef.current) {
+          setIsCompanyDetailLoading(false);
+        }
+      }
+    },
+    [normalizedSymbol, shouldLoadCompanyDetail]
+  );
+
   React.useEffect(() => {
     void hydrateSymbolMeta();
     void refreshQuote(true);
@@ -303,18 +529,45 @@ export default function StockDetailScreen() {
     };
   }, [chartRange, refreshChart]);
 
+  React.useEffect(() => {
+    setSelectedCompanyTab("profile");
+  }, [normalizedOrigin, normalizedSymbol]);
+
+  React.useEffect(() => {
+    if (!shouldLoadCompanyDetail || normalizedSymbol.length === 0) {
+      setCompanyDetail(null);
+      setIsCompanyDetailLoading(false);
+      return;
+    }
+
+    void refreshCompanyDetail(true);
+  }, [normalizedSymbol, refreshCompanyDetail, shouldLoadCompanyDetail]);
+
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await Promise.all([
+      const refreshTasks: Promise<unknown>[] = [
         hydrateSymbolMeta(),
         refreshQuote(),
         refreshChart(chartRange),
-      ]);
+      ];
+
+      if (shouldLoadCompanyDetail) {
+        refreshTasks.push(refreshCompanyDetail());
+      }
+
+      await Promise.all(refreshTasks);
     } finally {
       setIsRefreshing(false);
     }
-  }, [chartRange, hydrateSymbolMeta, refreshChart, refreshQuote]);
+  }, [
+    chartRange,
+    hydrateSymbolMeta,
+    refreshChart,
+    refreshCompanyDetail,
+    refreshQuote,
+    shouldLoadCompanyDetail,
+  ]);
 
   const chartToneValue = React.useMemo(() => {
     if (chartSeries.points.length < 2) {
@@ -346,8 +599,19 @@ export default function StockDetailScreen() {
   const activePoint = selectedChartPoint ?? chartLastPoint;
 
   const headerTitle = normalizedSymbol.length > 0 ? normalizedSymbol : "Stock Detail";
-  const companyName = symbolMeta?.name ?? "Unknown Company";
-  const sectorName = symbolMeta?.sectorName ?? "UNKNOWN";
+  const companyName =
+    companyDetail?.companyName ?? symbolMeta?.name ?? "Unknown Company";
+  const sectorName = companyDetail?.sector ?? symbolMeta?.sectorName ?? "UNKNOWN";
+  const companyAnnouncementItems = companyDetail?.announcements.slice(0, 15) ?? [];
+  const companyDetailsSourceLabel = companyDetail
+    ? companyDetail.source === "cache"
+      ? "Cached"
+      : "Live"
+    : "Pending";
+  const companyDetailsUpdatedAt =
+    companyDetail?.updatedAt && companyDetail.updatedAt.length > 0
+      ? formatUpdatedAt(companyDetail.updatedAt)
+      : "--";
 
   return (
     <SafeAreaView
@@ -506,6 +770,172 @@ export default function StockDetailScreen() {
                   />
                 </View>
               </View>
+
+              {shouldLoadCompanyDetail ? (
+                <View className="rounded-3xl bg-brand-white/95 p-4 shadow-sm dark:bg-brand-white/10">
+                  <View className="flex-row items-center justify-between gap-3">
+                    <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                      Company Details
+                    </Text>
+                    <Text className="text-[11px] font-semibold text-app-text dark:text-app-textDark">
+                      {companyDetailsSourceLabel} • {companyDetailsUpdatedAt}
+                    </Text>
+                  </View>
+
+                  <View className="mt-3 flex-row flex-wrap gap-2">
+                    {COMPANY_DETAIL_TAB_KEYS.map((tabKey) => (
+                      <CompanyDetailTabChip
+                        key={tabKey}
+                        tabKey={tabKey}
+                        selected={selectedCompanyTab === tabKey}
+                        onPress={() => setSelectedCompanyTab(tabKey)}
+                      />
+                    ))}
+                  </View>
+
+                  <View className="mt-4 gap-3">
+                    {isCompanyDetailLoading && !companyDetail ? (
+                      <View className="items-center rounded-2xl bg-brand-white/70 p-4 dark:bg-brand-white/5">
+                        <ActivityIndicator
+                          size="small"
+                          color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
+                        />
+                        <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
+                          Loading company details...
+                        </Text>
+                      </View>
+                    ) : !companyDetail ? (
+                      <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+                        Could not load company detail information right now.
+                      </Text>
+                    ) : (
+                      <>
+                        {isCompanyDetailLoading ? (
+                          <Text className="text-xs font-semibold text-app-text dark:text-app-textDark">
+                            Refreshing company details...
+                          </Text>
+                        ) : null}
+
+                        {selectedCompanyTab === "profile" ? (
+                          <View className="gap-3">
+                            {companyDetail.businessDescription ? (
+                              <View className="rounded-2xl bg-brand-white/70 p-3 dark:bg-brand-white/5">
+                                <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                                  Business Description
+                                </Text>
+                                <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
+                                  {companyDetail.businessDescription}
+                                </Text>
+                              </View>
+                            ) : null}
+
+                            <View className="rounded-2xl bg-brand-white/70 p-3 dark:bg-brand-white/5">
+                              <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                                Profile Facts
+                              </Text>
+                              <View className="mt-2">
+                                <CompanyMetricRows
+                                  metrics={companyDetail.profileMetrics}
+                                  emptyText="No profile facts available."
+                                />
+                              </View>
+                            </View>
+
+                            <View className="rounded-2xl bg-brand-white/70 p-3 dark:bg-brand-white/5">
+                              <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                                Key People
+                              </Text>
+                              {companyDetail.keyPeople.length === 0 ? (
+                                <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
+                                  No key people data available.
+                                </Text>
+                              ) : (
+                                <View className="mt-2 gap-2">
+                                  {companyDetail.keyPeople.map((person, personIndex) => (
+                                    <StatRow
+                                      key={`${person.name}-${person.role}-${personIndex}`}
+                                      label={person.name}
+                                      value={person.role}
+                                    />
+                                  ))}
+                                </View>
+                              )}
+                            </View>
+                          </View>
+                        ) : null}
+
+                        {selectedCompanyTab === "equity" ? (
+                          <View className="rounded-2xl bg-brand-white/70 p-3 dark:bg-brand-white/5">
+                            <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                              Equity Snapshot
+                            </Text>
+                            <View className="mt-2">
+                              <CompanyMetricRows
+                                metrics={companyDetail.equityMetrics}
+                                emptyText="No equity metrics available."
+                              />
+                            </View>
+                          </View>
+                        ) : null}
+
+                        {selectedCompanyTab === "financials" ? (
+                          <View className="gap-3">
+                            <CompanyMatrixTableCard
+                              table={companyDetail.annualFinancials}
+                              emptyText="No annual financial table available."
+                            />
+                            <CompanyMatrixTableCard
+                              table={companyDetail.quarterlyFinancials}
+                              emptyText="No quarterly financial table available."
+                            />
+                          </View>
+                        ) : null}
+
+                        {selectedCompanyTab === "ratios" ? (
+                          <CompanyMatrixTableCard
+                            table={companyDetail.ratioTable}
+                            emptyText="No ratio table available."
+                          />
+                        ) : null}
+
+                        {selectedCompanyTab === "announcements" ? (
+                          companyAnnouncementItems.length === 0 ? (
+                            <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+                              No announcements available.
+                            </Text>
+                          ) : (
+                            <View className="gap-2">
+                              {companyAnnouncementItems.map(
+                                (announcement: CompanyDetailAnnouncement, announcementIndex) => (
+                                  <View
+                                    key={`${announcement.category}-${announcement.date}-${announcementIndex}`}
+                                    className="rounded-2xl bg-brand-white/70 p-3 dark:bg-brand-white/5"
+                                  >
+                                    <View className="flex-row items-center justify-between gap-3">
+                                      <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                                        {announcement.category}
+                                      </Text>
+                                      <Text className="text-xs font-semibold text-app-text dark:text-app-textDark">
+                                        {announcement.date}
+                                      </Text>
+                                    </View>
+                                    <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
+                                      {announcement.title}
+                                    </Text>
+                                    <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
+                                      {announcement.document}
+                                    </Text>
+                                  </View>
+                                )
+                              )}
+                            </View>
+                          )
+                        ) : null}
+                      </>
+                    )}
+                  </View>
+                </View>
+              ) : null}
 
             </>
           )}

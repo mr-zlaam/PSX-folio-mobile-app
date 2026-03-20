@@ -37,7 +37,7 @@
           "backgroundColor": "#ffffff",
           "dark": {
             "image": "./assets/images/psx-folio.png",
-            "backgroundColor": "#000000"
+            "backgroundColor": "#ffffff"
           }
         }
       ],

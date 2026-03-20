@@ -1,7 +1,9 @@
 import { APP_COLORS } from "@/src/theme/colors";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { Tabs } from "expo-router";
+import { Tabs, useSegments } from "expo-router";
 import { useColorScheme } from "nativewind";
+import React from "react";
+import { Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type TabIconName =
@@ -11,6 +13,13 @@ type TabIconName =
   | "eye-outline"
   | "swap-horizontal"
   | "dots-horizontal-circle-outline";
+
+const MORE_MANAGED_ROUTES = new Set([
+  "market",
+  "transactions",
+  "stocks",
+  "settings",
+]);
 
 function getTabIconName(routeName: string): TabIconName {
   if (routeName === "home") {
@@ -36,25 +45,57 @@ function getTabIconName(routeName: string): TabIconName {
   return "dots-horizontal-circle-outline";
 }
 
+function getTabLabel(routeName: string): string {
+  if (routeName === "home") {
+    return "Home";
+  }
+
+  if (routeName === "portfolio") {
+    return "Portfolio";
+  }
+
+  if (routeName === "watchlist") {
+    return "Watchlist";
+  }
+
+  return "More";
+}
+
+function getCurrentTabRouteName(segments: string[]): string {
+  const filteredSegments = segments.filter((segment) => !segment.startsWith("("));
+  if (filteredSegments.length === 0) {
+    return "home";
+  }
+
+  return filteredSegments[0] ?? "home";
+}
+
 export default function TabsLayout() {
   const { colorScheme } = useColorScheme();
   const insets = useSafeAreaInsets();
+  const segments = useSegments();
   const isDarkMode = colorScheme === "dark";
   const bottomInset = insets.bottom;
   const tabBarBottomPadding = bottomInset > 0 ? bottomInset : 8;
   const tabBarHeight = 60 + tabBarBottomPadding;
+  const activeTintColor = isDarkMode
+    ? APP_COLORS.brand.white
+    : APP_COLORS.brand.purple;
+  const inactiveTintColor = isDarkMode
+    ? APP_COLORS.text.placeholderDark
+    : APP_COLORS.text.placeholderLight;
+  const currentTabRouteName = React.useMemo(
+    () => getCurrentTabRouteName(segments),
+    [segments]
+  );
 
   return (
     <Tabs
       backBehavior="history"
       screenOptions={({ route }) => ({
         headerShown: false,
-        tabBarActiveTintColor: isDarkMode
-          ? APP_COLORS.brand.white
-          : APP_COLORS.brand.purple,
-        tabBarInactiveTintColor: isDarkMode
-          ? APP_COLORS.text.placeholderDark
-          : APP_COLORS.text.placeholderLight,
+        tabBarActiveTintColor: activeTintColor,
+        tabBarInactiveTintColor: inactiveTintColor,
         tabBarStyle: {
           backgroundColor: isDarkMode
             ? APP_COLORS.brand.purple
@@ -69,19 +110,36 @@ export default function TabsLayout() {
             ? APP_COLORS.app.bgDark
             : APP_COLORS.app.bg,
         },
-        tabBarLabelStyle: {
-          fontWeight: "700",
-          fontSize: 12,
-          marginBottom: 6,
+        tabBarLabel: ({ focused }) => {
+          const forceMoreHighlight =
+            route.name === "more" && MORE_MANAGED_ROUTES.has(currentTabRouteName);
+          const shouldHighlight = focused || forceMoreHighlight;
+          return (
+            <Text
+              style={{
+                fontWeight: "700",
+                fontSize: 12,
+                marginBottom: 6,
+                color: shouldHighlight ? activeTintColor : inactiveTintColor,
+              }}
+            >
+              {getTabLabel(route.name)}
+            </Text>
+          );
         },
-        tabBarIcon: ({ color, focused }) => (
-          <MaterialCommunityIcons
-            name={getTabIconName(route.name)}
-            size={22}
-            color={color}
-            style={{ opacity: focused ? 1 : 0.75 }}
-          />
-        ),
+        tabBarIcon: ({ color, focused }) => {
+          const forceMoreHighlight =
+            route.name === "more" && MORE_MANAGED_ROUTES.has(currentTabRouteName);
+          const shouldHighlight = focused || forceMoreHighlight;
+          return (
+            <MaterialCommunityIcons
+              name={getTabIconName(route.name)}
+              size={22}
+              color={shouldHighlight ? activeTintColor : color}
+              style={{ opacity: shouldHighlight ? 1 : 0.75 }}
+            />
+          );
+        },
       })}
     >
       <Tabs.Screen

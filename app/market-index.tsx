@@ -469,6 +469,7 @@ export default function MarketIndexScreen() {
         pathname: "/stock-detail",
         params: {
           symbol: normalizedSymbol,
+          origin: "market",
         },
       });
     },

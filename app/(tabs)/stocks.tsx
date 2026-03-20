@@ -141,6 +141,7 @@ export default function StocksTabScreen() {
         pathname: "/stock-detail",
         params: {
           symbol: symbol.trim().toUpperCase(),
+          origin: "stocks",
         },
       });
     },

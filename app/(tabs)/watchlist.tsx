@@ -514,6 +514,7 @@ export default function WatchlistTabScreen() {
                       pathname: "/stock-detail",
                       params: {
                         symbol: row.symbol,
+                        origin: "watchlist",
                       },
                     });
                   }}
