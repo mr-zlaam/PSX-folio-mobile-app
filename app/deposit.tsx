@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import DateTimePicker, {
@@ -16,7 +16,11 @@ import DateTimePicker, {
 import AppButton from "@/components/ui/app-button";
 import AppFeedbackModal from "@/components/ui/app-feedback-modal";
 import { formatPKRAmount } from "@/src/features/home/home-formatters";
-import { saveDepositRecord } from "@/src/features/deposit/deposit-records";
+import {
+  getDepositRecordById,
+  saveDepositRecord,
+  updateDepositRecord,
+} from "@/src/features/deposit/deposit-records";
 import { APP_COLORS } from "@/src/theme/colors";
 
 type DateTimePickerMode = "date" | "time";
@@ -39,8 +43,23 @@ function parsePositiveNumber(value: string): number {
   return parsed;
 }
 
+function formatEditableAmount(value: number): string {
+  if (!Number.isFinite(value) || value <= 0) {
+    return "";
+  }
+
+  if (Number.isInteger(value)) {
+    return String(value);
+  }
+
+  return value.toFixed(2);
+}
+
 export default function DepositScreen() {
   const router = useRouter();
+  const searchParams = useLocalSearchParams<{
+    editDepositId?: string | string[];
+  }>();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
@@ -55,13 +74,57 @@ export default function DepositScreen() {
   const [isAwaitingTimeSelection, setIsAwaitingTimeSelection] =
     React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [shouldGoBackAfterNotice, setShouldGoBackAfterNotice] =
+    React.useState(false);
   const [notice, setNotice] = React.useState<{
     title: string;
     message: string;
     tone: "success" | "error" | "info";
   } | null>(null);
+  const normalizedEditDepositId = React.useMemo(() => {
+    const rawEditDepositId = Array.isArray(searchParams.editDepositId)
+      ? searchParams.editDepositId[0]
+      : searchParams.editDepositId;
+    return (rawEditDepositId ?? "").trim();
+  }, [searchParams.editDepositId]);
+  const isEditingDeposit = normalizedEditDepositId.length > 0;
 
   const parsedAmount = React.useMemo(() => parsePositiveNumber(amountInput), [amountInput]);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    if (!isEditingDeposit) {
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    async function loadDepositForEdit() {
+      const existingDeposit = await getDepositRecordById(normalizedEditDepositId);
+      if (!isMounted) {
+        return;
+      }
+
+      if (!existingDeposit) {
+        setNotice({
+          title: "Deposit Not Found",
+          message: "This deposit record was not found. It may have been removed.",
+          tone: "error",
+        });
+        return;
+      }
+
+      setAmountInput(formatEditableAmount(existingDeposit.amount));
+      setNoteInput(existingDeposit.note ?? "");
+      const parsedDate = new Date(existingDeposit.depositedAt);
+      setDepositedAt(Number.isNaN(parsedDate.getTime()) ? new Date() : parsedDate);
+    }
+
+    void loadDepositForEdit();
+    return () => {
+      isMounted = false;
+    };
+  }, [isEditingDeposit, normalizedEditDepositId]);
 
   const handleStartDateTimeSelection = React.useCallback(() => {
     setPickerMode("date");
@@ -123,7 +186,11 @@ export default function DepositScreen() {
 
   const handleCloseNotice = React.useCallback(() => {
     setNotice(null);
-  }, []);
+    if (shouldGoBackAfterNotice) {
+      setShouldGoBackAfterNotice(false);
+      router.back();
+    }
+  }, [router, shouldGoBackAfterNotice]);
 
   const handleSaveDeposit = React.useCallback(async () => {
     if (parsedAmount <= 0) {
@@ -132,28 +199,54 @@ export default function DepositScreen() {
     }
 
     setIsSubmitting(true);
+    setShouldGoBackAfterNotice(false);
     try {
-      const savedDeposit = await saveDepositRecord({
-        amount: parsedAmount,
-        depositedAt: depositedAt.toISOString(),
-        note: noteInput.trim().length > 0 ? noteInput.trim() : null,
-      });
+      const savedDeposit = isEditingDeposit
+        ? await updateDepositRecord(normalizedEditDepositId, {
+            amount: parsedAmount,
+            depositedAt: depositedAt.toISOString(),
+            note: noteInput.trim().length > 0 ? noteInput.trim() : null,
+          })
+        : await saveDepositRecord({
+            amount: parsedAmount,
+            depositedAt: depositedAt.toISOString(),
+            note: noteInput.trim().length > 0 ? noteInput.trim() : null,
+          });
 
       showNotice(
-        "Deposit Added",
-        `Deposit ${formatPKRAmount(savedDeposit.amount)} added successfully.`,
+        isEditingDeposit ? "Deposit Updated" : "Deposit Added",
+        `Deposit ${formatPKRAmount(savedDeposit.amount)} ${
+          isEditingDeposit ? "updated" : "added"
+        } successfully.`,
         "success"
       );
 
-      setAmountInput("");
-      setNoteInput("");
-      setDepositedAt(new Date());
+      if (isEditingDeposit) {
+        setShouldGoBackAfterNotice(true);
+      } else {
+        setAmountInput("");
+        setNoteInput("");
+        setDepositedAt(new Date());
+      }
     } catch {
-      showNotice("Save Failed", "Could not save deposit. Please try again.", "error");
+      showNotice(
+        isEditingDeposit ? "Update Failed" : "Save Failed",
+        isEditingDeposit
+          ? "Could not update deposit. Please try again."
+          : "Could not save deposit. Please try again.",
+        "error"
+      );
     } finally {
       setIsSubmitting(false);
     }
-  }, [depositedAt, noteInput, parsedAmount, showNotice]);
+  }, [
+    depositedAt,
+    noteInput,
+    parsedAmount,
+    showNotice,
+    isEditingDeposit,
+    normalizedEditDepositId,
+  ]);
 
   return (
     <SafeAreaView
@@ -182,7 +275,7 @@ export default function DepositScreen() {
             </TouchableOpacity>
 
             <Text className="text-2xl font-extrabold text-app-text dark:text-app-textDark">
-              Add Deposit
+              {isEditingDeposit ? "Edit Deposit" : "Add Deposit"}
             </Text>
 
             <View className="w-14" />
@@ -263,7 +356,7 @@ export default function DepositScreen() {
           </View>
 
           <AppButton
-            label="Save Deposit"
+            label={isEditingDeposit ? "Update Deposit" : "Save Deposit"}
             variant="primary"
             loading={isSubmitting}
             onPress={handleSaveDeposit}
@@ -282,4 +375,3 @@ export default function DepositScreen() {
     </SafeAreaView>
   );
 }
-

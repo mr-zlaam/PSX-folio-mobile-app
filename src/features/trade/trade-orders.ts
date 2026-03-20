@@ -185,6 +185,101 @@ export async function saveTradeOrder(
   return record;
 }
 
+export async function getTradeOrderById(
+  orderId: string
+): Promise<TradeOrderRecord | null> {
+  const normalizedOrderId = orderId.trim();
+  if (normalizedOrderId.length === 0) {
+    return null;
+  }
+
+  const store = await readStore();
+  return store.orders.find((order) => order.id === normalizedOrderId) ?? null;
+}
+
+export async function updateTradeOrder(
+  orderId: string,
+  orderInput: TradeOrderInput
+): Promise<TradeOrderRecord> {
+  const normalizedOrderId = orderId.trim();
+  if (normalizedOrderId.length === 0) {
+    throw new Error("Invalid trade order id.");
+  }
+
+  const store = await readStore();
+  const existingOrderIndex = store.orders.findIndex(
+    (order) => order.id === normalizedOrderId
+  );
+  if (existingOrderIndex < 0) {
+    throw new Error("Trade order not found.");
+  }
+
+  const bonusShareRecords = await getSavedBonusShareRecords();
+  const normalizedSymbol = normalizeSymbol(orderInput.symbol);
+  const safePrice = orderInput.price;
+  const safeUnits = orderInput.units;
+
+  if (
+    normalizedSymbol.length === 0 ||
+    !Number.isFinite(safePrice) ||
+    safePrice <= 0 ||
+    !Number.isFinite(safeUnits) ||
+    safeUnits <= 0 ||
+    !Number.isInteger(safeUnits)
+  ) {
+    throw new Error("Invalid trade order input.");
+  }
+
+  if (orderInput.side === "sell") {
+    const ordersWithoutCurrent = store.orders.filter(
+      (order) => order.id !== normalizedOrderId
+    );
+    const positionSnapshot = getPositionSnapshotForSymbol(
+      ordersWithoutCurrent,
+      bonusShareRecords,
+      normalizedSymbol
+    );
+    const openUnits = positionSnapshot.units;
+    if (safeUnits > openUnits) {
+      throw new InsufficientUnitsError(normalizedSymbol, openUnits, safeUnits);
+    }
+  }
+
+  const existingOrder = store.orders[existingOrderIndex];
+  const updatedOrder: TradeOrderRecord = {
+    id: existingOrder.id,
+    createdAt: existingOrder.createdAt,
+    side: orderInput.side,
+    symbol: normalizedSymbol,
+    price: safePrice,
+    units: safeUnits,
+    tradedAt: orderInput.tradedAt,
+    brokerMode: orderInput.brokerMode,
+    brokerName: orderInput.brokerName,
+    brokerFeePct: orderInput.brokerFeePct,
+  };
+
+  const nextOrders = [...store.orders];
+  nextOrders[existingOrderIndex] = updatedOrder;
+
+  const nextStore: TradeOrdersStore = {
+    version: 1,
+    orders: nextOrders,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await writeStore(nextStore);
+  emitTradeMutation({
+    type: "trade-created",
+    orderId: updatedOrder.id,
+    symbol: updatedOrder.symbol,
+    side: updatedOrder.side,
+    createdAt: new Date().toISOString(),
+  });
+
+  return updatedOrder;
+}
+
 export async function getSavedTradeOrders(): Promise<TradeOrderRecord[]> {
   const store = await readStore();
   return store.orders;

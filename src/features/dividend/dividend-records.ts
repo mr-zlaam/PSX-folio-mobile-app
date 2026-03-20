@@ -186,6 +186,95 @@ export async function saveDividendRecord(
   return record;
 }
 
+export async function getDividendRecordById(
+  dividendId: string
+): Promise<DividendRecord | null> {
+  const normalizedDividendId = dividendId.trim();
+  if (normalizedDividendId.length === 0) {
+    return null;
+  }
+
+  const store = await readStore();
+  return (
+    store.records.find((record) => record.id === normalizedDividendId) ?? null
+  );
+}
+
+export async function updateDividendRecord(
+  dividendId: string,
+  input: DividendRecordInput
+): Promise<DividendRecord> {
+  const normalizedDividendId = dividendId.trim();
+  if (normalizedDividendId.length === 0) {
+    throw new Error("Invalid dividend id.");
+  }
+
+  const normalizedSymbol = normalizeSymbol(input.symbol);
+  const shares = toPositiveFiniteNumber(input.shares);
+  const dividendPerShare = toPositiveFiniteNumber(input.dividendPerShare);
+  const taxDeductionPct = toNonNegativeFiniteNumber(input.taxDeductionPct);
+  const taxDeductionAmount = toNonNegativeFiniteNumber(input.taxDeductionAmount);
+  const zakatAmount = toNonNegativeFiniteNumber(input.zakatAmount);
+  const grossAmount = toPositiveFiniteNumber(input.grossAmount);
+  const finalAmount = toPositiveFiniteNumber(input.finalAmount);
+
+  if (
+    normalizedSymbol.length === 0 ||
+    shares === 0 ||
+    !Number.isInteger(shares) ||
+    dividendPerShare === 0 ||
+    grossAmount === 0 ||
+    finalAmount === 0
+  ) {
+    throw new Error("Invalid dividend record input.");
+  }
+
+  if (input.taxpayerProfile !== "filer" && input.taxpayerProfile !== "nonFiler") {
+    throw new Error("Invalid taxpayer profile.");
+  }
+
+  const store = await readStore();
+  const existingRecordIndex = store.records.findIndex(
+    (record) => record.id === normalizedDividendId
+  );
+  if (existingRecordIndex < 0) {
+    throw new Error("Dividend record not found.");
+  }
+
+  const existingRecord = store.records[existingRecordIndex];
+  const updatedRecord: DividendRecord = {
+    id: existingRecord.id,
+    createdAt: existingRecord.createdAt,
+    symbol: normalizedSymbol,
+    shares,
+    dividendPerShare,
+    taxDeductionPct,
+    taxDeductionAmount,
+    zakatAmount,
+    grossAmount,
+    finalAmount,
+    taxpayerProfile: input.taxpayerProfile,
+    dividendDate: input.dividendDate,
+  };
+
+  const nextRecords = [...store.records];
+  nextRecords[existingRecordIndex] = updatedRecord;
+
+  const nextStore: DividendStore = {
+    version: 1,
+    records: nextRecords,
+    updatedAt: new Date().toISOString(),
+  };
+  await writeStore(nextStore);
+  emitDividendMutation({
+    dividendId: updatedRecord.id,
+    symbol: updatedRecord.symbol,
+    createdAt: new Date().toISOString(),
+  });
+
+  return updatedRecord;
+}
+
 export async function getSavedDividendRecords(): Promise<DividendRecord[]> {
   const store = await readStore();
   return store.records;

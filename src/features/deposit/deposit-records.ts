@@ -129,6 +129,69 @@ export async function saveDepositRecord(
   return record;
 }
 
+export async function getDepositRecordById(
+  depositId: string
+): Promise<DepositRecord | null> {
+  const normalizedDepositId = depositId.trim();
+  if (normalizedDepositId.length === 0) {
+    return null;
+  }
+
+  const store = await readStore();
+  return store.records.find((record) => record.id === normalizedDepositId) ?? null;
+}
+
+export async function updateDepositRecord(
+  depositId: string,
+  input: DepositRecordInput
+): Promise<DepositRecord> {
+  const normalizedDepositId = depositId.trim();
+  if (normalizedDepositId.length === 0) {
+    throw new Error("Invalid deposit id.");
+  }
+
+  const amount = toPositiveFiniteNumber(input.amount);
+  if (amount === 0) {
+    throw new Error("Invalid deposit input.");
+  }
+
+  const store = await readStore();
+  const existingRecordIndex = store.records.findIndex(
+    (record) => record.id === normalizedDepositId
+  );
+  if (existingRecordIndex < 0) {
+    throw new Error("Deposit record not found.");
+  }
+
+  const normalizedNote = input.note?.trim() ?? "";
+  const existingRecord = store.records[existingRecordIndex];
+
+  const updatedRecord: DepositRecord = {
+    id: existingRecord.id,
+    createdAt: existingRecord.createdAt,
+    amount,
+    depositedAt: input.depositedAt,
+    note: normalizedNote.length > 0 ? normalizedNote : null,
+  };
+
+  const nextRecords = [...store.records];
+  nextRecords[existingRecordIndex] = updatedRecord;
+
+  const nextStore: DepositStore = {
+    version: 1,
+    records: nextRecords,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await writeStore(nextStore);
+  emitDepositMutation({
+    depositId: updatedRecord.id,
+    createdAt: new Date().toISOString(),
+  });
+
+  return updatedRecord;
+}
+
 export async function getSavedDepositRecords(): Promise<DepositRecord[]> {
   const store = await readStore();
   return store.records;
@@ -148,4 +211,3 @@ export async function clearSavedDepositRecords(): Promise<void> {
 
   await writeStore(clearedStore);
 }
-

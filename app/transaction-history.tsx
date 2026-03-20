@@ -33,6 +33,7 @@ type TransactionEntryType = "buy" | "sell" | "dividend" | "deposit" | "bonus";
 
 type TransactionEntry = {
   id: string;
+  sourceId: string;
   type: TransactionEntryType;
   symbol: string;
   title: string;
@@ -149,6 +150,7 @@ function toTradeEntry(order: TradeOrderRecord): TransactionEntry {
 
   return {
     id: `trade_${order.id}`,
+    sourceId: order.id,
     type: order.side,
     symbol: order.symbol.trim().toUpperCase(),
     title: order.side === "buy" ? "Buy Order" : "Sell Order",
@@ -161,6 +163,7 @@ function toTradeEntry(order: TradeOrderRecord): TransactionEntry {
 function toDividendEntry(record: DividendRecord): TransactionEntry {
   return {
     id: `dividend_${record.id}`,
+    sourceId: record.id,
     type: "dividend",
     symbol: record.symbol.trim().toUpperCase(),
     title: "Dividend",
@@ -173,6 +176,7 @@ function toDividendEntry(record: DividendRecord): TransactionEntry {
 function toDepositEntry(record: DepositRecord): TransactionEntry {
   return {
     id: `deposit_${record.id}`,
+    sourceId: record.id,
     type: "deposit",
     symbol: "CASH",
     title: "Deposit",
@@ -185,6 +189,7 @@ function toDepositEntry(record: DepositRecord): TransactionEntry {
 function toBonusEntry(record: BonusShareRecord): TransactionEntry {
   return {
     id: `bonus_${record.id}`,
+    sourceId: record.id,
     type: "bonus",
     symbol: record.symbol.trim().toUpperCase(),
     title: "Bonus Share",
@@ -211,6 +216,15 @@ function sortEntriesByTimeDesc(entries: TransactionEntry[]): TransactionEntry[] 
 
     return secondEntry.id.localeCompare(firstEntry.id);
   });
+}
+
+function canEditEntry(entry: TransactionEntry): boolean {
+  return (
+    entry.type === "buy" ||
+    entry.type === "sell" ||
+    entry.type === "deposit" ||
+    entry.type === "dividend"
+  );
 }
 
 function FilterChip({
@@ -312,6 +326,40 @@ export default function TransactionHistoryScreen() {
       return occurredAtTimestamp >= thresholdTimestamp;
     });
   }, [entries, rangeFilter]);
+
+  const handleEditEntry = React.useCallback(
+    (entry: TransactionEntry) => {
+      if (entry.type === "buy" || entry.type === "sell") {
+        router.push({
+          pathname: "/(tabs)/transactions",
+          params: {
+            editTradeId: entry.sourceId,
+          },
+        });
+        return;
+      }
+
+      if (entry.type === "deposit") {
+        router.push({
+          pathname: "/deposit",
+          params: {
+            editDepositId: entry.sourceId,
+          },
+        });
+        return;
+      }
+
+      if (entry.type === "dividend") {
+        router.push({
+          pathname: "/dividend",
+          params: {
+            editDividendId: entry.sourceId,
+          },
+        });
+      }
+    },
+    [router]
+  );
 
   return (
     <SafeAreaView
@@ -440,9 +488,22 @@ export default function TransactionHistoryScreen() {
                     </View>
                   </View>
 
-                  <Text className="mt-2 text-xs font-semibold text-app-text dark:text-app-textDark">
-                    {formatRecordDateTime(entry.occurredAt)}
-                  </Text>
+                  <View className="mt-2 flex-row items-center justify-between">
+                    <Text className="text-xs font-semibold text-app-text dark:text-app-textDark">
+                      {formatRecordDateTime(entry.occurredAt)}
+                    </Text>
+                    {canEditEntry(entry) ? (
+                      <TouchableOpacity
+                        activeOpacity={0.88}
+                        onPress={() => handleEditEntry(entry)}
+                        className="rounded-lg border border-app-highlight px-2 py-1 dark:border-app-highlightDark"
+                      >
+                        <Text className="text-[10px] font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                          Edit
+                        </Text>
+                      </TouchableOpacity>
+                    ) : null}
+                  </View>
                 </View>
               ))}
             </View>

@@ -7,7 +7,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import DateTimePicker, {
   DateTimePickerEvent,
@@ -20,7 +20,11 @@ import {
   getPortfolioHoldingsWithCachedQuotes,
   getPortfolioHoldingsWithLatestQuotes,
 } from "@/src/features/portfolio/portfolio-data";
-import { saveDividendRecord } from "@/src/features/dividend/dividend-records";
+import {
+  getDividendRecordById,
+  saveDividendRecord,
+  updateDividendRecord,
+} from "@/src/features/dividend/dividend-records";
 import { APP_COLORS } from "@/src/theme/colors";
 import {
   getTaxpayerProfilePreference,
@@ -102,6 +106,9 @@ function FieldInput({
 
 export default function DividendScreen() {
   const router = useRouter();
+  const searchParams = useLocalSearchParams<{
+    editDividendId?: string | string[];
+  }>();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
@@ -120,6 +127,8 @@ export default function DividendScreen() {
   const [dividendDate, setDividendDate] = React.useState(new Date());
   const [isDatePickerVisible, setIsDatePickerVisible] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
+  const [shouldGoBackAfterNotice, setShouldGoBackAfterNotice] =
+    React.useState(false);
   const [notice, setNotice] = React.useState<{
     title: string;
     message: string;
@@ -127,6 +136,13 @@ export default function DividendScreen() {
   } | null>(null);
   const [hasManuallyEditedTaxPct, setHasManuallyEditedTaxPct] =
     React.useState(false);
+  const normalizedEditDividendId = React.useMemo(() => {
+    const rawEditDividendId = Array.isArray(searchParams.editDividendId)
+      ? searchParams.editDividendId[0]
+      : searchParams.editDividendId;
+    return (rawEditDividendId ?? "").trim();
+  }, [searchParams.editDividendId]);
+  const isEditingDividend = normalizedEditDividendId.length > 0;
 
   const loadFormContext = React.useCallback(async () => {
     const [cachedHoldings, savedTaxpayerProfile] = await Promise.all([
@@ -146,8 +162,10 @@ export default function DividendScreen() {
       );
     setHoldings(normalizedCachedHoldings);
 
-    setTaxpayerProfile(savedTaxpayerProfile);
-    if (!hasManuallyEditedTaxPct) {
+    if (!isEditingDividend) {
+      setTaxpayerProfile(savedTaxpayerProfile);
+    }
+    if (!isEditingDividend && !hasManuallyEditedTaxPct) {
       setTaxDeductionPctInput(String(getDefaultTaxPctByProfile(savedTaxpayerProfile)));
     }
 
@@ -163,11 +181,55 @@ export default function DividendScreen() {
         firstHolding.symbol.localeCompare(secondHolding.symbol)
       );
     setHoldings(normalizedLatestHoldings);
-  }, [hasManuallyEditedTaxPct]);
+  }, [hasManuallyEditedTaxPct, isEditingDividend]);
 
   React.useEffect(() => {
     void loadFormContext();
   }, [loadFormContext]);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    if (!isEditingDividend) {
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    async function loadDividendForEdit() {
+      const existingRecord = await getDividendRecordById(normalizedEditDividendId);
+      if (!isMounted) {
+        return;
+      }
+
+      if (!existingRecord) {
+        setNotice({
+          title: "Dividend Not Found",
+          message: "This dividend record was not found. It may have been removed.",
+          tone: "error",
+        });
+        return;
+      }
+
+      setSelectedSymbol(existingRecord.symbol);
+      setSymbolSearchQuery(existingRecord.symbol);
+      setSharesInput(String(Math.round(existingRecord.shares)));
+      setDividendPerShareInput(formatEditableNumber(existingRecord.dividendPerShare));
+      setTaxDeductionPctInput(formatEditableNumber(existingRecord.taxDeductionPct));
+      setHasManuallyEditedTaxPct(true);
+      setZakatAmountInput(formatEditableNumber(existingRecord.zakatAmount));
+      setTaxpayerProfile(existingRecord.taxpayerProfile);
+
+      const parsedDividendDate = new Date(existingRecord.dividendDate);
+      setDividendDate(
+        Number.isNaN(parsedDividendDate.getTime()) ? new Date() : parsedDividendDate
+      );
+    }
+
+    void loadDividendForEdit();
+    return () => {
+      isMounted = false;
+    };
+  }, [isEditingDividend, normalizedEditDividendId]);
 
   const selectedHolding = React.useMemo(
     () => holdings.find((holding) => holding.symbol === selectedSymbol) ?? null,
@@ -246,7 +308,11 @@ export default function DividendScreen() {
 
   const closeNotice = React.useCallback(() => {
     setNotice(null);
-  }, []);
+    if (shouldGoBackAfterNotice) {
+      setShouldGoBackAfterNotice(false);
+      router.back();
+    }
+  }, [router, shouldGoBackAfterNotice]);
 
   const handleSubmit = React.useCallback(async () => {
     if (selectedSymbol.trim().length === 0) {
@@ -254,7 +320,7 @@ export default function DividendScreen() {
       return;
     }
 
-    if (!selectedHolding || selectedHolding.units <= 0) {
+    if (!isEditingDividend && (!selectedHolding || selectedHolding.units <= 0)) {
       showNotice("Holding Missing", "You do not currently hold this symbol.", "error");
       return;
     }
@@ -264,7 +330,11 @@ export default function DividendScreen() {
       return;
     }
 
-    if (shares > selectedHolding.units) {
+    if (
+      !isEditingDividend &&
+      selectedHolding &&
+      shares > selectedHolding.units
+    ) {
       showNotice(
         "Shares Exceed Holding",
         `You can use up to ${Math.floor(selectedHolding.units)} shares for ${selectedHolding.symbol}.`,
@@ -302,33 +372,55 @@ export default function DividendScreen() {
     }
 
     setIsSubmitting(true);
+    setShouldGoBackAfterNotice(false);
     try {
-      const savedRecord = await saveDividendRecord({
-        symbol: selectedSymbol,
-        shares,
-        dividendPerShare,
-        taxDeductionPct,
-        taxDeductionAmount,
-        zakatAmount,
-        grossAmount,
-        finalAmount,
-        taxpayerProfile,
-        dividendDate: dividendDate.toISOString(),
-      });
+      const savedRecord = isEditingDividend
+        ? await updateDividendRecord(normalizedEditDividendId, {
+            symbol: selectedSymbol,
+            shares,
+            dividendPerShare,
+            taxDeductionPct,
+            taxDeductionAmount,
+            zakatAmount,
+            grossAmount,
+            finalAmount,
+            taxpayerProfile,
+            dividendDate: dividendDate.toISOString(),
+          })
+        : await saveDividendRecord({
+            symbol: selectedSymbol,
+            shares,
+            dividendPerShare,
+            taxDeductionPct,
+            taxDeductionAmount,
+            zakatAmount,
+            grossAmount,
+            finalAmount,
+            taxpayerProfile,
+            dividendDate: dividendDate.toISOString(),
+          });
 
       showNotice(
-        "Dividend Added",
-        `Dividend for ${savedRecord.symbol} saved successfully.\nFinal amount ${formatPKRAmount(savedRecord.finalAmount)} is now added to portfolio worth.`,
+        isEditingDividend ? "Dividend Updated" : "Dividend Added",
+        `Dividend for ${savedRecord.symbol} ${
+          isEditingDividend ? "updated" : "saved"
+        } successfully.\nFinal amount ${formatPKRAmount(savedRecord.finalAmount)} is now added to portfolio worth.`,
         "success"
       );
 
-      setDividendPerShareInput("");
-      setZakatAmountInput("");
-      setDividendDate(new Date());
+      if (isEditingDividend) {
+        setShouldGoBackAfterNotice(true);
+      } else {
+        setDividendPerShareInput("");
+        setZakatAmountInput("");
+        setDividendDate(new Date());
+      }
     } catch {
       showNotice(
-        "Save Failed",
-        "Could not save dividend entry. Please try again.",
+        isEditingDividend ? "Update Failed" : "Save Failed",
+        isEditingDividend
+          ? "Could not update dividend entry. Please try again."
+          : "Could not save dividend entry. Please try again.",
         "error"
       );
     } finally {
@@ -346,6 +438,8 @@ export default function DividendScreen() {
     grossAmount,
     taxpayerProfile,
     dividendDate,
+    isEditingDividend,
+    normalizedEditDividendId,
     showNotice,
   ]);
 
@@ -376,7 +470,7 @@ export default function DividendScreen() {
             </TouchableOpacity>
 
             <Text className="text-2xl font-extrabold text-app-text dark:text-app-textDark">
-              Add Dividend
+              {isEditingDividend ? "Edit Dividend" : "Add Dividend"}
             </Text>
 
             <View className="w-14" />
@@ -563,7 +657,7 @@ export default function DividendScreen() {
           </View>
 
           <AppButton
-            label="Save Dividend"
+            label={isEditingDividend ? "Update Dividend" : "Save Dividend"}
             variant="primary"
             loading={isSubmitting}
             onPress={handleSubmit}

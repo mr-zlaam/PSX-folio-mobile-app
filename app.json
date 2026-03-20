@@ -7,7 +7,7 @@
     "icon": "./assets/images/1024.png",
     "scheme": "psxportfolio",
     "userInterfaceStyle": "automatic",
-    "newArchEnabled": true,
+    "newArchEnabled": false,
     "ios": {
       "supportsTablet": true
     },

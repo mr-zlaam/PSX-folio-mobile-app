@@ -44,8 +44,10 @@ import {
 } from "@/src/features/bonus-share/bonus-share-records";
 import {
   InsufficientUnitsError,
+  getTradeOrderById,
   getSavedTradeOrders,
   saveTradeOrder,
+  updateTradeOrder,
 } from "@/src/features/trade/trade-orders";
 import { getPositionSnapshotForSymbol } from "@/src/features/portfolio/position-ledger";
 
@@ -192,6 +194,7 @@ export default function TransactionsTabScreen() {
     symbol?: string | string[];
     side?: string | string[];
     lockSymbol?: string | string[];
+    editTradeId?: string | string[];
   }>();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
@@ -229,6 +232,8 @@ export default function TransactionsTabScreen() {
   const [isSubmittingOrder, setIsSubmittingOrder] = React.useState(false);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [tradeNotice, setTradeNotice] = React.useState<TradeNoticeState | null>(null);
+  const [shouldGoBackAfterNotice, setShouldGoBackAfterNotice] =
+    React.useState(false);
 
   const normalizedRouteSymbol = React.useMemo(() => {
     const rawSymbol = Array.isArray(searchParams.symbol)
@@ -253,6 +258,15 @@ export default function TransactionsTabScreen() {
       : searchParams.lockSymbol;
     return rawLockSymbol === "1" || rawLockSymbol === "true";
   }, [searchParams.lockSymbol]);
+
+  const normalizedEditTradeId = React.useMemo(() => {
+    const rawEditTradeId = Array.isArray(searchParams.editTradeId)
+      ? searchParams.editTradeId[0]
+      : searchParams.editTradeId;
+    return (rawEditTradeId ?? "").trim();
+  }, [searchParams.editTradeId]);
+
+  const isEditingTrade = normalizedEditTradeId.length > 0;
 
   const filteredSymbols = React.useMemo(() => {
     const normalizedQuery = symbolSearchQuery.trim().toLowerCase();
@@ -311,21 +325,21 @@ export default function TransactionsTabScreen() {
   }, [refreshQuoteForSymbol, refreshSymbols, selectedSymbol]);
 
   React.useEffect(() => {
-    if (normalizedRouteSymbol.length === 0) {
+    if (isEditingTrade || normalizedRouteSymbol.length === 0) {
       return;
     }
 
     setSelectedSymbol(normalizedRouteSymbol);
     setSymbolSearchQuery(normalizedRouteSymbol);
-  }, [normalizedRouteSymbol]);
+  }, [isEditingTrade, normalizedRouteSymbol]);
 
   React.useEffect(() => {
-    if (!requestedRouteSide) {
+    if (isEditingTrade || !requestedRouteSide) {
       return;
     }
 
     setTradeSide(requestedRouteSide);
-  }, [requestedRouteSide]);
+  }, [isEditingTrade, requestedRouteSide]);
 
   React.useEffect(() => {
     void refreshSymbols();
@@ -350,11 +364,64 @@ export default function TransactionsTabScreen() {
 
   React.useEffect(() => {
     let isMounted = true;
+    if (!isEditingTrade) {
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    async function loadTradeForEdit() {
+      const existingTrade = await getTradeOrderById(normalizedEditTradeId);
+      if (!isMounted) {
+        return;
+      }
+
+      if (!existingTrade) {
+        setTradeNotice({
+          title: "Trade Not Found",
+          message: "This trade record was not found. It may have been removed.",
+          tone: "error",
+        });
+        return;
+      }
+
+      setTradeSide(existingTrade.side);
+      setSelectedSymbol(existingTrade.symbol);
+      setSymbolSearchQuery(existingTrade.symbol);
+      setPriceInput(formatEditablePrice(existingTrade.price));
+      setHasEditedPrice(true);
+      setUnitsInput(String(Math.round(existingTrade.units)));
+
+      const parsedTradeDate = new Date(existingTrade.tradedAt);
+      setTradeDateTime(
+        Number.isNaN(parsedTradeDate.getTime()) ? new Date() : parsedTradeDate
+      );
+
+      setBrokerMode(existingTrade.brokerMode);
+      setCustomBrokerNameInput(existingTrade.brokerName ?? "");
+      setCustomBrokerFeePctInput(
+        typeof existingTrade.brokerFeePct === "number" &&
+          Number.isFinite(existingTrade.brokerFeePct)
+          ? String(existingTrade.brokerFeePct)
+          : ""
+      );
+    }
+
+    void loadTradeForEdit();
+    return () => {
+      isMounted = false;
+    };
+  }, [isEditingTrade, normalizedEditTradeId]);
+
+  React.useEffect(() => {
+    let isMounted = true;
     const normalizedSymbol = selectedSymbol.trim().toUpperCase();
 
     if (normalizedSymbol.length === 0) {
       setSymbolQuote(getSymbolQuoteFallback(""));
-      setHasEditedPrice(false);
+      if (!isEditingTrade) {
+        setHasEditedPrice(false);
+      }
       setPriceInput("");
       return () => {
         isMounted = false;
@@ -374,7 +441,9 @@ export default function TransactionsTabScreen() {
     }
 
     setSymbolQuote(getSymbolQuoteFallback(normalizedSymbol));
-    setHasEditedPrice(false);
+    if (!isEditingTrade) {
+      setHasEditedPrice(false);
+    }
 
     void refreshQuote();
     const intervalId = setInterval(() => {
@@ -385,7 +454,7 @@ export default function TransactionsTabScreen() {
       isMounted = false;
       clearInterval(intervalId);
     };
-  }, [selectedSymbol]);
+  }, [isEditingTrade, selectedSymbol]);
 
   React.useEffect(() => {
     if (!hasEditedPrice && symbolQuote.lastPrice > 0) {
@@ -411,7 +480,11 @@ export default function TransactionsTabScreen() {
 
   const handleCloseTradeNotice = React.useCallback(() => {
     setTradeNotice(null);
-  }, []);
+    if (shouldGoBackAfterNotice) {
+      setShouldGoBackAfterNotice(false);
+      router.back();
+    }
+  }, [router, shouldGoBackAfterNotice]);
 
   const handleCreateOrder = React.useCallback(async () => {
     const normalizedSymbol = selectedSymbol.trim().toUpperCase();
@@ -492,8 +565,11 @@ export default function TransactionsTabScreen() {
         getSavedTradeOrders(),
         getSavedBonusShareRecords(),
       ]);
+      const effectiveOrders = isEditingTrade
+        ? savedOrders.filter((order) => order.id !== normalizedEditTradeId)
+        : savedOrders;
       const positionSnapshot = getPositionSnapshotForSymbol(
-        savedOrders,
+        effectiveOrders,
         bonusShareRecords,
         normalizedSymbol
       );
@@ -528,17 +604,29 @@ export default function TransactionsTabScreen() {
     }
 
     setIsSubmittingOrder(true);
+    setShouldGoBackAfterNotice(false);
     try {
-      const savedOrder = await saveTradeOrder({
-        side: tradeSide,
-        symbol: normalizedSymbol,
-        price: parsedPrice,
-        units: parsedUnits,
-        tradedAt: tradeDateTime.toISOString(),
-        brokerMode,
-        brokerName,
-        brokerFeePct,
-      });
+      const savedOrder = isEditingTrade
+        ? await updateTradeOrder(normalizedEditTradeId, {
+            side: tradeSide,
+            symbol: normalizedSymbol,
+            price: parsedPrice,
+            units: parsedUnits,
+            tradedAt: tradeDateTime.toISOString(),
+            brokerMode,
+            brokerName,
+            brokerFeePct,
+          })
+        : await saveTradeOrder({
+            side: tradeSide,
+            symbol: normalizedSymbol,
+            price: parsedPrice,
+            units: parsedUnits,
+            tradedAt: tradeDateTime.toISOString(),
+            brokerMode,
+            brokerName,
+            brokerFeePct,
+          });
 
       if (tradeSide === "sell") {
         const messageLines = [
@@ -560,7 +648,16 @@ export default function TransactionsTabScreen() {
         }
 
         messageLines.push("Saved locally on this device.");
-        showTradeNotice("Sold Successfully", messageLines.join("\n"), "success");
+        showTradeNotice(
+          isEditingTrade ? "Trade Updated" : "Sold Successfully",
+          messageLines.join("\n"),
+          "success"
+        );
+
+        if (isEditingTrade) {
+          setShouldGoBackAfterNotice(true);
+          return;
+        }
 
         setUnitsInput("");
         setCustomBrokerNameInput("");
@@ -574,7 +671,7 @@ export default function TransactionsTabScreen() {
       }
 
       showTradeNotice(
-        tradeSide === "buy" ? "Bought Successfully" : "Sold Successfully",
+        isEditingTrade ? "Trade Updated" : "Bought Successfully",
         `You have ${getTradeSideActionText(tradeSide)} ${
           savedOrder.units
         } shares of ${savedOrder.symbol} at ${formatPKRAmount(
@@ -582,6 +679,11 @@ export default function TransactionsTabScreen() {
         )} per share.\nSaved locally on this device.`,
         "success"
       );
+
+      if (isEditingTrade) {
+        setShouldGoBackAfterNotice(true);
+        return;
+      }
 
       setUnitsInput("");
       setCustomBrokerNameInput("");
@@ -602,8 +704,10 @@ export default function TransactionsTabScreen() {
       }
 
       showTradeNotice(
-        "Trade Save Failed",
-        "Could not save this trade locally. Please try again.",
+        isEditingTrade ? "Trade Update Failed" : "Trade Save Failed",
+        isEditingTrade
+          ? "Could not update this trade locally. Please try again."
+          : "Could not save this trade locally. Please try again.",
         "error"
       );
     } finally {
@@ -622,6 +726,8 @@ export default function TransactionsTabScreen() {
     tradeDateTime,
     tradeSide,
     unitsInput,
+    isEditingTrade,
+    normalizedEditTradeId,
     showTradeNotice,
   ]);
 
@@ -714,7 +820,7 @@ export default function TransactionsTabScreen() {
             </TouchableOpacity>
 
             <Text className="text-2xl font-extrabold text-app-text dark:text-app-textDark">
-              Trade
+              {isEditingTrade ? "Edit Trade" : "Trade"}
             </Text>
 
             <View className="w-14" />
@@ -979,7 +1085,15 @@ export default function TransactionsTabScreen() {
 
             <View className="mt-5">
               <AppButton
-                label={tradeSide === "buy" ? "Create Buy Order" : "Create Sell Order"}
+                label={
+                  tradeSide === "buy"
+                    ? isEditingTrade
+                      ? "Update Buy Order"
+                      : "Create Buy Order"
+                    : isEditingTrade
+                      ? "Update Sell Order"
+                      : "Create Sell Order"
+                }
                 variant={tradeSide === "buy" ? "primary" : "danger"}
                 loading={isSubmittingOrder}
                 onPress={handleCreateOrder}
