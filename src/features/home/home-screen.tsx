@@ -28,11 +28,18 @@ import {
   BottomSheetModal,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
+import {
+  getCachedMarketIndexDetail,
+  getLatestMarketIndexDetail,
+} from "@/src/features/market/market-data";
+import { evaluatePsxMarketStatus } from "@/src/features/market/market-status";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useColorScheme } from "nativewind";
 import React from "react";
 import {
+  Animated,
+  Easing,
   RefreshControl,
   ScrollView,
   Text,
@@ -72,6 +79,24 @@ function getInsightValueClassName(valueText: string): string {
   }
 
   return "text-app-text dark:text-app-textDark";
+}
+
+function formatUpdatedAt(value: string | null): string {
+  if (!value) {
+    return "--";
+  }
+
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "--";
+  }
+
+  return parsedDate.toLocaleString("en-PK", {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 type HeaderActionButtonProps = {
@@ -140,11 +165,13 @@ export default function HomeScreen() {
   const [totalDepositValue, setTotalDepositValue] = React.useState(0);
   const [cashGuardEnabled, setCashGuardEnabled] = React.useState(false);
   const [availableFreeCash, setAvailableFreeCash] = React.useState(0);
+  const [marketAsOf, setMarketAsOf] = React.useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [hasHydratedInsightMode, setHasHydratedInsightMode] =
     React.useState(false);
   const quickActionSheetRef = React.useRef<BottomSheetModal>(null);
   const quickActionSheetSnapPoints = React.useMemo(() => ["42%"], []);
+  const openPulseAnim = React.useRef(new Animated.Value(0)).current;
 
   const handleTradePress = React.useCallback(() => {
     router.push({
@@ -186,20 +213,29 @@ export default function HomeScreen() {
       totalDepositValue,
       isCashGuardEnabled,
       cashLedgerSnapshot,
+      cachedMarketDetail,
     ] = await Promise.all([
       getPortfolioHoldingsWithCachedQuotes(),
       getTotalDividendFinalAmount(),
       getTotalDepositAmount(),
       getCashGuardEnabledPreference(),
       getCashLedgerSnapshot(),
+      getCachedMarketIndexDetail("KSE100"),
     ]);
     setTotalDividendValue(totalDividendValue);
     setTotalDepositValue(totalDepositValue);
     setCashGuardEnabled(isCashGuardEnabled);
     setAvailableFreeCash(cashLedgerSnapshot.availableCash);
+    setMarketAsOf(cachedMarketDetail?.snapshot.asOf ?? null);
     applyHomeSnapshot(cachedHoldings, totalDividendValue, totalDepositValue);
 
-    const latestHoldings = await getPortfolioHoldingsWithLatestQuotes();
+    const [latestHoldings, latestMarketDetail] = await Promise.all([
+      getPortfolioHoldingsWithLatestQuotes(),
+      getLatestMarketIndexDetail("KSE100"),
+    ]);
+    if (latestMarketDetail?.snapshot.asOf) {
+      setMarketAsOf(latestMarketDetail.snapshot.asOf);
+    }
     applyHomeSnapshot(latestHoldings, totalDividendValue, totalDepositValue);
   }, [applyHomeSnapshot]);
 
@@ -328,6 +364,65 @@ export default function HomeScreen() {
     const normalizedFreeCash = Math.max(0, availableFreeCash);
     return formatPKRAmount(normalizedFreeCash);
   }, [availableFreeCash, cashGuardEnabled]);
+  const marketStatus = React.useMemo(
+    () =>
+      evaluatePsxMarketStatus(marketAsOf, {
+        staleThresholdMinutes: 5,
+      }),
+    [marketAsOf]
+  );
+  const marketStatusLabel = React.useMemo(() => {
+    if (marketStatus.condition === "HALTED") {
+      return "HALTED";
+    }
+    return marketStatus.uiStatus;
+  }, [marketStatus.condition, marketStatus.uiStatus]);
+  const marketStatusTextClassName =
+    marketStatusLabel === "OPEN" ? "text-success-green" : "text-brand-red";
+  const isMarketOpen = marketStatusLabel === "OPEN";
+  const statusDotColor = isMarketOpen
+    ? APP_COLORS.success.green
+    : APP_COLORS.brand.red;
+  const pulseScale = openPulseAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [1, 2.4],
+  });
+  const pulseOpacity = openPulseAnim.interpolate({
+    inputRange: [0, 1],
+    outputRange: [0.34, 0],
+  });
+
+  React.useEffect(() => {
+    let animation: Animated.CompositeAnimation | null = null;
+
+    if (isMarketOpen) {
+      openPulseAnim.setValue(0);
+      animation = Animated.loop(
+        Animated.sequence([
+          Animated.timing(openPulseAnim, {
+            toValue: 1,
+            duration: 980,
+            easing: Easing.out(Easing.quad),
+            useNativeDriver: true,
+          }),
+          Animated.timing(openPulseAnim, {
+            toValue: 0,
+            duration: 220,
+            easing: Easing.in(Easing.quad),
+            useNativeDriver: true,
+          }),
+        ])
+      );
+      animation.start();
+    } else {
+      openPulseAnim.stopAnimation();
+      openPulseAnim.setValue(0);
+    }
+
+    return () => {
+      animation?.stop();
+    };
+  }, [isMarketOpen, openPulseAnim]);
 
   return (
     <SafeAreaView
@@ -376,9 +471,49 @@ export default function HomeScreen() {
           </View>
 
           <View className="rounded-3xl bg-brand-white px-4 py-4 shadow-sm dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
-            <Text className="text-xs font-bold uppercase tracking-wider text-app-highlight dark:text-app-highlightDark">
-              Current Portfolio Worth
-            </Text>
+            <View className="flex-row items-start justify-between gap-3">
+              <Text className="text-xs font-bold uppercase tracking-wider text-app-highlight dark:text-app-highlightDark">
+                Current Portfolio Worth
+              </Text>
+
+              <View className="items-end">
+                <View className="flex-row items-center">
+                  <View className="mr-1.5 h-3.5 w-3.5 items-center justify-center">
+                    {isMarketOpen ? (
+                      <Animated.View
+                        style={{
+                          position: "absolute",
+                          width: 10,
+                          height: 10,
+                          borderRadius: 999,
+                          backgroundColor: statusDotColor,
+                          opacity: pulseOpacity,
+                          transform: [{ scale: pulseScale }],
+                        }}
+                      />
+                    ) : null}
+                    <View
+                      style={{
+                        width: 8,
+                        height: 8,
+                        borderRadius: 999,
+                        backgroundColor: statusDotColor,
+                      }}
+                    />
+                  </View>
+                  <Text
+                    className={[
+                      "text-xs font-bold uppercase tracking-wide",
+                      marketStatusTextClassName,
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
+                    {marketStatusLabel}
+                  </Text>
+                </View>
+              </View>
+            </View>
             <Text
               className={[
                 "mt-2 text-4xl font-extrabold",
@@ -414,6 +549,11 @@ export default function HomeScreen() {
             <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
               Free Cash: {freeCashText}
             </Text>
+            <View className="mt-2 items-end">
+              <Text className="text-[9px] font-semibold text-text-light dark:text-text-dark">
+                Updated {formatUpdatedAt(marketAsOf)}
+              </Text>
+            </View>
           </View>
 
           <View className="flex-row items-center gap-3">
