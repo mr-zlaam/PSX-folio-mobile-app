@@ -12,29 +12,29 @@ import {
 import { buildHomeViewModel } from "@/src/features/home/home-view-model";
 import { ValueTone } from "@/src/features/home/types";
 import {
+  getCachedMarketIndexDetail,
+  getLatestMarketIndexDetail,
+} from "@/src/features/market/market-data";
+import { evaluatePsxMarketStatus } from "@/src/features/market/market-status";
+import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
+import {
   getPortfolioHoldingsWithCachedQuotes,
   getPortfolioHoldingsWithLatestQuotes,
   PortfolioHolding,
 } from "@/src/features/portfolio/portfolio-data";
+import { getCashLedgerSnapshot } from "@/src/features/trade/cash-ledger";
 import { subscribeToTradeMutations } from "@/src/features/trade/trade-events";
 import {
-  getHomeInsightDisplayModePreference,
   getCashGuardEnabledPreference,
+  getHomeInsightDisplayModePreference,
   setHomeInsightDisplayModePreference,
 } from "@/src/lib/app-preferences";
-import { getCashLedgerSnapshot } from "@/src/features/trade/cash-ledger";
 import { APP_COLORS } from "@/src/theme/colors";
 import {
   BottomSheetBackdrop,
   BottomSheetModal,
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
-import {
-  getCachedMarketIndexDetail,
-  getLatestMarketIndexDetail,
-} from "@/src/features/market/market-data";
-import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
-import { evaluatePsxMarketStatus } from "@/src/features/market/market-status";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useColorScheme } from "nativewind";
@@ -198,7 +198,7 @@ export default function HomeScreen() {
     (
       holdings: PortfolioHolding[],
       totalDividendValue: number,
-      totalDepositValue: number
+      totalDepositValue: number,
     ) => {
       const nextHomeData = buildHomeSnapshotFromHoldings(holdings, {
         contributedCapitalAdjustment: totalDepositValue,
@@ -263,7 +263,7 @@ export default function HomeScreen() {
 
       router.push("/bonus-share");
     },
-    [handleDismissQuickActionSheet, router]
+    [handleDismissQuickActionSheet, router],
   );
 
   const handleOpenQuickActionSheet = React.useCallback(() => {
@@ -341,7 +341,7 @@ export default function HomeScreen() {
   useFocusEffect(
     React.useCallback(() => {
       void refreshHomeSnapshot();
-    }, [refreshHomeSnapshot])
+    }, [refreshHomeSnapshot]),
   );
 
   const profitSummaryItem = React.useMemo(
@@ -373,7 +373,7 @@ export default function HomeScreen() {
       evaluatePsxMarketStatus(marketAsOf, {
         staleThresholdMinutes: 5,
       }),
-    [marketAsOf]
+    [marketAsOf],
   );
   const marketStatusLabel = React.useMemo(() => {
     if (marketStatus.condition === "HALTED") {
@@ -415,7 +415,7 @@ export default function HomeScreen() {
             easing: Easing.in(Easing.quad),
             useNativeDriver: true,
           }),
-        ])
+        ]),
       );
       animation.start();
     } else {
@@ -460,7 +460,7 @@ export default function HomeScreen() {
         <View className="gap-7">
           <View className="flex-row items-center justify-between">
             <Text className="text-3xl font-extrabold text-app-text dark:text-app-textDark">
-              PSX Portfolio
+              PSX Folio
             </Text>
 
             <TouchableOpacity
