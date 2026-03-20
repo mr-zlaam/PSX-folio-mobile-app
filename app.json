@@ -4,7 +4,7 @@
     "slug": "psx-folio",
     "version": "1.0.0",
     "orientation": "portrait",
-    "icon": "./assets/images/1024.png",
+    "icon": "./assets/images/play_store_512.png",
     "scheme": "psxportfolio",
     "userInterfaceStyle": "automatic",
     "ios": {
@@ -13,8 +13,8 @@
     "android": {
       "adaptiveIcon": {
         "backgroundColor": "#16002A",
-        "foregroundImage": "./assets/images/1024.png",
-        "monochromeImage": "./assets/images/1024.png"
+        "foregroundImage": "./assets/images/play_store_512.png",
+        "monochromeImage": "./assets/images/play_store_512.png"
       },
       "edgeToEdgeEnabled": true,
       "predictiveBackGestureEnabled": false,
@@ -31,12 +31,12 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/images/psx-folio.png",
+          "image": "./assets/images/splash-screen-logo.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#ffffff",
           "dark": {
-            "image": "./assets/images/psx-folio.png",
+            "image": "./assets/images/splash-screen-logo.png",
             "backgroundColor": "#ffffff"
           }
         }
