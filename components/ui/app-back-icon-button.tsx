@@ -22,7 +22,7 @@ export default function AppBackIconButton({
       onPress={onPress}
       accessibilityRole="button"
       accessibilityLabel={accessibilityLabel}
-      className="h-10 w-14 items-center justify-center rounded-xl border border-app-highlight dark:border-app-highlightDark"
+      className="h-10 w-14 items-center justify-center rounded-xl"
     >
       <MaterialCommunityIcons
         name="arrow-left"
