@@ -130,12 +130,12 @@ function ToggleChip({
       onPress={onPress}
       activeOpacity={0.88}
       className={[
-        "rounded-xl border px-3 py-2",
+        "rounded-xl px-3 py-2",
         selected
           ? selectedTone === "danger"
-            ? "border-brand-red bg-brand-red dark:border-brand-red dark:bg-brand-red"
-            : "border-app-highlight bg-app-highlight dark:border-app-highlightDark dark:bg-app-highlightDark"
-          : "border-app-highlight bg-button-neutral dark:border-app-highlightDark dark:bg-transparent",
+            ? "bg-brand-red dark:bg-brand-red"
+            : "bg-app-highlight dark:bg-app-highlightDark"
+          : "bg-brand-white/70 dark:bg-brand-white/5",
       ]
         .filter(Boolean)
         .join(" ")}
@@ -187,7 +187,7 @@ function FieldInput({
         placeholderTextColor={placeholderTextColor}
         keyboardType={keyboardType}
         editable={editable}
-        className="mt-1 rounded-xl border border-app-highlight bg-brand-white px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark dark:bg-transparent dark:text-app-textDark"
+        className="mt-1 rounded-xl bg-brand-white/70 px-3 py-2 text-sm font-semibold text-app-text dark:bg-brand-white/5 dark:text-app-textDark"
       />
     </View>
   );
@@ -924,7 +924,7 @@ export default function TransactionsTabScreen() {
               placeholder="Search symbol or company"
               placeholderTextColor={inputPlaceholderTextColor}
               editable={!isSymbolLocked}
-              className="mt-3 rounded-xl border border-app-highlight bg-brand-white px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark dark:bg-transparent dark:text-app-textDark"
+              className="mt-3 rounded-xl bg-brand-white/70 px-3 py-2 text-sm font-semibold text-app-text dark:bg-brand-white/5 dark:text-app-textDark"
             />
 
             {isSymbolLocked ? (
@@ -941,10 +941,10 @@ export default function TransactionsTabScreen() {
                   disabled={isSymbolLocked}
                   onPress={() => handleSelectSymbol(symbolItem.symbol)}
                   className={[
-                    "rounded-xl border px-3 py-2",
+                    "rounded-xl px-3 py-2",
                     selectedSymbol === symbolItem.symbol
-                      ? "border-app-highlight bg-app-highlight dark:border-app-highlightDark dark:bg-app-highlightDark"
-                      : "border-app-highlight bg-brand-white dark:border-app-highlightDark dark:bg-transparent",
+                      ? "bg-app-highlight dark:bg-app-highlightDark"
+                      : "bg-brand-white/70 dark:bg-brand-white/5",
                     isSymbolLocked ? "opacity-60" : "",
                   ]
                     .filter(Boolean)
@@ -1096,7 +1096,7 @@ export default function TransactionsTabScreen() {
                   <TouchableOpacity
                     activeOpacity={0.88}
                     onPress={handleStartTradeDateTimeSelection}
-                    className="mt-1 rounded-xl border border-app-highlight bg-brand-white px-3 py-2 dark:border-app-highlightDark dark:bg-transparent"
+                    className="mt-1 rounded-xl bg-brand-white/70 px-3 py-2 dark:bg-brand-white/5"
                   >
                     <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
                       {formatDateTimeInput(tradeDateTime)}
@@ -1150,7 +1150,7 @@ export default function TransactionsTabScreen() {
                 <TouchableOpacity
                   activeOpacity={0.88}
                   onPress={() => router.push("/broker-settings")}
-                  className="self-start rounded-xl border border-app-highlight px-3 py-2 dark:border-app-highlightDark"
+                  className="self-start rounded-xl bg-brand-white/70 px-3 py-2 dark:bg-brand-white/5"
                 >
                   <Text className="text-xs font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                     Configure Broker Settings
@@ -1207,7 +1207,7 @@ export default function TransactionsTabScreen() {
             </View>
 
             {isTradeDateTimePickerVisible ? (
-              <View className="mt-4 rounded-2xl border border-app-highlight bg-brand-white p-2 dark:border-app-highlightDark dark:bg-transparent">
+              <View className="mt-4 rounded-2xl bg-brand-white/70 p-2 dark:bg-brand-white/5">
                 <Text className="px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                   {isAwaitingTimeSelection ? "Pick Time" : "Pick Date"}
                 </Text>
