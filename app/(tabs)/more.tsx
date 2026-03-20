@@ -124,7 +124,20 @@ export default function MoreTabScreen() {
               <TouchableOpacity
                 key={item.id}
                 activeOpacity={0.88}
-                onPress={() => router.push(item.route)}
+                onPress={() => {
+                  if (item.id === "trade") {
+                    router.push({
+                      pathname: "/(tabs)/transactions",
+                      params: {
+                        lockSymbol: "0",
+                        originTab: "more",
+                      },
+                    });
+                    return;
+                  }
+
+                  router.push(item.route);
+                }}
                 style={{ width: "33.333%" }}
                 className="p-1.5"
               >

@@ -181,6 +181,7 @@ export default function HomeScreen() {
       pathname: "/(tabs)/transactions",
       params: {
         lockSymbol: "0",
+        originTab: "home",
       },
     });
   }, [router]);

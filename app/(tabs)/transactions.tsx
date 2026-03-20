@@ -201,6 +201,7 @@ export default function TransactionsTabScreen() {
     side?: string | string[];
     lockSymbol?: string | string[];
     editTradeId?: string | string[];
+    originTab?: string | string[];
   }>();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
@@ -273,6 +274,16 @@ export default function TransactionsTabScreen() {
       : searchParams.editTradeId;
     return (rawEditTradeId ?? "").trim();
   }, [searchParams.editTradeId]);
+
+  const routeOriginTab = React.useMemo(() => {
+    const rawOriginTab = Array.isArray(searchParams.originTab)
+      ? searchParams.originTab[0]
+      : searchParams.originTab;
+    if (rawOriginTab === "home" || rawOriginTab === "more") {
+      return rawOriginTab;
+    }
+    return null;
+  }, [searchParams.originTab]);
 
   const isEditingTrade = normalizedEditTradeId.length > 0;
 
@@ -503,13 +514,45 @@ export default function TransactionsTabScreen() {
     []
   );
 
+  const handleBackFromTrade = React.useCallback(() => {
+    // For symbol-driven or edit flows, preserve stack back behavior.
+    if (
+      isEditingTrade ||
+      normalizedRouteSymbol.length > 0 ||
+      requestedRouteSide !== null ||
+      isSymbolLocked
+    ) {
+      router.back();
+      return;
+    }
+
+    if (routeOriginTab === "more") {
+      router.replace("/(tabs)/more");
+      return;
+    }
+
+    if (routeOriginTab === "home") {
+      router.replace("/(tabs)/home");
+      return;
+    }
+
+    router.back();
+  }, [
+    isEditingTrade,
+    isSymbolLocked,
+    normalizedRouteSymbol.length,
+    requestedRouteSide,
+    routeOriginTab,
+    router,
+  ]);
+
   const handleCloseTradeNotice = React.useCallback(() => {
     setTradeNotice(null);
     if (shouldGoBackAfterNotice) {
       setShouldGoBackAfterNotice(false);
-      router.back();
+      handleBackFromTrade();
     }
-  }, [router, shouldGoBackAfterNotice]);
+  }, [handleBackFromTrade, shouldGoBackAfterNotice]);
 
   const handleCreateOrder = React.useCallback(async () => {
     const normalizedSymbol = selectedSymbol.trim().toUpperCase();
@@ -861,7 +904,7 @@ export default function TransactionsTabScreen() {
       >
         <View className="gap-5">
           <View className="flex-row items-center justify-between">
-            <AppBackIconButton onPress={() => router.back()} />
+            <AppBackIconButton onPress={handleBackFromTrade} />
 
             <Text className="text-2xl font-extrabold text-app-text dark:text-app-textDark">
               {isEditingTrade ? "Edit Trade" : "Trade"}
