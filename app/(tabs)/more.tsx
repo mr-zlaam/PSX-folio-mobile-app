@@ -11,6 +11,8 @@ type MoreGridItem = {
   label: string;
   icon: React.ComponentProps<typeof MaterialCommunityIcons>["name"];
   route:
+    | "/(tabs)/market"
+    | "/(tabs)/stocks"
     | "/(tabs)/settings"
     | "/(tabs)/transactions"
     | "/transaction-history"
@@ -32,6 +34,18 @@ const MORE_GRID_ITEMS: MoreGridItem[] = [
     label: "History",
     icon: "history",
     route: "/transaction-history",
+  },
+  {
+    id: "stocks",
+    label: "Stocks",
+    icon: "format-list-bulleted",
+    route: "/(tabs)/stocks",
+  },
+  {
+    id: "market",
+    label: "Market",
+    icon: "chart-box-outline",
+    route: "/(tabs)/market",
   },
   {
     id: "broker",
@@ -98,25 +112,27 @@ export default function MoreTabScreen() {
             Quick access to extra screens
           </Text>
 
-          <View className="mt-5 flex-row flex-wrap justify-between gap-y-3">
+          <View className="mt-5 flex-row flex-wrap">
             {MORE_GRID_ITEMS.map((item) => (
               <TouchableOpacity
                 key={item.id}
                 activeOpacity={0.88}
                 onPress={() => router.push(item.route)}
-                style={{ width: "31%" }}
-                className="items-center rounded-2xl bg-brand-white/75 px-2 py-3 dark:bg-brand-white/5"
+                style={{ width: "33.333%" }}
+                className="p-1.5"
               >
-                <View className="rounded-xl bg-app-highlight/10 p-2 dark:bg-brand-white/10">
-                  <MaterialCommunityIcons
-                    name={item.icon}
-                    size={22}
-                    color={iconColor}
-                  />
+                <View className="items-center rounded-2xl bg-brand-white/75 px-2 py-3 dark:bg-brand-white/5">
+                  <View className="rounded-xl bg-app-highlight/10 p-2 dark:bg-brand-white/10">
+                    <MaterialCommunityIcons
+                      name={item.icon}
+                      size={22}
+                      color={iconColor}
+                    />
+                  </View>
+                  <Text className="mt-2 text-center text-xs font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                    {item.label}
+                  </Text>
                 </View>
-                <Text className="mt-2 text-center text-xs font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                  {item.label}
-                </Text>
               </TouchableOpacity>
             ))}
           </View>
