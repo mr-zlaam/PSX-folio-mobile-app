@@ -1,5 +1,8 @@
+import React from "react";
 import { Stack } from "expo-router";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";
+import { StatusBar } from "expo-status-bar";
+import * as SystemUI from "expo-system-ui";
 import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { useColorScheme } from "nativewind";
 import { APP_COLORS } from "@/src/theme/colors";
@@ -12,6 +15,10 @@ export default function RootLayout() {
     ? APP_COLORS.app.bgDark
     : APP_COLORS.app.bg;
 
+  React.useEffect(() => {
+    void SystemUI.setBackgroundColorAsync(stackBackgroundColor);
+  }, [stackBackgroundColor]);
+
   return (
     <GestureHandlerRootView
       style={{
@@ -20,6 +27,11 @@ export default function RootLayout() {
       }}
     >
       <BottomSheetModalProvider>
+        <StatusBar
+          style={isDarkMode ? "light" : "dark"}
+          backgroundColor={stackBackgroundColor}
+          translucent
+        />
         <Stack
           screenOptions={{
             headerShown: false,
@@ -38,6 +50,7 @@ export default function RootLayout() {
           <Stack.Screen name="bonus-share" />
           <Stack.Screen name="transaction-history" />
           <Stack.Screen name="market-index" />
+          <Stack.Screen name="market-index-stocks" />
           <Stack.Screen name="stock-detail" />
           <Stack.Screen name="pdf-viewer" />
           <Stack.Screen name="analytics" />

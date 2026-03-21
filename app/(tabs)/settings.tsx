@@ -426,7 +426,7 @@ export default function SettingsTabScreen() {
             <TouchableOpacity
               activeOpacity={0.88}
               onPress={() => router.push("/broker-settings")}
-              className="mt-4 rounded-xl border border-app-highlight px-3 py-2 dark:border-app-highlightDark"
+              className="mt-4 rounded-xl border border-app-highlight/25 bg-app-highlight/5 px-3 py-2 dark:border-app-highlightDark/35 dark:bg-brand-white/5"
             >
               <Text className="text-sm font-semibold text-app-highlight dark:text-app-highlightDark">
                 Open Broker Settings

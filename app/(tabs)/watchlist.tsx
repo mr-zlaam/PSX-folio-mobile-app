@@ -33,6 +33,7 @@ import {
   RefreshControl,
   ScrollView,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -173,6 +174,7 @@ export default function WatchlistTabScreen() {
   const addSheetSnapPoints = React.useMemo(() => ["72%", "92%"], []);
 
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [watchlistSearchQuery, setWatchlistSearchQuery] = React.useState("");
   const [allSymbols, setAllSymbols] = React.useState<PsxSymbol[]>([]);
   const [watchlistItems, setWatchlistItems] = React.useState<WatchlistItem[]>([]);
   const [rows, setRows] = React.useState<WatchlistRow[]>([]);
@@ -196,6 +198,20 @@ export default function WatchlistTabScreen() {
       })
       .slice(0, 10);
   }, [allSymbols, searchQuery]);
+
+  const filteredWatchlistRows = React.useMemo(() => {
+    const normalizedQuery = watchlistSearchQuery.trim().toLowerCase();
+    if (normalizedQuery.length === 0) {
+      return rows;
+    }
+
+    return rows.filter((row) => {
+      const symbolMatch = row.symbol.toLowerCase().includes(normalizedQuery);
+      const nameMatch = row.name.toLowerCase().includes(normalizedQuery);
+      const sectorMatch = row.sectorName.toLowerCase().includes(normalizedQuery);
+      return symbolMatch || nameMatch || sectorMatch;
+    });
+  }, [rows, watchlistSearchQuery]);
 
   const showNotice = React.useCallback(
     (title: string, message: string, tone: AppFeedbackModalTone) => {
@@ -493,9 +509,17 @@ export default function WatchlistTabScreen() {
                   Watchlist
                 </Text>
                 <Text className="text-xs font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                  {watchlistItems.length} symbols
+                  {watchlistItems.length} stocks
                 </Text>
               </View>
+
+              <TextInput
+                value={watchlistSearchQuery}
+                onChangeText={setWatchlistSearchQuery}
+                placeholder="Search in watchlist"
+                placeholderTextColor={inputPlaceholderTextColor}
+                className="mt-3 rounded-xl border border-app-highlight/20 bg-app-highlight/5 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/30 dark:bg-brand-white/5 dark:text-app-textDark"
+              />
             </View>
 
             {shouldShowRowsLoader ? (
@@ -504,8 +528,14 @@ export default function WatchlistTabScreen() {
                   Loading latest prices...
                 </Text>
               </View>
+            ) : filteredWatchlistRows.length === 0 ? (
+              <View className="rounded-2xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+                <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+                  No stock matches your search.
+                </Text>
+              </View>
             ) : (
-              rows.map((row) => (
+              filteredWatchlistRows.map((row) => (
                 <TouchableOpacity
                   key={row.symbol}
                   activeOpacity={0.9}
@@ -651,7 +681,7 @@ export default function WatchlistTabScreen() {
             onChangeText={setSearchQuery}
             placeholder="Search symbol or company"
             placeholderTextColor={inputPlaceholderTextColor}
-            className="mt-3 rounded-xl border border-app-highlight bg-brand-white px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark dark:bg-transparent dark:text-app-textDark"
+            className="mt-3 rounded-xl border border-app-highlight/15 bg-app-highlight/5 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/25 dark:bg-brand-white/5 dark:text-app-textDark"
           />
 
           {searchQuery.trim().length === 0 ? (
@@ -681,8 +711,8 @@ export default function WatchlistTabScreen() {
                       className={[
                         "rounded-xl border px-3 py-2",
                         alreadyAdded
-                          ? "border-app-highlight/40 bg-app-highlight/10 dark:border-app-highlightDark/40 dark:bg-brand-white/10"
-                          : "border-app-highlight bg-brand-white dark:border-app-highlightDark dark:bg-transparent",
+                          ? "border-app-highlight/12 bg-app-highlight/10 dark:border-app-highlightDark/25 dark:bg-brand-white/10"
+                          : "border-app-highlight/12 bg-brand-white/90 dark:border-app-highlightDark/25 dark:bg-brand-white/5",
                       ]
                         .filter(Boolean)
                         .join(" ")}

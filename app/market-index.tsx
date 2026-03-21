@@ -1,17 +1,12 @@
 import StockLineChart from "@/components/charts/stock-line-chart";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
-import ShariahChip from "@/components/ui/shariah-chip";
 import {
   formatPKRAmount,
   formatSignedPercentage,
 } from "@/src/features/home/home-formatters";
-import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
 import {
-  getCachedMarketIndexConstituents,
   getCachedMarketIndexDetail,
-  getLatestMarketIndexConstituents,
   getLatestMarketIndexDetail,
-  MarketIndexConstituentSnapshot,
   getMarketIndexDefinitionByCode,
   MarketIndexDetailSnapshot,
 } from "@/src/features/market/market-data";
@@ -32,7 +27,6 @@ import {
   RefreshControl,
   ScrollView,
   Text,
-  TextInput,
   TouchableOpacity,
   View,
 } from "react-native";
@@ -70,22 +64,6 @@ function formatPoints(value: number): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
-}
-
-function formatSignedPoints(value: number): string {
-  if (!Number.isFinite(value)) {
-    return "0.00";
-  }
-
-  if (value > 0) {
-    return `+${formatPoints(value)}`;
-  }
-
-  if (value < 0) {
-    return `-${formatPoints(Math.abs(value))}`;
-  }
-
-  return "0.00";
 }
 
 function formatCompactMetric(value: number): string {
@@ -242,7 +220,6 @@ function RangeBar({
 
 export default function MarketIndexScreen() {
   const router = useRouter();
-  const { isShariahCompliantSymbol } = useShariahSymbols();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
@@ -259,14 +236,7 @@ export default function MarketIndexScreen() {
   );
 
   const [detail, setDetail] = React.useState<MarketIndexDetailSnapshot | null>(null);
-  const [constituents, setConstituents] =
-    React.useState<MarketIndexConstituentSnapshot | null>(null);
-  const [constituentsSearchQuery, setConstituentsSearchQuery] = React.useState("");
-  const deferredConstituentsSearchQuery = React.useDeferredValue(
-    constituentsSearchQuery
-  );
   const [isInitialLoading, setIsInitialLoading] = React.useState(true);
-  const [isConstituentsLoading, setIsConstituentsLoading] = React.useState(true);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [chartRange, setChartRange] = React.useState<StockChartRange>("1D");
   const [chartSeries, setChartSeries] = React.useState<StockChartSeries>(() =>
@@ -301,38 +271,6 @@ export default function MarketIndexScreen() {
       } finally {
         if (showLoader) {
           setIsInitialLoading(false);
-        }
-      }
-    },
-    [normalizedCode]
-  );
-
-  const refreshConstituents = React.useCallback(
-    async (showLoader = false) => {
-      if (showLoader) {
-        setIsConstituentsLoading(true);
-      }
-
-      try {
-        if (normalizedCode.length === 0) {
-          setConstituents(null);
-          return;
-        }
-
-        const cachedSnapshot =
-          await getCachedMarketIndexConstituents(normalizedCode);
-        if (cachedSnapshot) {
-          setConstituents(cachedSnapshot);
-        }
-
-        const latestSnapshot =
-          await getLatestMarketIndexConstituents(normalizedCode);
-        if (latestSnapshot) {
-          setConstituents(latestSnapshot);
-        }
-      } finally {
-        if (showLoader) {
-          setIsConstituentsLoading(false);
         }
       }
     },
@@ -375,15 +313,15 @@ export default function MarketIndexScreen() {
   );
 
   React.useEffect(() => {
-    void Promise.all([refreshDetail(true), refreshConstituents(true)]);
+    void refreshDetail(true);
     const intervalId = setInterval(() => {
-      void Promise.all([refreshDetail(), refreshConstituents()]);
+      void refreshDetail();
     }, MARKET_DETAIL_REFRESH_INTERVAL_MS);
 
     return () => {
       clearInterval(intervalId);
     };
-  }, [refreshConstituents, refreshDetail]);
+  }, [refreshDetail]);
 
   React.useEffect(() => {
     setSelectedChartPoint(null);
@@ -400,15 +338,11 @@ export default function MarketIndexScreen() {
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await Promise.all([
-        refreshDetail(),
-        refreshConstituents(),
-        refreshChart(chartRange),
-      ]);
+      await Promise.all([refreshDetail(), refreshChart(chartRange)]);
     } finally {
       setIsRefreshing(false);
     }
-  }, [chartRange, refreshChart, refreshConstituents, refreshDetail]);
+  }, [chartRange, refreshChart, refreshDetail]);
 
   const chartToneValue = React.useMemo(() => {
     if (chartSeries.points.length < 2) {
@@ -437,48 +371,44 @@ export default function MarketIndexScreen() {
 
   const chartFirstPoint = chartSeries.points[0] ?? null;
   const chartLastPoint = chartSeries.points[chartSeries.points.length - 1] ?? null;
-  const constituentsSearchPlaceholderTextColor = isDarkMode
-    ? APP_COLORS.text.placeholderDark
-    : APP_COLORS.text.placeholderLight;
-  const filteredConstituents = React.useMemo(() => {
-    const items = constituents?.items ?? [];
-    const normalizedQuery = deferredConstituentsSearchQuery.trim().toLowerCase();
-    if (normalizedQuery.length === 0) {
-      return items;
-    }
-
-    return items.filter((item) => {
-      return (
-        item.symbol.toLowerCase().includes(normalizedQuery) ||
-        item.name.toLowerCase().includes(normalizedQuery)
-      );
-    });
-  }, [constituents?.items, deferredConstituentsSearchQuery]);
-
   const titleText =
     (detail?.snapshot.name ?? indexDefinition?.name ?? normalizedCode) ||
     "Market Index";
-  const handleOpenConstituentStock = React.useCallback(
-    (symbol: string) => {
-      const normalizedSymbol = symbol.trim().toUpperCase();
-      if (normalizedSymbol.length === 0) {
-        return;
-      }
+  const detailDisplayCode =
+    detail?.snapshot.displayCode ?? indexDefinition?.displayCode ?? normalizedCode;
+  const handleChartPointSelected = React.useCallback(
+    (point: StockChartPoint | null) => {
+      setSelectedChartPoint((previousPoint) => {
+        if (previousPoint === point) {
+          return previousPoint;
+        }
 
-      router.push({
-        pathname: "/stock-detail",
-        params: {
-          symbol: normalizedSymbol,
-          origin: "market",
-        },
+        if (
+          previousPoint &&
+          point &&
+          previousPoint.timestamp === point.timestamp &&
+          previousPoint.price === point.price
+        ) {
+          return previousPoint;
+        }
+
+        return point;
       });
     },
-    [router]
+    []
   );
+  const handleOpenConstituents = React.useCallback(() => {
+    if (normalizedCode.length === 0) {
+      return;
+    }
 
-  React.useEffect(() => {
-    setConstituentsSearchQuery("");
-  }, [normalizedCode]);
+    router.push({
+      pathname: "/market-index-stocks",
+      params: {
+        code: normalizedCode,
+      },
+    });
+  }, [normalizedCode, router]);
 
   return (
     <SafeAreaView
@@ -594,7 +524,7 @@ export default function MarketIndexScreen() {
                       lineColor={chartLineColor}
                       gridColor={chartGridColor}
                       emptyLabel="No chart data for this range"
-                      onPointSelected={setSelectedChartPoint}
+                      onPointSelected={handleChartPointSelected}
                     />
                   )}
                 </View>
@@ -764,115 +694,22 @@ export default function MarketIndexScreen() {
               </View>
 
               <View className="rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
-                <View className="flex-row items-center justify-between">
-                  <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                    Constituents
-                  </Text>
-                  <Text className="text-xs font-bold text-app-text dark:text-app-textDark">
-                    {(filteredConstituents.length ?? 0).toLocaleString("en-PK")}
-                    {deferredConstituentsSearchQuery.trim().length > 0
-                      ? ` / ${(constituents?.items.length ?? 0).toLocaleString("en-PK")}`
-                      : ""}
-                  </Text>
-                </View>
-                <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
-                  Source: {constituents?.endpointCode ?? "--"} | Updated:{" "}
-                  {formatUpdatedAt(constituents?.asOf ?? null)}
+                <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                  Constituents
                 </Text>
-
-                {(constituents?.items.length ?? 0) > 0 ? (
-                  <TextInput
-                    value={constituentsSearchQuery}
-                    onChangeText={setConstituentsSearchQuery}
-                    placeholder="Search symbol or company"
-                    placeholderTextColor={constituentsSearchPlaceholderTextColor}
-                    autoCorrect={false}
-                    autoCapitalize="characters"
-                    className="mt-3 rounded-2xl border border-app-highlight bg-brand-white px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark dark:bg-transparent dark:text-app-textDark"
-                  />
-                ) : null}
-
-                {isConstituentsLoading &&
-                (constituents?.items.length ?? 0) === 0 ? (
-                  <View className="items-center py-5">
-                    <ActivityIndicator
-                      size="small"
-                      color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
-                    />
-                    <Text className="mt-2 text-xs font-semibold text-app-text dark:text-app-textDark">
-                      Loading constituents...
-                    </Text>
-                  </View>
-                ) : null}
-
-                {!isConstituentsLoading &&
-                (constituents?.items.length ?? 0) === 0 ? (
-                  <Text className="mt-3 text-sm font-semibold text-app-text dark:text-app-textDark">
-                    Constituents are not available for this index yet.
+                <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
+                  Open a dedicated stock list for {detailDisplayCode} to browse and
+                  search all companies smoothly.
+                </Text>
+                <TouchableOpacity
+                  activeOpacity={0.9}
+                  onPress={handleOpenConstituents}
+                  className="mt-4 rounded-xl border border-app-highlight/25 bg-app-highlight/5 px-4 py-3 dark:border-app-highlightDark/35 dark:bg-brand-white/5"
+                >
+                  <Text className="text-center text-sm font-bold text-app-highlight dark:text-app-highlightDark">
+                    View {detailDisplayCode} Stocks
                   </Text>
-                ) : null}
-
-                {(constituents?.items.length ?? 0) > 0 &&
-                filteredConstituents.length === 0 ? (
-                  <Text className="mt-3 text-sm font-semibold text-app-text dark:text-app-textDark">
-                    No constituent matched your search.
-                  </Text>
-                ) : null}
-
-                {filteredConstituents.length > 0 ? (
-                  <View className="mt-3 gap-2">
-                    {filteredConstituents.map((item) => (
-                      <TouchableOpacity
-                        key={item.symbol}
-                        activeOpacity={0.9}
-                        onPress={() => handleOpenConstituentStock(item.symbol)}
-                        className="rounded-xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5"
-                      >
-                        <View className="flex-row items-start justify-between gap-3">
-                          <View className="flex-1">
-                            <View className="flex-row items-center gap-2">
-                              <Text className="text-base font-extrabold text-app-text dark:text-app-textDark">
-                                {item.symbol}
-                              </Text>
-                              {isShariahCompliantSymbol(item.symbol) ? (
-                                <ShariahChip compact />
-                              ) : null}
-                            </View>
-                            <Text
-                              className="mt-0.5 text-xs font-semibold text-app-text dark:text-app-textDark"
-                              numberOfLines={1}
-                            >
-                              {item.name}
-                            </Text>
-                            <Text className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                              Weight {item.idxWeightPct.toFixed(2)}%
-                            </Text>
-                          </View>
-
-                          <View className="items-end">
-                            <Text className="text-base font-extrabold text-app-text dark:text-app-textDark">
-                              {formatPoints(item.current)}
-                            </Text>
-                            <Text
-                              className={[
-                                "mt-0.5 text-xs font-bold",
-                                getValueToneClassName(item.change),
-                              ]
-                                .filter(Boolean)
-                                .join(" ")}
-                            >
-                              {formatSignedPoints(item.change)} (
-                              {formatSignedPercentage(item.changePct)})
-                            </Text>
-                            <Text className="mt-1 text-[10px] font-semibold text-app-text dark:text-app-textDark">
-                              Vol {formatCompactMetric(item.volume)}
-                            </Text>
-                          </View>
-                        </View>
-                      </TouchableOpacity>
-                    ))}
-                  </View>
-                ) : null}
+                </TouchableOpacity>
               </View>
             </>
           )}

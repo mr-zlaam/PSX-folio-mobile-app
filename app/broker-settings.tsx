@@ -148,7 +148,7 @@ export default function BrokerSettingsScreen() {
                   onChangeText={setBrokerNameInput}
                   placeholder="e.g. XYZ Securities"
                   placeholderTextColor={placeholderTextColor}
-                  className="mt-1 rounded-xl border border-app-highlight bg-brand-white px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark dark:bg-transparent dark:text-app-textDark"
+                  className="mt-1 rounded-xl border border-app-highlight/25 bg-app-highlight/5 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/35 dark:bg-brand-white/5 dark:text-app-textDark"
                 />
               </View>
 
@@ -162,7 +162,7 @@ export default function BrokerSettingsScreen() {
                   placeholder="e.g. 0.15"
                   placeholderTextColor={placeholderTextColor}
                   keyboardType="numeric"
-                  className="mt-1 rounded-xl border border-app-highlight bg-brand-white px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark dark:bg-transparent dark:text-app-textDark"
+                  className="mt-1 rounded-xl border border-app-highlight/25 bg-app-highlight/5 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/35 dark:bg-brand-white/5 dark:text-app-textDark"
                 />
               </View>
             </View>

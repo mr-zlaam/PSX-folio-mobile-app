@@ -27,13 +27,13 @@ const variantClassMap: Record<ButtonVariant, string> = {
   primary:
     "bg-button-primary border-button-primary dark:bg-button-neutral dark:border-button-neutral",
   secondary:
-    "bg-button-neutral border-brand-purple dark:bg-transparent dark:border-brand-white",
+    "bg-app-highlight/5 border-app-highlight/25 dark:bg-brand-white/5 dark:border-app-highlightDark/35",
   danger: "bg-button-danger border-button-danger",
 };
 
 const textVariantClassMap: Record<ButtonVariant, string> = {
   primary: "text-brand-white dark:text-brand-purple",
-  secondary: "text-brand-purple dark:text-brand-white",
+  secondary: "text-app-highlight dark:text-app-highlightDark",
   danger: "text-brand-white",
 };
 
