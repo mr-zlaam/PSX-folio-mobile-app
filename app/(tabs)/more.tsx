@@ -23,7 +23,13 @@ type MoreGridItem = {
     | "/analytics";
 };
 
-const MORE_GRID_ITEMS: MoreGridItem[] = [
+type MoreSection = {
+  id: string;
+  title: string;
+  items: MoreGridItem[];
+};
+
+const TRADING_ITEMS: MoreGridItem[] = [
   {
     id: "trade",
     label: "Trade",
@@ -42,6 +48,9 @@ const MORE_GRID_ITEMS: MoreGridItem[] = [
     icon: "chart-timeline-variant",
     route: "/analytics",
   },
+];
+
+const MARKET_ITEMS: MoreGridItem[] = [
   {
     id: "stocks",
     label: "Stocks",
@@ -54,6 +63,9 @@ const MORE_GRID_ITEMS: MoreGridItem[] = [
     icon: "chart-box-outline",
     route: "/(tabs)/market",
   },
+];
+
+const PORTFOLIO_ACTION_ITEMS: MoreGridItem[] = [
   {
     id: "broker",
     label: "Broker",
@@ -78,11 +90,37 @@ const MORE_GRID_ITEMS: MoreGridItem[] = [
     icon: "gift-outline",
     route: "/bonus-share",
   },
+];
+
+const PREFERENCES_ITEMS: MoreGridItem[] = [
   {
     id: "settings",
     label: "Settings",
     icon: "cog-outline",
     route: "/(tabs)/settings",
+  },
+];
+
+const MORE_SECTIONS: MoreSection[] = [
+  {
+    id: "trading",
+    title: "Trading",
+    items: TRADING_ITEMS,
+  },
+  {
+    id: "market",
+    title: "Market",
+    items: MARKET_ITEMS,
+  },
+  {
+    id: "portfolio-actions",
+    title: "Portfolio Actions",
+    items: PORTFOLIO_ACTION_ITEMS,
+  },
+  {
+    id: "preferences",
+    title: "Preferences",
+    items: PREFERENCES_ITEMS,
   },
 ];
 
@@ -94,24 +132,36 @@ export default function MoreTabScreen() {
   const iconColor = isDarkMode
     ? APP_COLORS.app.highlightDark
     : APP_COLORS.app.highlight;
+  const handleOpenItem = React.useCallback(
+    (item: MoreGridItem) => {
+      if (item.id === "trade") {
+        router.push({
+          pathname: "/(tabs)/transactions",
+          params: {
+            lockSymbol: "0",
+            originTab: "more",
+          },
+        });
+        return;
+      }
+
+      router.push(item.route);
+    },
+    [router]
+  );
 
   return (
     <SafeAreaView
       edges={["top", "left", "right"]}
       className="flex-1 bg-app-bg dark:bg-app-bgDark"
     >
-      <ScrollView
-        className="flex-1"
-        contentContainerStyle={{
-          flexGrow: 1,
-          justifyContent: "center",
-          paddingHorizontal: 20,
-          paddingBottom: insets.bottom + 24,
-          paddingTop: 14,
+      <View
+        className="flex-1 px-5 pt-3"
+        style={{
+          paddingBottom: insets.bottom + 12,
         }}
-        showsVerticalScrollIndicator={false}
       >
-        <View className="rounded-3xl bg-brand-white px-4 py-5 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+        <View className="flex-1 rounded-3xl bg-brand-white px-4 pt-5 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
           <Text className="text-center text-2xl font-extrabold text-app-text dark:text-app-textDark">
             More
           </Text>
@@ -119,45 +169,50 @@ export default function MoreTabScreen() {
             Quick access to extra screens
           </Text>
 
-          <View className="mt-5 flex-row flex-wrap">
-            {MORE_GRID_ITEMS.map((item) => (
-              <TouchableOpacity
-                key={item.id}
-                activeOpacity={0.88}
-                onPress={() => {
-                  if (item.id === "trade") {
-                    router.push({
-                      pathname: "/(tabs)/transactions",
-                      params: {
-                        lockSymbol: "0",
-                        originTab: "more",
-                      },
-                    });
-                    return;
-                  }
-
-                  router.push(item.route);
-                }}
-                style={{ width: "33.333%" }}
-                className="p-1.5"
-              >
-                <View className="items-center rounded-2xl bg-brand-white/75 px-2 py-3 dark:bg-brand-white/5">
-                  <View className="rounded-xl bg-app-highlight/10 p-2 dark:bg-brand-white/10">
-                    <MaterialCommunityIcons
-                      name={item.icon}
-                      size={22}
-                      color={iconColor}
-                    />
-                  </View>
-                  <Text className="mt-2 text-center text-xs font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                    {item.label}
+          <ScrollView
+            className="mt-5 flex-1"
+            contentContainerStyle={{
+              paddingBottom: 10,
+            }}
+            showsVerticalScrollIndicator={false}
+          >
+            <View className="gap-4">
+              {MORE_SECTIONS.map((section) => (
+                <View key={section.id}>
+                  <Text className="text-[11px] font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                    {section.title}
                   </Text>
+
+                  <View className="mt-2 flex-row flex-wrap">
+                    {section.items.map((item) => (
+                      <TouchableOpacity
+                        key={item.id}
+                        activeOpacity={0.88}
+                        onPress={() => handleOpenItem(item)}
+                        style={{ width: "33.333%" }}
+                        className="p-1.5"
+                      >
+                        <View className="items-center rounded-2xl bg-brand-white/75 px-2 py-3 dark:bg-brand-white/5">
+                          <View className="rounded-xl bg-app-highlight/10 p-2 dark:bg-brand-white/10">
+                            <MaterialCommunityIcons
+                              name={item.icon}
+                              size={22}
+                              color={iconColor}
+                            />
+                          </View>
+                          <Text className="mt-2 text-center text-xs font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                            {item.label}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    ))}
+                  </View>
                 </View>
-              </TouchableOpacity>
-            ))}
-          </View>
+              ))}
+            </View>
+          </ScrollView>
         </View>
-      </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }
