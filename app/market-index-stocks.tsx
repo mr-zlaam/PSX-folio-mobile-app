@@ -24,6 +24,16 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 const MARKET_CONSTITUENTS_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+type ConstituentsFilter = "all" | "gainers" | "decliners" | "active";
+const CONSTITUENTS_FILTER_OPTIONS: {
+  value: ConstituentsFilter;
+  label: string;
+}[] = [
+  { value: "active", label: "Most Active" },
+  { value: "gainers", label: "Top Gainers" },
+  { value: "decliners", label: "Top Decliners" },
+  { value: "all", label: "All" },
+];
 
 function getValueToneClassName(value: number): string {
   if (value > 0) {
@@ -90,6 +100,44 @@ function formatUpdatedAt(value: string | null): string {
   });
 }
 
+function FilterChip({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.88}
+      onPress={onPress}
+      className={[
+        "rounded-xl border px-3 py-2",
+        selected
+          ? "border-app-highlight bg-app-highlight dark:border-app-highlightDark dark:bg-app-highlightDark"
+          : "border-app-highlight/20 bg-app-highlight/5 dark:border-app-highlightDark/30 dark:bg-brand-white/5",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <Text
+        className={[
+          "text-xs font-bold uppercase tracking-wide",
+          selected
+            ? "text-brand-white dark:text-brand-purple"
+            : "text-app-highlight dark:text-app-highlightDark",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 export default function MarketIndexStocksScreen() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -112,6 +160,8 @@ export default function MarketIndexStocksScreen() {
   );
 
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [activeFilter, setActiveFilter] =
+    React.useState<ConstituentsFilter>("active");
   const deferredSearchQuery = React.useDeferredValue(searchQuery);
   const [constituents, setConstituents] =
     React.useState<MarketIndexConstituentSnapshot | null>(null);
@@ -170,20 +220,40 @@ export default function MarketIndexStocksScreen() {
     }
   }, [refreshConstituents]);
 
-  const filteredConstituents = React.useMemo(() => {
+  const tabFilteredConstituents = React.useMemo(() => {
     const items = constituents?.items ?? [];
-    const normalizedQuery = deferredSearchQuery.trim().toLowerCase();
-    if (normalizedQuery.length === 0) {
+    if (activeFilter === "all") {
       return items;
     }
 
-    return items.filter((item) => {
+    if (activeFilter === "gainers") {
+      return items
+        .filter((item) => item.change > 0)
+        .sort((first, second) => second.changePct - first.changePct);
+    }
+
+    if (activeFilter === "decliners") {
+      return items
+        .filter((item) => item.change < 0)
+        .sort((first, second) => first.changePct - second.changePct);
+    }
+
+    return [...items].sort((first, second) => second.volume - first.volume);
+  }, [activeFilter, constituents?.items]);
+
+  const filteredConstituents = React.useMemo(() => {
+    const normalizedQuery = deferredSearchQuery.trim().toLowerCase();
+    if (normalizedQuery.length === 0) {
+      return tabFilteredConstituents;
+    }
+
+    return tabFilteredConstituents.filter((item) => {
       return (
         item.symbol.toLowerCase().includes(normalizedQuery) ||
         item.name.toLowerCase().includes(normalizedQuery)
       );
     });
-  }, [constituents?.items, deferredSearchQuery]);
+  }, [deferredSearchQuery, tabFilteredConstituents]);
 
   const handleOpenStock = React.useCallback(
     (symbol: string) => {
@@ -205,6 +275,14 @@ export default function MarketIndexStocksScreen() {
 
   const titleText =
     indexDefinition?.displayCode ?? constituents?.indexCode ?? normalizedCode;
+  const totalConstituentsCount = constituents?.items.length ?? 0;
+  const shouldShowFilteredCountSuffix =
+    activeFilter !== "all" || deferredSearchQuery.trim().length > 0;
+
+  React.useEffect(() => {
+    setSearchQuery("");
+    setActiveFilter("active");
+  }, [normalizedCode]);
 
   return (
     <SafeAreaView
@@ -247,8 +325,8 @@ export default function MarketIndexStocksScreen() {
               </Text>
               <Text className="text-xs font-bold text-app-text dark:text-app-textDark">
                 {(filteredConstituents.length ?? 0).toLocaleString("en-PK")}
-                {deferredSearchQuery.trim().length > 0
-                  ? ` / ${(constituents?.items.length ?? 0).toLocaleString("en-PK")}`
+                {shouldShowFilteredCountSuffix
+                  ? ` / ${totalConstituentsCount.toLocaleString("en-PK")}`
                   : ""}
               </Text>
             </View>
@@ -258,15 +336,27 @@ export default function MarketIndexStocksScreen() {
             </Text>
 
             {(constituents?.items.length ?? 0) > 0 ? (
-              <TextInput
-                value={searchQuery}
-                onChangeText={setSearchQuery}
-                placeholder="Search symbol or company"
-                placeholderTextColor={searchPlaceholderTextColor}
-                autoCorrect={false}
-                autoCapitalize="characters"
-                className="mt-3 rounded-xl border border-app-highlight/20 bg-app-highlight/5 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/30 dark:bg-brand-white/5 dark:text-app-textDark"
-              />
+              <>
+                <View className="mt-3 flex-row flex-wrap gap-2">
+                  {CONSTITUENTS_FILTER_OPTIONS.map((option) => (
+                    <FilterChip
+                      key={option.value}
+                      label={option.label}
+                      selected={activeFilter === option.value}
+                      onPress={() => setActiveFilter(option.value)}
+                    />
+                  ))}
+                </View>
+                <TextInput
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                  placeholder="Search symbol or company"
+                  placeholderTextColor={searchPlaceholderTextColor}
+                  autoCorrect={false}
+                  autoCapitalize="characters"
+                  className="mt-3 rounded-xl border border-app-highlight/20 bg-app-highlight/5 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/30 dark:bg-brand-white/5 dark:text-app-textDark"
+                />
+              </>
             ) : null}
           </View>
 
