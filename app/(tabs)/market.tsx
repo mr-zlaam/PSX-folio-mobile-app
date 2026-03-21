@@ -4,7 +4,11 @@ import {
   getMarketIndexDefinitions,
   MarketIndexSnapshot,
 } from "@/src/features/market/market-data";
-import { evaluatePsxMarketStatus } from "@/src/features/market/market-status";
+import {
+  DpsMarketStatusSnapshot,
+  getCachedDpsMarketStatus,
+  getLatestDpsMarketStatus,
+} from "@/src/features/market/dps-market-status";
 import { APP_COLORS } from "@/src/theme/colors";
 import { useRouter } from "expo-router";
 import React from "react";
@@ -140,15 +144,33 @@ export default function MarketTabScreen() {
   const openPulseAnim = React.useRef(new Animated.Value(0)).current;
 
   const [indices, setIndices] = React.useState<MarketIndexSnapshot[]>([]);
+  const [dpsMarketStatus, setDpsMarketStatus] =
+    React.useState<DpsMarketStatusSnapshot>({
+      primaryBoardKey: null,
+      primaryBoardTitle: null,
+      stateText: "CLOSED",
+      uiStatus: "CLOSED",
+      boards: [],
+      fetchedAt: null,
+      source: "fallback",
+    });
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [isBootstrapping, setIsBootstrapping] = React.useState(true);
 
   const refreshMarket = React.useCallback(async () => {
-    const cachedSnapshot = await getCachedMarketSnapshot();
+    const [cachedSnapshot, cachedDpsStatus] = await Promise.all([
+      getCachedMarketSnapshot(),
+      getCachedDpsMarketStatus(),
+    ]);
     setIndices(cachedSnapshot);
+    setDpsMarketStatus(cachedDpsStatus);
 
-    const latestSnapshot = await getLatestMarketSnapshot();
+    const [latestSnapshot, latestDpsStatus] = await Promise.all([
+      getLatestMarketSnapshot(),
+      getLatestDpsMarketStatus(),
+    ]);
     setIndices(latestSnapshot);
+    setDpsMarketStatus(latestDpsStatus);
   }, []);
 
   React.useEffect(() => {
@@ -209,13 +231,6 @@ export default function MarketTabScreen() {
     () => marketList.find((indexItem) => indexItem.code === "KSE100") ?? null,
     [marketList]
   );
-  const marketStatus = React.useMemo(
-    () =>
-      evaluatePsxMarketStatus(headline?.asOf ?? null, {
-        staleThresholdMinutes: 5,
-      }),
-    [headline?.asOf]
-  );
   const hasLiveData = React.useMemo(
     () =>
       marketList.some(
@@ -234,7 +249,7 @@ export default function MarketTabScreen() {
     },
     [router]
   );
-  const isMarketOpen = marketStatus.uiStatus === "OPEN";
+  const isMarketOpen = dpsMarketStatus.uiStatus === "OPEN";
 
   React.useEffect(() => {
     let animation: Animated.CompositeAnimation | null = null;
@@ -335,7 +350,7 @@ export default function MarketTabScreen() {
                     }}
                   />
                 </View>
-                <Text
+                  <Text
                   className={[
                     "text-sm font-bold uppercase",
                     isMarketOpen
@@ -345,7 +360,7 @@ export default function MarketTabScreen() {
                     .filter(Boolean)
                     .join(" ")}
                 >
-                  {marketStatus.uiStatus}
+                  {dpsMarketStatus.stateText}
                 </Text>
               </View>
 

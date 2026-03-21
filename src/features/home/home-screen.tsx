@@ -1,9 +1,15 @@
 import AppButton from "@/components/ui/app-button";
+import AppFeedbackModal, {
+  AppFeedbackModalTone,
+} from "@/components/ui/app-feedback-modal";
 import ShariahChip from "@/components/ui/shariah-chip";
 import { getTotalDepositAmount } from "@/src/features/deposit/deposit-records";
 import { getTotalDividendFinalAmount } from "@/src/features/dividend/dividend-records";
 import { InsightDisplayMode } from "@/src/features/home/home-data";
-import { formatPKRAmount } from "@/src/features/home/home-formatters";
+import {
+  formatCompactPKRAmount,
+  formatPKRAmount,
+} from "@/src/features/home/home-formatters";
 import {
   buildHomeSnapshotFromHoldings,
   DEFAULT_INSIGHT_DISPLAY_VALUES,
@@ -15,7 +21,11 @@ import {
   getCachedMarketIndexDetail,
   getLatestMarketIndexDetail,
 } from "@/src/features/market/market-data";
-import { evaluatePsxMarketStatus } from "@/src/features/market/market-status";
+import {
+  getCachedDpsMarketStatus,
+  getLatestDpsMarketStatus,
+  DpsMarketStatusSnapshot,
+} from "@/src/features/market/dps-market-status";
 import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
 import {
   getPortfolioHoldingsWithCachedQuotes,
@@ -34,6 +44,7 @@ import {
   subscribeToInAppNotifications,
   syncPsxAnnouncementsToInAppNotifications,
 } from "@/src/features/notifications/in-app-notifications";
+import { isInternetReachable } from "@/src/lib/network";
 import { APP_COLORS } from "@/src/theme/colors";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -55,6 +66,12 @@ import {
 } from "react-native-safe-area-context";
 
 const HOME_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+
+type HomeNoticeState = {
+  title: string;
+  message: string;
+  tone: AppFeedbackModalTone;
+};
 
 function getToneClassName(tone: ValueTone): string {
   if (tone === "positive") {
@@ -166,14 +183,33 @@ export default function HomeScreen() {
   const [totalDividendValue, setTotalDividendValue] = React.useState(0);
   const [cashGuardEnabled, setCashGuardEnabled] = React.useState(false);
   const [availableFreeCash, setAvailableFreeCash] = React.useState(0);
+  const [currentPortfolioWorth, setCurrentPortfolioWorth] = React.useState(0);
   const [marketAsOf, setMarketAsOf] = React.useState<string | null>(null);
+  const [dpsMarketStatus, setDpsMarketStatus] =
+    React.useState<DpsMarketStatusSnapshot>({
+      primaryBoardKey: null,
+      primaryBoardTitle: null,
+      stateText: "CLOSED",
+      uiStatus: "CLOSED",
+      boards: [],
+      fetchedAt: null,
+      source: "fallback",
+    });
   const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [noticeState, setNoticeState] = React.useState<HomeNoticeState | null>(
+    null,
+  );
   const [unreadNotificationsCount, setUnreadNotificationsCount] =
     React.useState(0);
   const [hasHydratedInsightMode, setHasHydratedInsightMode] =
     React.useState(false);
+  const [isPortfolioWorthTooltipVisible, setIsPortfolioWorthTooltipVisible] =
+    React.useState(false);
   const openPulseAnim = React.useRef(new Animated.Value(0)).current;
   const homeRefreshRequestIdRef = React.useRef(0);
+  const portfolioWorthTooltipTimeoutRef = React.useRef<
+    ReturnType<typeof setTimeout> | null
+  >(null);
 
   const handleTradePress = React.useCallback(() => {
     router.push({
@@ -197,6 +233,17 @@ export default function HomeScreen() {
     router.push("/notifications");
   }, [router]);
 
+  const showNotice = React.useCallback(
+    (title: string, message: string, tone: AppFeedbackModalTone = "info") => {
+      setNoticeState({ title, message, tone });
+    },
+    [],
+  );
+
+  const closeNotice = React.useCallback(() => {
+    setNoticeState(null);
+  }, []);
+
   const applyHomeSnapshot = React.useCallback(
     (
       holdings: PortfolioHolding[],
@@ -207,6 +254,7 @@ export default function HomeScreen() {
         contributedCapitalAdjustment: totalDepositValue,
         returnCashAdjustment: totalDividendValue,
       });
+      setCurrentPortfolioWorth(nextHomeData.snapshot.summary.value);
       setViewModel(buildHomeViewModel(nextHomeData.snapshot));
       setInsightDisplayValues(nextHomeData.insightDisplayValues);
     },
@@ -224,6 +272,7 @@ export default function HomeScreen() {
       isCashGuardEnabled,
       cashLedgerSnapshot,
       cachedMarketDetail,
+      cachedDpsStatus,
     ] = await Promise.all([
       getPortfolioHoldingsWithCachedQuotes(),
       getTotalDividendFinalAmount(),
@@ -231,6 +280,7 @@ export default function HomeScreen() {
       getCashGuardEnabledPreference(),
       getCashLedgerSnapshot(),
       getCachedMarketIndexDetail("KSE100"),
+      getCachedDpsMarketStatus(),
     ]);
     if (requestId !== homeRefreshRequestIdRef.current) {
       return;
@@ -240,11 +290,13 @@ export default function HomeScreen() {
     setCashGuardEnabled(isCashGuardEnabled);
     setAvailableFreeCash(cashLedgerSnapshot.availableCash);
     setMarketAsOf(cachedMarketDetail?.snapshot.asOf ?? null);
+    setDpsMarketStatus(cachedDpsStatus);
     applyHomeSnapshot(cachedHoldings, totalDividendValue, totalDepositValue);
 
-    const [latestHoldings, latestMarketDetail] = await Promise.all([
+    const [latestHoldings, latestMarketDetail, latestDpsStatus] = await Promise.all([
       getPortfolioHoldingsWithLatestQuotes(),
       getLatestMarketIndexDetail("KSE100"),
+      getLatestDpsMarketStatus(),
     ]);
     if (requestId !== homeRefreshRequestIdRef.current) {
       return;
@@ -253,6 +305,7 @@ export default function HomeScreen() {
     if (latestMarketDetail?.snapshot.asOf) {
       setMarketAsOf(latestMarketDetail.snapshot.asOf);
     }
+    setDpsMarketStatus(latestDpsStatus);
     applyHomeSnapshot(latestHoldings, totalDividendValue, totalDepositValue);
 
     void syncPsxAnnouncementsToInAppNotifications();
@@ -261,11 +314,20 @@ export default function HomeScreen() {
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
+      const isOnline = await isInternetReachable();
+      if (!isOnline) {
+        showNotice(
+          "You're Offline",
+          "No internet connection detected. Connect to the internet and pull to refresh again.",
+          "error",
+        );
+        return;
+      }
       await refreshHomeSnapshot();
     } finally {
       setIsRefreshing(false);
     }
-  }, [refreshHomeSnapshot]);
+  }, [refreshHomeSnapshot, showNotice]);
 
   const refreshUnreadNotificationsCount = React.useCallback(async () => {
     const nextUnreadCount = await getUnreadInAppNotificationCount();
@@ -351,28 +413,25 @@ export default function HomeScreen() {
     () => viewModel.summaryItems.find((item) => item.key === "returnPct"),
     [viewModel.summaryItems],
   );
+  const isPortfolioWorthCompact = Math.abs(currentPortfolioWorth) >= 100_000;
+  const displayPortfolioWorth = React.useMemo(
+    () => formatCompactPKRAmount(currentPortfolioWorth, { compactFrom: 100_000 }),
+    [currentPortfolioWorth],
+  );
+  const fullPortfolioWorth = React.useMemo(
+    () => formatPKRAmount(currentPortfolioWorth),
+    [currentPortfolioWorth],
+  );
   const freeCashText = React.useMemo(() => {
     if (!cashGuardEnabled) {
       return "Unlimited";
     }
     return formatPKRAmount(availableFreeCash);
   }, [availableFreeCash, cashGuardEnabled]);
-  const marketStatus = React.useMemo(
-    () =>
-      evaluatePsxMarketStatus(marketAsOf, {
-        staleThresholdMinutes: 5,
-      }),
-    [marketAsOf],
-  );
-  const marketStatusLabel = React.useMemo(() => {
-    if (marketStatus.condition === "HALTED") {
-      return "HALTED";
-    }
-    return marketStatus.uiStatus;
-  }, [marketStatus.condition, marketStatus.uiStatus]);
+  const marketStatusLabel = dpsMarketStatus.stateText;
   const marketStatusTextClassName =
-    marketStatusLabel === "OPEN" ? "text-success-green" : "text-brand-red";
-  const isMarketOpen = marketStatusLabel === "OPEN";
+    dpsMarketStatus.uiStatus === "OPEN" ? "text-success-green" : "text-brand-red";
+  const isMarketOpen = dpsMarketStatus.uiStatus === "OPEN";
   const statusDotColor = isMarketOpen
     ? APP_COLORS.success.green
     : APP_COLORS.brand.red;
@@ -416,6 +475,29 @@ export default function HomeScreen() {
       animation?.stop();
     };
   }, [isMarketOpen, openPulseAnim]);
+
+  React.useEffect(() => {
+    return () => {
+      if (portfolioWorthTooltipTimeoutRef.current) {
+        clearTimeout(portfolioWorthTooltipTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handlePortfolioWorthPress = React.useCallback(() => {
+    if (!isPortfolioWorthCompact) {
+      return;
+    }
+
+    setIsPortfolioWorthTooltipVisible(true);
+    if (portfolioWorthTooltipTimeoutRef.current) {
+      clearTimeout(portfolioWorthTooltipTimeoutRef.current);
+    }
+
+    portfolioWorthTooltipTimeoutRef.current = setTimeout(() => {
+      setIsPortfolioWorthTooltipVisible(false);
+    }, 2000);
+  }, [isPortfolioWorthCompact]);
 
   return (
     <SafeAreaView
@@ -519,16 +601,31 @@ export default function HomeScreen() {
                 </View>
               </View>
             </View>
-            <Text
-              className={[
-                "mt-2 text-4xl font-extrabold",
-                getToneClassName(valueSummaryItem?.tone ?? "neutral"),
-              ]
-                .filter(Boolean)
-                .join(" ")}
-            >
-              {valueSummaryItem?.value ?? "PKR 0"}
-            </Text>
+            <View className="relative mt-2 self-start">
+              {isPortfolioWorthTooltipVisible && isPortfolioWorthCompact ? (
+                <View className="absolute -top-9 left-0 z-20 rounded-lg bg-app-highlight px-2.5 py-1.5 dark:bg-brand-white/90">
+                  <Text className="text-[11px] font-semibold text-brand-white dark:text-brand-purple">
+                    {fullPortfolioWorth}
+                  </Text>
+                </View>
+              ) : null}
+              <TouchableOpacity
+                activeOpacity={isPortfolioWorthCompact ? 0.82 : 1}
+                disabled={!isPortfolioWorthCompact}
+                onPress={handlePortfolioWorthPress}
+              >
+                <Text
+                  className={[
+                    "text-4xl font-extrabold",
+                    getToneClassName(valueSummaryItem?.tone ?? "neutral"),
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                >
+                  {displayPortfolioWorth}
+                </Text>
+              </TouchableOpacity>
+            </View>
             <Text
               className={[
                 "mt-1 text-sm font-semibold",
@@ -647,6 +744,14 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+      <AppFeedbackModal
+        visible={noticeState !== null}
+        title={noticeState?.title ?? ""}
+        message={noticeState?.message ?? ""}
+        tone={noticeState?.tone ?? "info"}
+        actionLabel="OK"
+        onClose={closeNotice}
+      />
     </SafeAreaView>
   );
 }

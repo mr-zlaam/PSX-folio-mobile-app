@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  formatCompactPKRAmount,
   formatKse100Points,
   formatPKRAmount,
   formatSignedPercentage,
@@ -8,6 +9,13 @@ import {
 describe("home-formatters", () => {
   test("formats PKR amounts with separators", () => {
     expect(formatPKRAmount(100000)).toBe("PKR 100,000");
+  });
+
+  test("formats compact PKR amounts for large values", () => {
+    expect(formatCompactPKRAmount(99_999)).toBe("PKR 99,999");
+    expect(formatCompactPKRAmount(100_000)).toBe("PKR 100K");
+    expect(formatCompactPKRAmount(104_549_230)).toBe("PKR 104.55M");
+    expect(formatCompactPKRAmount(1_200_000_000)).toBe("PKR 1.2B");
   });
 
   test("formats signed percentages", () => {

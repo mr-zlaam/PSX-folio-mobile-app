@@ -37,12 +37,15 @@ import {
 } from "@/src/features/home/home-formatters";
 import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
 import {
+  getAutoTaxDeductionEnabledPreference,
   BrokerSettings,
   getCashGuardEnabledPreference,
+  getDeductTaxFromCgtEnabledPreference,
+  getEffectiveCgtTaxRatePreference,
   getBrokerSettings,
-  getTaxRatesByProfilePreference,
+  getTaxComputationModePreference,
   getTaxpayerProfilePreference,
-  TaxRateByProfile,
+  TaxComputationMode,
   TaxpayerProfile,
 } from "@/src/lib/app-preferences";
 import { APP_COLORS } from "@/src/theme/colors";
@@ -70,10 +73,7 @@ type TradeNoticeState = {
   tone: AppFeedbackModalTone;
 };
 
-const FALLBACK_CGT_RATE_BY_PROFILE: TaxRateByProfile = {
-  filer: 15,
-  nonFiler: 30,
-};
+const DEFAULT_CGT_TAX_RATE_PCT = 15;
 
 function getTaxpayerProfileLabel(profile: TaxpayerProfile): string {
   return profile === "filer" ? "Filer" : "Non-Filer";
@@ -237,11 +237,17 @@ export default function TransactionsTabScreen() {
     React.useState<BrokerSettings | null>(null);
   const [taxpayerProfile, setTaxpayerProfile] =
     React.useState<TaxpayerProfile>("nonFiler");
-  const [cgtRateByProfile, setCgtRateByProfile] =
-    React.useState<TaxRateByProfile>(FALLBACK_CGT_RATE_BY_PROFILE);
+  const [taxComputationMode, setTaxComputationMode] =
+    React.useState<TaxComputationMode>("default");
+  const [effectiveCgtTaxRatePct, setEffectiveCgtTaxRatePct] = React.useState(
+    DEFAULT_CGT_TAX_RATE_PCT
+  );
+  const [autoTaxDeductionEnabled, setAutoTaxDeductionEnabled] =
+    React.useState(true);
+  const [deductTaxFromCgtEnabled, setDeductTaxFromCgtEnabled] =
+    React.useState(true);
   const [cashGuardEnabled, setCashGuardEnabled] = React.useState(false);
   const [availableCash, setAvailableCash] = React.useState(0);
-  const [deductCgtTaxOnSell, setDeductCgtTaxOnSell] = React.useState(true);
   const [hasEditedPrice, setHasEditedPrice] = React.useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = React.useState(false);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
@@ -347,22 +353,44 @@ export default function TransactionsTabScreen() {
     setAvailableCash(cashLedger.availableCash);
   }, [isEditingTrade, normalizedEditTradeId]);
 
+  const loadTaxpayerProfile = React.useCallback(async () => {
+    const [
+      savedTaxpayerProfile,
+      savedTaxComputationMode,
+      savedEffectiveCgtTaxRatePct,
+      isAutoTaxDeductionEnabled,
+      isDeductTaxFromCgtEnabled,
+    ] = await Promise.all([
+      getTaxpayerProfilePreference(),
+      getTaxComputationModePreference(),
+      getEffectiveCgtTaxRatePreference(),
+      getAutoTaxDeductionEnabledPreference(),
+      getDeductTaxFromCgtEnabledPreference(),
+    ]);
+    setTaxpayerProfile(savedTaxpayerProfile);
+    setTaxComputationMode(savedTaxComputationMode);
+    setEffectiveCgtTaxRatePct(savedEffectiveCgtTaxRatePct);
+    setAutoTaxDeductionEnabled(isAutoTaxDeductionEnabled);
+    setDeductTaxFromCgtEnabled(isDeductTaxFromCgtEnabled);
+  }, []);
+
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
       await refreshSymbols();
       await refreshQuoteForSymbol(selectedSymbol);
-      const [savedTaxpayerProfile, taxRates] = await Promise.all([
-        getTaxpayerProfilePreference(),
-        getTaxRatesByProfilePreference(),
-      ]);
-      setTaxpayerProfile(savedTaxpayerProfile);
-      setCgtRateByProfile(taxRates);
+      await loadTaxpayerProfile();
       await refreshCashLedger();
     } finally {
       setIsRefreshing(false);
     }
-  }, [refreshCashLedger, refreshQuoteForSymbol, refreshSymbols, selectedSymbol]);
+  }, [
+    loadTaxpayerProfile,
+    refreshCashLedger,
+    refreshQuoteForSymbol,
+    refreshSymbols,
+    selectedSymbol,
+  ]);
 
   React.useEffect(() => {
     if (isEditingTrade || normalizedRouteSymbol.length === 0) {
@@ -392,15 +420,6 @@ export default function TransactionsTabScreen() {
   const loadSavedBrokerSettings = React.useCallback(async () => {
     const brokerSettings = await getBrokerSettings();
     setSavedBrokerSettings(brokerSettings);
-  }, []);
-
-  const loadTaxpayerProfile = React.useCallback(async () => {
-    const [savedTaxpayerProfile, taxRates] = await Promise.all([
-      getTaxpayerProfilePreference(),
-      getTaxRatesByProfilePreference(),
-    ]);
-    setTaxpayerProfile(savedTaxpayerProfile);
-    setCgtRateByProfile(taxRates);
   }, []);
 
   useFocusEffect(
@@ -697,8 +716,10 @@ export default function TransactionsTabScreen() {
       sellGrossProfit = (parsedPrice - positionSnapshot.averageBuyPrice) * parsedUnits;
       sellNetProfit = sellGrossProfit;
 
-      if (deductCgtTaxOnSell && sellGrossProfit > 0) {
-        sellCgtRatePct = cgtRateByProfile[taxpayerProfile];
+      const isCgtTaxDeductionEnabled =
+        autoTaxDeductionEnabled && deductTaxFromCgtEnabled;
+      if (isCgtTaxDeductionEnabled && sellGrossProfit > 0) {
+        sellCgtRatePct = effectiveCgtTaxRatePct;
         sellCgtTaxAmount = (sellGrossProfit * sellCgtRatePct) / 100;
         sellNetProfit = sellGrossProfit - sellCgtTaxAmount;
         isCgtApplied = true;
@@ -738,17 +759,25 @@ export default function TransactionsTabScreen() {
           `Estimated Gross P/L: ${formatPKRAmount(sellGrossProfit)}.`,
         ];
 
-        if (deductCgtTaxOnSell) {
+        if (autoTaxDeductionEnabled && deductTaxFromCgtEnabled) {
           if (isCgtApplied) {
+            const cgtLabel =
+              taxComputationMode === "custom"
+                ? `CGT (${sellCgtRatePct}%)`
+                : `CGT (${getTaxpayerProfileLabel(
+                    taxpayerProfile
+                  )} ${sellCgtRatePct}%)`;
             messageLines.push(
-              `CGT (${getTaxpayerProfileLabel(taxpayerProfile)} ${sellCgtRatePct}%): ${formatPKRAmount(-sellCgtTaxAmount)}.`
+              `${cgtLabel}: ${formatPKRAmount(-sellCgtTaxAmount)}.`
             );
             messageLines.push(`Estimated Net P/L: ${formatPKRAmount(sellNetProfit)}.`);
           } else {
             messageLines.push("CGT not applied because this sell is not in profit.");
           }
+        } else if (!autoTaxDeductionEnabled) {
+          messageLines.push("CGT deduction is off because Auto Tax Deduction is disabled in Tax Settings.");
         } else {
-          messageLines.push("CGT deduction is turned off for this sell order.");
+          messageLines.push("CGT deduction toggle is disabled in Tax Settings.");
         }
 
         messageLines.push("Saved locally on this device.");
@@ -781,7 +810,7 @@ export default function TransactionsTabScreen() {
           savedOrder.units
         } shares of ${savedOrder.symbol} at ${formatPKRAmount(
           savedOrder.price
-        )} per share.\nSaved locally on this device.`,
+        )} per share.`,
         "success"
       );
       await refreshCashLedger();
@@ -823,13 +852,15 @@ export default function TransactionsTabScreen() {
     brokerMode,
     customBrokerFeePctInput,
     customBrokerNameInput,
-    deductCgtTaxOnSell,
     priceInput,
     selectedSymbol,
     savedBrokerSettings,
     symbolQuote.lastPrice,
     taxpayerProfile,
-    cgtRateByProfile,
+    autoTaxDeductionEnabled,
+    deductTaxFromCgtEnabled,
+    effectiveCgtTaxRatePct,
+    taxComputationMode,
     tradeDateTime,
     tradeSide,
     unitsInput,
@@ -1186,26 +1217,16 @@ export default function TransactionsTabScreen() {
                     CGT Tax
                   </Text>
                   <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
-                    {`Profile: ${getTaxpayerProfileLabel(taxpayerProfile)} (${cgtRateByProfile[taxpayerProfile]}% on profit)`}
+                    {taxComputationMode === "custom"
+                      ? `Mode: Custom (${effectiveCgtTaxRatePct}% on profit)`
+                      : `Mode: Default • ${getTaxpayerProfileLabel(taxpayerProfile)} (${effectiveCgtTaxRatePct}% on profit)`}
                   </Text>
-
-                  <View className="mt-2 flex-row items-center gap-2">
-                    <ToggleChip
-                      label="Deduct"
-                      selected={deductCgtTaxOnSell}
-                      onPress={() => setDeductCgtTaxOnSell(true)}
-                    />
-                    <ToggleChip
-                      label="Skip"
-                      selected={!deductCgtTaxOnSell}
-                      onPress={() => setDeductCgtTaxOnSell(false)}
-                    />
-                  </View>
-
                   <Text className="mt-2 text-xs font-semibold text-app-text dark:text-app-textDark">
-                    {deductCgtTaxOnSell
-                      ? "CGT will be deducted only when this sell is in profit."
-                      : "No CGT will be deducted for this sell order."}
+                    {!autoTaxDeductionEnabled
+                      ? "Auto tax deduction is disabled in Tax Settings."
+                      : !deductTaxFromCgtEnabled
+                        ? "CGT deduction toggle is disabled in Tax Settings."
+                        : "CGT will be deducted only when this sell is in profit."}
                   </Text>
                 </View>
               ) : null}

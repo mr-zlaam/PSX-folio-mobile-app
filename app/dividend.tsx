@@ -29,9 +29,12 @@ import {
 import { maybeAutoReinvestDividend } from "@/src/features/dividend/dividend-auto-reinvest";
 import { APP_COLORS } from "@/src/theme/colors";
 import {
-  getTaxRatesByProfilePreference,
+  getAutoTaxDeductionEnabledPreference,
+  getDeductTaxFromDividendEnabledPreference,
+  getEffectiveDividendTaxRatePreference,
+  getTaxComputationModePreference,
   getTaxpayerProfilePreference,
-  TaxRateByProfile,
+  TaxComputationMode,
   TaxpayerProfile,
 } from "@/src/lib/app-preferences";
 
@@ -39,10 +42,6 @@ type HoldingOption = {
   symbol: string;
   companyName: string;
   units: number;
-};
-const FALLBACK_TAX_RATE_BY_PROFILE: TaxRateByProfile = {
-  filer: 15,
-  nonFiler: 30,
 };
 
 function formatDateInput(date: Date): string {
@@ -122,14 +121,18 @@ export default function DividendScreen() {
   const [holdings, setHoldings] = React.useState<HoldingOption[]>([]);
   const [taxpayerProfile, setTaxpayerProfile] =
     React.useState<TaxpayerProfile>("nonFiler");
-  const [taxRateByProfile, setTaxRateByProfile] = React.useState<TaxRateByProfile>(
-    FALLBACK_TAX_RATE_BY_PROFILE
-  );
+  const [taxComputationMode, setTaxComputationMode] =
+    React.useState<TaxComputationMode>("default");
+  const [effectiveDividendTaxRatePct, setEffectiveDividendTaxRatePct] =
+    React.useState(0);
+  const [autoTaxDeductionEnabled, setAutoTaxDeductionEnabled] =
+    React.useState(true);
+  const [deductTaxFromDividendEnabled, setDeductTaxFromDividendEnabled] =
+    React.useState(true);
   const [symbolSearchQuery, setSymbolSearchQuery] = React.useState("");
   const [selectedSymbol, setSelectedSymbol] = React.useState("");
   const [sharesInput, setSharesInput] = React.useState("");
   const [dividendPerShareInput, setDividendPerShareInput] = React.useState("");
-  const [taxDeductionPctInput, setTaxDeductionPctInput] = React.useState("30");
   const [zakatPctInput, setZakatPctInput] = React.useState("");
   const [dividendDate, setDividendDate] = React.useState(new Date());
   const [isDatePickerVisible, setIsDatePickerVisible] = React.useState(false);
@@ -141,8 +144,6 @@ export default function DividendScreen() {
     message: string;
     tone: "success" | "error" | "info";
   } | null>(null);
-  const [hasManuallyEditedTaxPct, setHasManuallyEditedTaxPct] =
-    React.useState(false);
   const normalizedEditDividendId = React.useMemo(() => {
     const rawEditDividendId = Array.isArray(searchParams.editDividendId)
       ? searchParams.editDividendId[0]
@@ -156,10 +157,20 @@ export default function DividendScreen() {
     "mt-3 rounded-xl border border-app-text/10 bg-brand-white/90 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/20 dark:bg-brand-white/10 dark:text-app-textDark";
 
   const loadFormContext = React.useCallback(async () => {
-    const [cachedHoldings, savedTaxpayerProfile, taxRates] = await Promise.all([
+    const [
+      cachedHoldings,
+      savedTaxpayerProfile,
+      savedTaxComputationMode,
+      savedEffectiveDividendTaxRatePct,
+      isAutoTaxDeductionEnabled,
+      isDeductTaxFromDividendEnabled,
+    ] = await Promise.all([
       getPortfolioHoldingsWithCachedQuotes(),
       getTaxpayerProfilePreference(),
-      getTaxRatesByProfilePreference(),
+      getTaxComputationModePreference(),
+      getEffectiveDividendTaxRatePreference(),
+      getAutoTaxDeductionEnabledPreference(),
+      getDeductTaxFromDividendEnabledPreference(),
     ]);
 
     const normalizedCachedHoldings: HoldingOption[] = cachedHoldings
@@ -174,13 +185,11 @@ export default function DividendScreen() {
       );
     setHoldings(normalizedCachedHoldings);
 
-    if (!isEditingDividend) {
-      setTaxpayerProfile(savedTaxpayerProfile);
-    }
-    setTaxRateByProfile(taxRates);
-    if (!isEditingDividend && !hasManuallyEditedTaxPct) {
-      setTaxDeductionPctInput(String(taxRates[savedTaxpayerProfile]));
-    }
+    setTaxpayerProfile(savedTaxpayerProfile);
+    setTaxComputationMode(savedTaxComputationMode);
+    setEffectiveDividendTaxRatePct(savedEffectiveDividendTaxRatePct);
+    setAutoTaxDeductionEnabled(isAutoTaxDeductionEnabled);
+    setDeductTaxFromDividendEnabled(isDeductTaxFromDividendEnabled);
 
     const latestHoldings = await getPortfolioHoldingsWithLatestQuotes();
     const normalizedLatestHoldings: HoldingOption[] = latestHoldings
@@ -194,7 +203,7 @@ export default function DividendScreen() {
         firstHolding.symbol.localeCompare(secondHolding.symbol)
       );
     setHoldings(normalizedLatestHoldings);
-  }, [hasManuallyEditedTaxPct, isEditingDividend]);
+  }, []);
 
   React.useEffect(() => {
     void loadFormContext();
@@ -227,14 +236,11 @@ export default function DividendScreen() {
       setSymbolSearchQuery(existingRecord.symbol);
       setSharesInput(String(Math.round(existingRecord.shares)));
       setDividendPerShareInput(formatEditableNumber(existingRecord.dividendPerShare));
-      setTaxDeductionPctInput(formatEditableNumber(existingRecord.taxDeductionPct));
-      setHasManuallyEditedTaxPct(true);
       const zakatPct =
         existingRecord.grossAmount > 0
           ? (existingRecord.zakatAmount / existingRecord.grossAmount) * 100
           : 0;
       setZakatPctInput(formatEditableNumber(zakatPct));
-      setTaxpayerProfile(existingRecord.taxpayerProfile);
 
       const parsedDividendDate = new Date(existingRecord.dividendDate);
       setDividendDate(
@@ -277,8 +283,15 @@ export default function DividendScreen() {
     [dividendPerShareInput]
   );
   const taxDeductionPct = React.useMemo(
-    () => parseNonNegativeNumber(taxDeductionPctInput),
-    [taxDeductionPctInput]
+    () =>
+      autoTaxDeductionEnabled && deductTaxFromDividendEnabled
+        ? effectiveDividendTaxRatePct
+        : 0,
+    [
+      autoTaxDeductionEnabled,
+      deductTaxFromDividendEnabled,
+      effectiveDividendTaxRatePct,
+    ]
   );
   const zakatPct = React.useMemo(
     () => parseNonNegativeNumber(zakatPctInput),
@@ -370,11 +383,6 @@ export default function DividendScreen() {
         "Dividend per share must be greater than 0.",
         "error"
       );
-      return;
-    }
-
-    if (taxDeductionPct < 0) {
-      showNotice("Invalid Tax", "Tax deduction % cannot be negative.", "error");
       return;
     }
 
@@ -596,20 +604,23 @@ export default function DividendScreen() {
               <View className="flex-row gap-3">
                 <View className="flex-1">
                   <Text className="mb-1 text-xs font-semibold text-app-text dark:text-app-textDark">
-                    {`Profile: ${
-                      taxpayerProfile === "filer" ? "Filer" : "Non-Filer"
-                    } (${taxRateByProfile[taxpayerProfile]}%)`}
+                    {taxComputationMode === "custom"
+                      ? "Tax Mode: Custom"
+                      : `Profile: ${
+                          taxpayerProfile === "filer" ? "Filer" : "Non-Filer"
+                        }`}
                   </Text>
-                  <FieldInput
-                    label="Tax Deduction %"
-                    value={taxDeductionPctInput}
-                    onChangeText={(nextValue) => {
-                      setHasManuallyEditedTaxPct(true);
-                      setTaxDeductionPctInput(nextValue);
-                    }}
-                    placeholderTextColor={inputPlaceholderTextColor}
-                    keyboardType="numeric"
-                  />
+                  <View className="mt-1 rounded-xl border border-app-text/10 bg-brand-white/90 px-3 py-2 dark:border-app-highlightDark/20 dark:bg-brand-white/10">
+                    <Text className="text-xs font-semibold text-app-text dark:text-app-textDark">
+                      {autoTaxDeductionEnabled
+                        ? deductTaxFromDividendEnabled
+                          ? `Dividend Tax Deduction: ${formatEditableNumber(
+                              taxDeductionPct
+                            )}%`
+                          : "Dividend Tax Deduction: Disabled in Tax Settings"
+                        : "Auto Tax Deduction: Off"}
+                    </Text>
+                  </View>
                 </View>
 
                 <View className="flex-1">

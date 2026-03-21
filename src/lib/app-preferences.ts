@@ -6,6 +6,7 @@ export type HomeInsightDisplayModePreference = "percentage" | "price";
 export type PortfolioGroupingModePreference = "sectors" | "companies";
 export type PortfolioDisplayModePreference = "percentage" | "price";
 export type TaxpayerProfile = "filer" | "nonFiler";
+export type TaxComputationMode = "default" | "custom";
 export type TaxRateByProfile = Record<TaxpayerProfile, number>;
 export type BrokerSettings = {
   brokerName: string;
@@ -19,6 +20,12 @@ const STORAGE_KEYS = {
   portfolioGroupingMode: "@psx-portfolio/portfolio-grouping-mode",
   portfolioDisplayMode: "@psx-portfolio/portfolio-display-mode",
   taxpayerProfile: "@psx-portfolio/taxpayer-profile",
+  taxComputationMode: "@psx-portfolio/tax-computation-mode",
+  autoTaxDeductionEnabled: "@psx-portfolio/auto-tax-deduction-enabled",
+  deductTaxFromCgtEnabled: "@psx-portfolio/deduct-tax-from-cgt-enabled",
+  deductTaxFromDividendEnabled: "@psx-portfolio/deduct-tax-from-dividend-enabled",
+  customCgtTaxRatePct: "@psx-portfolio/custom-cgt-tax-rate-pct",
+  customDividendTaxRatePct: "@psx-portfolio/custom-dividend-tax-rate-pct",
   filerTaxRatePct: "@psx-portfolio/filer-tax-rate-pct",
   nonFilerTaxRatePct: "@psx-portfolio/non-filer-tax-rate-pct",
   brokerSettings: "@psx-portfolio/broker-settings",
@@ -41,6 +48,10 @@ const PORTFOLIO_DISPLAY_MODE_VALUES: readonly PortfolioDisplayModePreference[] =
 const TAXPAYER_PROFILE_VALUES: readonly TaxpayerProfile[] = [
   "filer",
   "nonFiler",
+];
+const TAX_COMPUTATION_MODE_VALUES: readonly TaxComputationMode[] = [
+  "default",
+  "custom",
 ];
 const DEFAULT_TAX_RATE_BY_PROFILE: TaxRateByProfile = {
   filer: 15,
@@ -327,6 +338,104 @@ export async function setTaxpayerProfilePreference(
   await setStoredItem(STORAGE_KEYS.taxpayerProfile, profile);
 }
 
+export async function getTaxComputationModePreference(): Promise<TaxComputationMode> {
+  return getEnumPreference(
+    STORAGE_KEYS.taxComputationMode,
+    TAX_COMPUTATION_MODE_VALUES,
+    "default"
+  );
+}
+
+export async function setTaxComputationModePreference(
+  mode: TaxComputationMode
+): Promise<void> {
+  await setStoredItem(STORAGE_KEYS.taxComputationMode, mode);
+}
+
+export async function getAutoTaxDeductionEnabledPreference(): Promise<boolean> {
+  const storedValue = await getStoredItem(STORAGE_KEYS.autoTaxDeductionEnabled);
+  if (storedValue === null) {
+    return true;
+  }
+  return storedValue === "true";
+}
+
+export async function setAutoTaxDeductionEnabledPreference(
+  enabled: boolean
+): Promise<void> {
+  await setStoredItem(STORAGE_KEYS.autoTaxDeductionEnabled, String(enabled));
+}
+
+export async function getDeductTaxFromCgtEnabledPreference(): Promise<boolean> {
+  const storedValue = await getStoredItem(STORAGE_KEYS.deductTaxFromCgtEnabled);
+  if (storedValue === null) {
+    return true;
+  }
+  return storedValue === "true";
+}
+
+export async function setDeductTaxFromCgtEnabledPreference(
+  enabled: boolean
+): Promise<void> {
+  await setStoredItem(STORAGE_KEYS.deductTaxFromCgtEnabled, String(enabled));
+}
+
+export async function getDeductTaxFromDividendEnabledPreference(): Promise<boolean> {
+  const storedValue = await getStoredItem(
+    STORAGE_KEYS.deductTaxFromDividendEnabled
+  );
+  if (storedValue === null) {
+    return true;
+  }
+  return storedValue === "true";
+}
+
+export async function setDeductTaxFromDividendEnabledPreference(
+  enabled: boolean
+): Promise<void> {
+  await setStoredItem(STORAGE_KEYS.deductTaxFromDividendEnabled, String(enabled));
+}
+
+export async function getCustomCgtTaxRatePreference(): Promise<number | null> {
+  const storedValue = await getStoredItem(STORAGE_KEYS.customCgtTaxRatePct);
+  return parseTaxRatePct(storedValue);
+}
+
+export async function setCustomCgtTaxRatePreference(
+  ratePct: number | null
+): Promise<void> {
+  if (ratePct === null) {
+    await removeStoredItem(STORAGE_KEYS.customCgtTaxRatePct);
+    return;
+  }
+
+  if (!Number.isFinite(ratePct) || ratePct < 0 || ratePct > 100) {
+    throw new Error("Invalid custom CGT tax rate.");
+  }
+
+  await setStoredItem(STORAGE_KEYS.customCgtTaxRatePct, String(ratePct));
+}
+
+export async function getCustomDividendTaxRatePreference(): Promise<number | null> {
+  const storedValue = await getStoredItem(STORAGE_KEYS.customDividendTaxRatePct);
+  return parseTaxRatePct(storedValue);
+}
+
+export async function setCustomDividendTaxRatePreference(
+  ratePct: number | null
+): Promise<void> {
+  if (ratePct === null) {
+    await removeStoredItem(STORAGE_KEYS.customDividendTaxRatePct);
+    return;
+  }
+
+  if (!Number.isFinite(ratePct) || ratePct < 0 || ratePct > 100) {
+    throw new Error("Invalid custom dividend tax rate.");
+  }
+
+  await setStoredItem(STORAGE_KEYS.customDividendTaxRatePct, String(ratePct));
+}
+
 export function getDefaultTaxRateByProfile(
   profile: TaxpayerProfile
 ): number {
@@ -379,6 +488,34 @@ export async function setCustomTaxRatePreference(
   }
 
   await setStoredItem(storageKey, String(ratePct));
+}
+
+export async function getEffectiveCgtTaxRatePreference(): Promise<number> {
+  const [mode, profile, customRate] = await Promise.all([
+    getTaxComputationModePreference(),
+    getTaxpayerProfilePreference(),
+    getCustomCgtTaxRatePreference(),
+  ]);
+
+  if (mode === "custom" && customRate !== null) {
+    return customRate;
+  }
+
+  return getDefaultTaxRateByProfile(profile);
+}
+
+export async function getEffectiveDividendTaxRatePreference(): Promise<number> {
+  const [mode, profile, customRate] = await Promise.all([
+    getTaxComputationModePreference(),
+    getTaxpayerProfilePreference(),
+    getCustomDividendTaxRatePreference(),
+  ]);
+
+  if (mode === "custom" && customRate !== null) {
+    return customRate;
+  }
+
+  return getDefaultTaxRateByProfile(profile);
 }
 
 export async function getBrokerSettings(): Promise<BrokerSettings | null> {

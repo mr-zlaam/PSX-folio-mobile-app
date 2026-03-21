@@ -698,11 +698,19 @@ export default function TransactionHistoryScreen() {
                         <TouchableOpacity
                           activeOpacity={0.88}
                           onPress={() => handleEditEntry(entry)}
-                          className="rounded-lg border border-app-highlight px-2 py-1 dark:border-app-highlightDark"
+                          accessibilityRole="button"
+                          accessibilityLabel={`Edit ${entry.type} transaction`}
+                          className="rounded-lg bg-app-highlight/10 px-2.5 py-1.5 dark:bg-brand-white/10"
                         >
-                          <Text className="text-[10px] font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                            Edit
-                          </Text>
+                          <MaterialCommunityIcons
+                            name="pencil-outline"
+                            size={16}
+                            color={
+                              isDarkMode
+                                ? APP_COLORS.brand.white
+                                : APP_COLORS.brand.purple
+                            }
+                          />
                         </TouchableOpacity>
                       ) : null}
                       {canDeleteEntry(entry) ? (
@@ -710,11 +718,22 @@ export default function TransactionHistoryScreen() {
                           activeOpacity={0.88}
                           disabled={deletingEntryId === entry.id}
                           onPress={() => handleDeleteEntry(entry)}
-                          className="rounded-lg border border-brand-red px-2 py-1"
+                          accessibilityRole="button"
+                          accessibilityLabel={`Delete ${entry.type} transaction`}
+                          className="rounded-lg bg-brand-red/15 px-2.5 py-1.5"
                         >
-                          <Text className="text-[10px] font-bold uppercase tracking-wide text-brand-red">
-                            {deletingEntryId === entry.id ? "Deleting" : "Delete"}
-                          </Text>
+                          {deletingEntryId === entry.id ? (
+                            <ActivityIndicator
+                              size="small"
+                              color={APP_COLORS.brand.red}
+                            />
+                          ) : (
+                            <MaterialCommunityIcons
+                              name="trash-can-outline"
+                              size={16}
+                              color={APP_COLORS.brand.red}
+                            />
+                          )}
                         </TouchableOpacity>
                       ) : null}
                     </View>
@@ -820,16 +839,13 @@ export default function TransactionHistoryScreen() {
 
             <View className="mt-5 flex-row items-center gap-3">
               <View className="flex-1">
-                <TouchableOpacity
-                  activeOpacity={0.88}
+                <AppButton
+                  label="Cancel"
+                  size="sm"
+                  variant="secondary"
                   disabled={deletingEntryId !== null}
                   onPress={handleCancelDelete}
-                  className="rounded-xl border border-app-highlight px-3 py-2 dark:border-app-highlightDark"
-                >
-                  <Text className="text-center text-sm font-semibold text-app-highlight dark:text-app-highlightDark">
-                    Cancel
-                  </Text>
-                </TouchableOpacity>
+                />
               </View>
               <View className="flex-1">
                 <TouchableOpacity
