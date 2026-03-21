@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import { useGuardedRouter } from "@/src/lib/navigation";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import DateTimePicker, {
   DateTimePickerEvent,
@@ -108,7 +109,7 @@ function FieldInput({
 }
 
 export default function DividendScreen() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const searchParams = useLocalSearchParams<{
     editDividendId?: string | string[];
   }>();

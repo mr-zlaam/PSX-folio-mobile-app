@@ -1,4 +1,5 @@
 import AppButton from "@/components/ui/app-button";
+import { useGuardedRouter } from "@/src/lib/navigation";
 import AppFeedbackModal, {
   AppFeedbackModalTone,
 } from "@/components/ui/app-feedback-modal";
@@ -27,7 +28,7 @@ import {
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+
 import React from "react";
 import {
   RefreshControl,
@@ -161,7 +162,7 @@ function Metric({ label, value }: { label: string; value: string }) {
 }
 
 export default function WatchlistTabScreen() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const { isShariahCompliantSymbol } = useShariahSymbols();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();

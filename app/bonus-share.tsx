@@ -1,4 +1,5 @@
 import React from "react";
+import { useGuardedRouter } from "@/src/lib/navigation";
 import {
   Platform,
   ScrollView,
@@ -7,7 +8,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import DateTimePicker, {
@@ -54,7 +55,7 @@ function parsePositiveInteger(value: string): number {
 }
 
 export default function BonusShareScreen() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";

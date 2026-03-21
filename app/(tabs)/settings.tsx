@@ -1,4 +1,5 @@
 import React from "react";
+import { useGuardedRouter } from "@/src/lib/navigation";
 import {
   ActivityIndicator,
   InteractionManager,
@@ -11,7 +12,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import { useFocusEffect } from "@react-navigation/native";
@@ -129,7 +130,7 @@ function formatBrokerSummary(brokerSettings: BrokerSettings | null): string {
 
 export default function SettingsTabScreen() {
   const insets = useSafeAreaInsets();
-  const router = useRouter();
+  const router = useGuardedRouter();
   const { colorScheme, setColorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
   const inputPlaceholderTextColor = isDarkMode

@@ -9,7 +9,8 @@ import {
 import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
 import { formatSignedPercentage } from "@/src/features/home/home-formatters";
 import { APP_COLORS } from "@/src/theme/colors";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import { useGuardedRouter } from "@/src/lib/navigation";
 import { useColorScheme } from "nativewind";
 import React from "react";
 import {
@@ -139,7 +140,7 @@ function FilterChip({
 }
 
 export default function MarketIndexStocksScreen() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const insets = useSafeAreaInsets();
   const { isShariahCompliantSymbol } = useShariahSymbols();
   const { colorScheme } = useColorScheme();

@@ -32,7 +32,8 @@ import {
   StockChartSeries,
 } from "@/src/features/trade/stock-chart-data";
 import { APP_COLORS } from "@/src/theme/colors";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import { useGuardedRouter } from "@/src/lib/navigation";
 import { useColorScheme } from "nativewind";
 import React from "react";
 import {
@@ -405,7 +406,7 @@ function CompanyMatrixTableCard({
 }
 
 export default function StockDetailScreen() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const { isShariahCompliantSymbol } = useShariahSymbols();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();

@@ -7,7 +7,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import { useGuardedRouter } from "@/src/lib/navigation";
 import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
@@ -59,7 +60,7 @@ function formatEditableAmount(value: number): string {
 }
 
 export default function DepositScreen() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const searchParams = useLocalSearchParams<{
     editDepositId?: string | string[];
   }>();

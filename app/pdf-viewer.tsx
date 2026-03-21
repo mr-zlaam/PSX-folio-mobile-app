@@ -1,6 +1,7 @@
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
 import { APP_COLORS } from "@/src/theme/colors";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import { useGuardedRouter } from "@/src/lib/navigation";
 import { useColorScheme } from "nativewind";
 import React from "react";
 import {
@@ -36,7 +37,7 @@ function buildEmbeddedViewerUrl(pdfUrl: string): string {
 }
 
 export default function PdfViewerScreen() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";

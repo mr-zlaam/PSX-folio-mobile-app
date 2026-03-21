@@ -9,8 +9,9 @@ import {
   getCachedDpsMarketStatus,
   getLatestDpsMarketStatus,
 } from "@/src/features/market/dps-market-status";
+import { useGuardedRouter } from "@/src/lib/navigation";
 import { APP_COLORS } from "@/src/theme/colors";
-import { useRouter } from "expo-router";
+
 import React from "react";
 import {
   Animated,
@@ -137,7 +138,7 @@ function MetricCell({ label, value }: { label: string; value: string }) {
 }
 
 export default function MarketTabScreen() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";

@@ -1,7 +1,8 @@
 import React from "react";
+import { useGuardedRouter } from "@/src/lib/navigation";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native";
-import { useRouter } from "expo-router";
+
 import * as DocumentPicker from "expo-document-picker";
 import * as Sharing from "expo-sharing";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -345,7 +346,7 @@ function SectorCard({
 }
 
 export default function PortfolioTabScreen() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const { isShariahCompliantSymbol } = useShariahSymbols();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();

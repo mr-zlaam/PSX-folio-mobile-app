@@ -1,5 +1,6 @@
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+import { useGuardedRouter } from "@/src/lib/navigation";
+
 import { useColorScheme } from "nativewind";
 import React from "react";
 import { ScrollView, Text, TouchableOpacity, View } from "react-native";
@@ -148,7 +149,7 @@ const MORE_SECTIONS: MoreSection[] = [
 
 export default function MoreTabScreen() {
   const insets = useSafeAreaInsets();
-  const router = useRouter();
+  const router = useGuardedRouter();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
   const iconColor = isDarkMode

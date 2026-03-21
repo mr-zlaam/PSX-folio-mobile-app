@@ -1,4 +1,5 @@
 import AppButton from "@/components/ui/app-button";
+import { useGuardedRouter } from "@/src/lib/navigation";
 import AppFeedbackModal, {
   AppFeedbackModalTone,
 } from "@/components/ui/app-feedback-modal";
@@ -48,7 +49,7 @@ import { isInternetReachable } from "@/src/lib/network";
 import { APP_COLORS } from "@/src/theme/colors";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
-import { useRouter } from "expo-router";
+
 import { useColorScheme } from "nativewind";
 import React from "react";
 import {
@@ -165,7 +166,7 @@ function HeaderActionButton({
 
 export default function HomeScreen() {
   const insets = useSafeAreaInsets();
-  const router = useRouter();
+  const router = useGuardedRouter();
   const { isShariahCompliantSymbol } = useShariahSymbols();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";

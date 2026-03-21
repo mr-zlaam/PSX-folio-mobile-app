@@ -14,7 +14,8 @@ import {
 } from "@/src/features/home/home-formatters";
 import { subscribeToTradeMutations } from "@/src/features/trade/trade-events";
 import { APP_COLORS } from "@/src/theme/colors";
-import { useFocusEffect, useRouter } from "expo-router";
+import { useFocusEffect } from "expo-router";
+import { useGuardedRouter } from "@/src/lib/navigation";
 import { useColorScheme } from "nativewind";
 import React from "react";
 import {
@@ -262,7 +263,7 @@ function AllocationBar({
 }
 
 export default function AnalyticsScreen() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";

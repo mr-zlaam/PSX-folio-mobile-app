@@ -17,7 +17,8 @@ import {
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useLocalSearchParams } from "expo-router";
+import { useGuardedRouter } from "@/src/lib/navigation";
 import { useColorScheme } from "nativewind";
 import React from "react";
 import {
@@ -110,7 +111,7 @@ function AnnouncementSourceRow({
 }
 
 export default function AnnouncementsScreen() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";

@@ -1,4 +1,4 @@
-import { useRouter } from "expo-router";
+
 import { useColorScheme } from "nativewind";
 import React from "react";
 import {
@@ -12,6 +12,7 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import ShariahChip from "@/components/ui/shariah-chip";
+import { useGuardedRouter } from "@/src/lib/navigation";
 import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
 import { APP_COLORS } from "@/src/theme/colors";
 import {
@@ -78,7 +79,7 @@ const StockRow = React.memo(function StockRow({
 );
 
 export default function StocksTabScreen() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const { isShariahCompliantSymbol } = useShariahSymbols();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();

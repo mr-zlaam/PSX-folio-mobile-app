@@ -1,4 +1,5 @@
 import React from "react";
+import { useGuardedRouter } from "@/src/lib/navigation";
 import {
   RefreshControl,
   ScrollView,
@@ -8,7 +9,7 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useRouter } from "expo-router";
+
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
@@ -141,7 +142,7 @@ function TaxSwitchRow({
 }
 
 export default function TaxSettingsScreen() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";

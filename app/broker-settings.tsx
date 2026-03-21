@@ -1,6 +1,7 @@
 import React from "react";
+import { useGuardedRouter } from "@/src/lib/navigation";
 import { ScrollView, Text, TextInput, View } from "react-native";
-import { useRouter } from "expo-router";
+
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import AppButton from "@/components/ui/app-button";
@@ -21,7 +22,7 @@ type BrokerSettingsNotice = {
 };
 
 export default function BrokerSettingsScreen() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";

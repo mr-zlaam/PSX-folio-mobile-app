@@ -1,4 +1,5 @@
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
+import { useGuardedRouter } from "@/src/lib/navigation";
 import {
   getInAppNotifications,
   InAppNotification,
@@ -9,7 +10,7 @@ import {
 } from "@/src/features/notifications/in-app-notifications";
 import { APP_COLORS } from "@/src/theme/colors";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { useRouter } from "expo-router";
+
 import { useColorScheme } from "nativewind";
 import React from "react";
 import {
@@ -69,7 +70,7 @@ function sortNotificationsByDateDesc(
 }
 
 export default function NotificationsScreen() {
-  const router = useRouter();
+  const router = useGuardedRouter();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
