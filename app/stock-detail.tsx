@@ -359,30 +359,33 @@ function CompanyMatrixTableCard({
         {table.title}
       </Text>
 
-      <View className="mt-2 gap-2">
+      <View className="mt-2">
         {visibleRows.map((rowItem, rowIndex) => (
           <View
             key={`${rowItem.label}-${rowIndex}`}
-            className="rounded-xl bg-brand-white/75 p-3 dark:bg-brand-white/10"
+            className={[
+              "py-2",
+              rowIndex < visibleRows.length - 1
+                ? "border-b border-app-highlight/12 dark:border-app-highlightDark/20"
+                : "",
+            ]
+              .filter(Boolean)
+              .join(" ")}
           >
             <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
               {rowItem.label}
             </Text>
 
-            <View className="mt-2 flex-row flex-wrap">
+            <View className="mt-2 gap-1">
               {table.columns.map((columnLabel, columnIndex) => (
                 <View
-                  key={`${columnLabel}-${rowItem.label}-${columnIndex}`}
-                  className="w-1/2 pb-2 pr-2"
+                  key={`${rowItem.label}-${columnLabel}-${columnIndex}`}
+                  className="flex-row items-start justify-between gap-3"
                 >
-                  <Text className="text-[10px] font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                  <Text className="flex-1 text-[11px] font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                     {columnLabel}
                   </Text>
-                  <Text
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                    className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark"
-                  >
+                  <Text className="max-w-[58%] text-right text-sm font-semibold text-app-text dark:text-app-textDark">
                     {rowItem.values[columnIndex] ?? "--"}
                   </Text>
                 </View>
