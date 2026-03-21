@@ -68,17 +68,248 @@ type InAppNotificationListener = () => void;
 
 const notificationListeners = new Set<InAppNotificationListener>();
 
+const MONTH_INDEX_BY_NAME: Record<string, number> = {
+  jan: 0,
+  feb: 1,
+  mar: 2,
+  apr: 3,
+  may: 4,
+  jun: 5,
+  jul: 6,
+  aug: 7,
+  sep: 8,
+  oct: 9,
+  nov: 10,
+  dec: 11,
+};
+
+function parseTimeParts(timeText: string | null | undefined): {
+  hours: number;
+  minutes: number;
+  seconds: number;
+} {
+  const normalized = (timeText ?? "").trim().toLowerCase();
+  if (normalized.length === 0) {
+    return {
+      hours: 0,
+      minutes: 0,
+      seconds: 0,
+    };
+  }
+
+  const timeMatch = normalized.match(
+    /^(\d{1,2})(?::(\d{2}))?(?::(\d{2}))?\s*(am|pm)?$/,
+  );
+  if (!timeMatch) {
+    return {
+      hours: 0,
+      minutes: 0,
+      seconds: 0,
+    };
+  }
+
+  let hours = Number(timeMatch[1] ?? "0");
+  const minutes = Number(timeMatch[2] ?? "0");
+  const seconds = Number(timeMatch[3] ?? "0");
+  const meridiem = timeMatch[4] ?? "";
+
+  if (meridiem === "pm" && hours < 12) {
+    hours += 12;
+  } else if (meridiem === "am" && hours === 12) {
+    hours = 0;
+  }
+
+  return {
+    hours: Number.isFinite(hours) ? hours : 0,
+    minutes: Number.isFinite(minutes) ? minutes : 0,
+    seconds: Number.isFinite(seconds) ? seconds : 0,
+  };
+}
+
+function buildIsoFromDateParts(
+  year: number,
+  month: number,
+  day: number,
+  timeText?: string | null,
+): string | null {
+  if (!Number.isInteger(year) || !Number.isInteger(month) || !Number.isInteger(day)) {
+    return null;
+  }
+
+  if (month < 0 || month > 11 || day <= 0 || day > 31) {
+    return null;
+  }
+
+  const { hours, minutes, seconds } = parseTimeParts(timeText);
+  const parsedDate = new Date(year, month, day, hours, minutes, seconds);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  return parsedDate.toISOString();
+}
+
+function parseFlexibleDateToIso(
+  dateText: string,
+  timeText?: string | null,
+): string | null {
+  const normalizedDate = dateText.trim().replace(/,/g, " ").replace(/\s+/g, " ");
+  if (normalizedDate.length === 0) {
+    return null;
+  }
+
+  if (/^\d{4}-\d{2}-\d{2}$/.test(normalizedDate)) {
+    const parsedIso = new Date(
+      `${normalizedDate}T${(timeText ?? "").trim().length > 0 ? (timeText ?? "").trim() : "00:00:00"}`,
+    );
+    if (!Number.isNaN(parsedIso.getTime())) {
+      return parsedIso.toISOString();
+    }
+  }
+
+  const ddMmYyyyMatch = normalizedDate.match(/^(\d{1,2})[/-](\d{1,2})[/-](\d{2,4})$/);
+  if (ddMmYyyyMatch) {
+    const day = Number(ddMmYyyyMatch[1]);
+    const month = Number(ddMmYyyyMatch[2]) - 1;
+    let year = Number(ddMmYyyyMatch[3]);
+    if (year < 100) {
+      year += year >= 70 ? 1900 : 2000;
+    }
+    return buildIsoFromDateParts(year, month, day, timeText);
+  }
+
+  const ddMmmYyyyMatch = normalizedDate.match(
+    /^(\d{1,2})[-\s]([A-Za-z]{3,9})[-\s](\d{2,4})$/,
+  );
+  if (ddMmmYyyyMatch) {
+    const day = Number(ddMmmYyyyMatch[1]);
+    const monthName = ddMmmYyyyMatch[2].slice(0, 3).toLowerCase();
+    const month = MONTH_INDEX_BY_NAME[monthName];
+    let year = Number(ddMmmYyyyMatch[3]);
+    if (year < 100) {
+      year += year >= 70 ? 1900 : 2000;
+    }
+    if (typeof month === "number") {
+      return buildIsoFromDateParts(year, month, day, timeText);
+    }
+  }
+
+  const mmmDdYyyyMatch = normalizedDate.match(
+    /^([A-Za-z]{3,9})\s+(\d{1,2})\s+(\d{2,4})$/,
+  );
+  if (mmmDdYyyyMatch) {
+    const monthName = mmmDdYyyyMatch[1].slice(0, 3).toLowerCase();
+    const day = Number(mmmDdYyyyMatch[2]);
+    let year = Number(mmmDdYyyyMatch[3]);
+    if (year < 100) {
+      year += year >= 70 ? 1900 : 2000;
+    }
+    const month = MONTH_INDEX_BY_NAME[monthName];
+    if (typeof month === "number") {
+      return buildIsoFromDateParts(year, month, day, timeText);
+    }
+  }
+
+  const parsedFallback = new Date(
+    `${normalizedDate}${(timeText ?? "").trim().length > 0 ? ` ${(timeText ?? "").trim()}` : ""}`,
+  );
+  if (Number.isNaN(parsedFallback.getTime())) {
+    return null;
+  }
+
+  return parsedFallback.toISOString();
+}
+
+function inferOccurredAtFromMessage(message: string): string | null {
+  const segments = message
+    .split("•")
+    .map((segment) => segment.trim())
+    .filter((segment) => segment.length > 0);
+
+  if (segments.length === 0) {
+    return null;
+  }
+
+  const lastSegment = segments[segments.length - 1] ?? "";
+  const secondLastSegment = segments[segments.length - 2] ?? "";
+
+  const dateWithTimeIso = parseFlexibleDateToIso(secondLastSegment, lastSegment);
+  if (dateWithTimeIso) {
+    return dateWithTimeIso;
+  }
+
+  const dateOnlyIso = parseFlexibleDateToIso(lastSegment);
+  if (dateOnlyIso) {
+    return dateOnlyIso;
+  }
+
+  return null;
+}
+
+function getSortTimestamp(notification: InAppNotification): number {
+  const primaryOccurredAt =
+    notification.occurredAt ?? inferOccurredAtFromMessage(notification.message);
+  if (primaryOccurredAt) {
+    const parsed = new Date(primaryOccurredAt).getTime();
+    if (!Number.isNaN(parsed)) {
+      return parsed;
+    }
+  }
+
+  const createdAt = new Date(notification.createdAt).getTime();
+  if (Number.isNaN(createdAt)) {
+    return 0;
+  }
+
+  return createdAt;
+}
+
+function getNormalizedOccurredAt(notification: InAppNotification): string | null {
+  if (notification.occurredAt) {
+    const parsed = new Date(notification.occurredAt).getTime();
+    if (!Number.isNaN(parsed)) {
+      return notification.occurredAt;
+    }
+  }
+
+  return inferOccurredAtFromMessage(notification.message);
+}
+
+function getOccurredAtFromAnnouncementItem(
+  announcementItem: PsxAnnouncementItem,
+): string | null {
+  if (announcementItem.occurredAt) {
+    const parsed = new Date(announcementItem.occurredAt).getTime();
+    if (!Number.isNaN(parsed)) {
+      return announcementItem.occurredAt;
+    }
+  }
+
+  return parseFlexibleDateToIso(
+    announcementItem.dateLabel,
+    announcementItem.timeLabel,
+  );
+}
+
 function normalizeNotifications(
   notifications: InAppNotification[],
 ): InAppNotification[] {
-  return [...notifications]
+  const normalizedNotifications = notifications.map((notification) => {
+    const normalizedOccurredAt = getNormalizedOccurredAt(notification);
+    if (normalizedOccurredAt === notification.occurredAt) {
+      return notification;
+    }
+
+    return {
+      ...notification,
+      occurredAt: normalizedOccurredAt,
+    };
+  });
+
+  return [...normalizedNotifications]
     .sort((firstItem, secondItem) => {
-      const firstTime = firstItem.occurredAt
-        ? new Date(firstItem.occurredAt).getTime()
-        : new Date(firstItem.createdAt).getTime();
-      const secondTime = secondItem.occurredAt
-        ? new Date(secondItem.occurredAt).getTime()
-        : new Date(secondItem.createdAt).getTime();
+      const firstTime = getSortTimestamp(firstItem);
+      const secondTime = getSortTimestamp(secondItem);
 
       if (firstTime === secondTime) {
         return secondItem.createdAt.localeCompare(firstItem.createdAt);
@@ -120,7 +351,7 @@ function buildNotificationFromAnnouncement(
     message: buildNotificationMessage(item),
     symbol: item.symbol,
     pdfUrl: item.pdfUrl,
-    occurredAt: item.occurredAt,
+    occurredAt: getOccurredAtFromAnnouncementItem(item),
     createdAt,
     readAt: null,
   };
@@ -129,34 +360,85 @@ function buildNotificationFromAnnouncement(
 function appendAnnouncementNotifications(
   store: NotificationStore,
   announcementItems: PsxAnnouncementItem[],
-): number {
+): {
+  createdCount: number;
+  updatedCount: number;
+} {
   if (announcementItems.length === 0) {
-    return 0;
+    return {
+      createdCount: 0,
+      updatedCount: 0,
+    };
   }
 
-  const existingAnnouncementIds = new Set(
-    store.notifications.map((notification) => notification.announcementId),
+  const existingNotificationIndexByAnnouncementId = new Map(
+    store.notifications.map((notification, index) => [
+      notification.announcementId,
+      index,
+    ]),
   );
 
   const newNotifications: InAppNotification[] = [];
+  let updatedCount = 0;
   for (const announcementItem of announcementItems) {
-    if (existingAnnouncementIds.has(announcementItem.id)) {
+    const existingNotificationIndex = existingNotificationIndexByAnnouncementId.get(
+      announcementItem.id,
+    );
+    if (typeof existingNotificationIndex === "number") {
+      const existingNotification = store.notifications[existingNotificationIndex];
+      if (!existingNotification) {
+        continue;
+      }
+
+      const updatedOccurredAt = getOccurredAtFromAnnouncementItem(announcementItem);
+      const updatedMessage = buildNotificationMessage(announcementItem);
+      const shouldUpdate =
+        existingNotification.title !== announcementItem.title ||
+        existingNotification.message !== updatedMessage ||
+        existingNotification.sourceLabel !== announcementItem.sourceLabel ||
+        existingNotification.symbol !== announcementItem.symbol ||
+        existingNotification.pdfUrl !== announcementItem.pdfUrl ||
+        (updatedOccurredAt !== null &&
+          existingNotification.occurredAt !== updatedOccurredAt);
+
+      if (shouldUpdate) {
+        store.notifications[existingNotificationIndex] = {
+          ...existingNotification,
+          sourceLabel: announcementItem.sourceLabel,
+          title: announcementItem.title,
+          message: updatedMessage,
+          symbol: announcementItem.symbol,
+          pdfUrl: announcementItem.pdfUrl,
+          occurredAt: updatedOccurredAt ?? existingNotification.occurredAt,
+        };
+        updatedCount += 1;
+      }
+
       continue;
     }
 
     newNotifications.push(buildNotificationFromAnnouncement(announcementItem));
-    existingAnnouncementIds.add(announcementItem.id);
+    existingNotificationIndexByAnnouncementId.set(
+      announcementItem.id,
+      store.notifications.length + newNotifications.length - 1,
+    );
   }
 
-  if (newNotifications.length === 0) {
-    return 0;
+  if (newNotifications.length === 0 && updatedCount === 0) {
+    return {
+      createdCount: 0,
+      updatedCount: 0,
+    };
   }
 
   store.notifications = normalizeNotifications([
     ...newNotifications,
     ...store.notifications,
   ]);
-  return newNotifications.length;
+  return {
+    createdCount: newNotifications.length,
+    updatedCount,
+  };
 }
 
 function emitNotificationChange(): void {
@@ -360,9 +642,12 @@ export async function registerAnnouncementItemsAsNotifications(
   }
 
   const store = await readStore();
-  const createdCount = appendAnnouncementNotifications(store, announcementItems);
+  const { createdCount, updatedCount } = appendAnnouncementNotifications(
+    store,
+    announcementItems,
+  );
 
-  if (createdCount <= 0) {
+  if (createdCount <= 0 && updatedCount <= 0) {
     return 0;
   }
 
@@ -399,11 +684,14 @@ export async function syncPsxAnnouncementsToInAppNotifications(options?: {
 
     const announcementItems = snapshots.flatMap((snapshot) => snapshot.items);
     const store = await readStore();
-    const createdCount = appendAnnouncementNotifications(store, announcementItems);
+    const { createdCount, updatedCount } = appendAnnouncementNotifications(
+      store,
+      announcementItems,
+    );
     store.lastSyncedAt = new Date().toISOString();
     await writeStore(store);
 
-    if (createdCount > 0) {
+    if (createdCount > 0 || updatedCount > 0) {
       emitNotificationChange();
     }
 

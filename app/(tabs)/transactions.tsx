@@ -40,7 +40,9 @@ import {
   BrokerSettings,
   getCashGuardEnabledPreference,
   getBrokerSettings,
+  getTaxRatesByProfilePreference,
   getTaxpayerProfilePreference,
+  TaxRateByProfile,
   TaxpayerProfile,
 } from "@/src/lib/app-preferences";
 import { APP_COLORS } from "@/src/theme/colors";
@@ -68,7 +70,7 @@ type TradeNoticeState = {
   tone: AppFeedbackModalTone;
 };
 
-const CGT_RATE_BY_PROFILE: Record<TaxpayerProfile, number> = {
+const FALLBACK_CGT_RATE_BY_PROFILE: TaxRateByProfile = {
   filer: 15,
   nonFiler: 30,
 };
@@ -235,6 +237,8 @@ export default function TransactionsTabScreen() {
     React.useState<BrokerSettings | null>(null);
   const [taxpayerProfile, setTaxpayerProfile] =
     React.useState<TaxpayerProfile>("nonFiler");
+  const [cgtRateByProfile, setCgtRateByProfile] =
+    React.useState<TaxRateByProfile>(FALLBACK_CGT_RATE_BY_PROFILE);
   const [cashGuardEnabled, setCashGuardEnabled] = React.useState(false);
   const [availableCash, setAvailableCash] = React.useState(0);
   const [deductCgtTaxOnSell, setDeductCgtTaxOnSell] = React.useState(true);
@@ -348,8 +352,12 @@ export default function TransactionsTabScreen() {
     try {
       await refreshSymbols();
       await refreshQuoteForSymbol(selectedSymbol);
-      const savedTaxpayerProfile = await getTaxpayerProfilePreference();
+      const [savedTaxpayerProfile, taxRates] = await Promise.all([
+        getTaxpayerProfilePreference(),
+        getTaxRatesByProfilePreference(),
+      ]);
       setTaxpayerProfile(savedTaxpayerProfile);
+      setCgtRateByProfile(taxRates);
       await refreshCashLedger();
     } finally {
       setIsRefreshing(false);
@@ -387,8 +395,12 @@ export default function TransactionsTabScreen() {
   }, []);
 
   const loadTaxpayerProfile = React.useCallback(async () => {
-    const savedTaxpayerProfile = await getTaxpayerProfilePreference();
+    const [savedTaxpayerProfile, taxRates] = await Promise.all([
+      getTaxpayerProfilePreference(),
+      getTaxRatesByProfilePreference(),
+    ]);
     setTaxpayerProfile(savedTaxpayerProfile);
+    setCgtRateByProfile(taxRates);
   }, []);
 
   useFocusEffect(
@@ -686,7 +698,7 @@ export default function TransactionsTabScreen() {
       sellNetProfit = sellGrossProfit;
 
       if (deductCgtTaxOnSell && sellGrossProfit > 0) {
-        sellCgtRatePct = CGT_RATE_BY_PROFILE[taxpayerProfile];
+        sellCgtRatePct = cgtRateByProfile[taxpayerProfile];
         sellCgtTaxAmount = (sellGrossProfit * sellCgtRatePct) / 100;
         sellNetProfit = sellGrossProfit - sellCgtTaxAmount;
         isCgtApplied = true;
@@ -817,6 +829,7 @@ export default function TransactionsTabScreen() {
     savedBrokerSettings,
     symbolQuote.lastPrice,
     taxpayerProfile,
+    cgtRateByProfile,
     tradeDateTime,
     tradeSide,
     unitsInput,
@@ -1173,7 +1186,7 @@ export default function TransactionsTabScreen() {
                     CGT Tax
                   </Text>
                   <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
-                    {`Profile: ${getTaxpayerProfileLabel(taxpayerProfile)} (${CGT_RATE_BY_PROFILE[taxpayerProfile]}% on profit)`}
+                    {`Profile: ${getTaxpayerProfileLabel(taxpayerProfile)} (${cgtRateByProfile[taxpayerProfile]}% on profit)`}
                   </Text>
 
                   <View className="mt-2 flex-row items-center gap-2">

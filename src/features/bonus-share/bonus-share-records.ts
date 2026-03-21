@@ -1,5 +1,8 @@
 import * as FileSystem from "expo-file-system/legacy";
-import { emitBonusShareMutation } from "@/src/features/trade/trade-events";
+import {
+  emitBonusShareDeletedMutation,
+  emitBonusShareMutation,
+} from "@/src/features/trade/trade-events";
 
 export type BonusShareRecordInput = {
   symbol: string;
@@ -136,6 +139,43 @@ export async function saveBonusShareRecord(
 export async function getSavedBonusShareRecords(): Promise<BonusShareRecord[]> {
   const store = await readStore();
   return store.records;
+}
+
+export async function deleteBonusShareRecord(
+  bonusShareId: string
+): Promise<BonusShareRecord> {
+  const normalizedBonusShareId = bonusShareId.trim();
+  if (normalizedBonusShareId.length === 0) {
+    throw new Error("Invalid bonus share id.");
+  }
+
+  const store = await readStore();
+  const existingRecordIndex = store.records.findIndex(
+    (record) => record.id === normalizedBonusShareId
+  );
+  if (existingRecordIndex < 0) {
+    throw new Error("Bonus share record not found.");
+  }
+
+  const deletedRecord = store.records[existingRecordIndex];
+  const nextRecords = store.records.filter(
+    (record) => record.id !== normalizedBonusShareId
+  );
+
+  const nextStore: BonusShareStore = {
+    version: 1,
+    records: nextRecords,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await writeStore(nextStore);
+  emitBonusShareDeletedMutation({
+    bonusShareId: deletedRecord.id,
+    symbol: deletedRecord.symbol,
+    createdAt: new Date().toISOString(),
+  });
+
+  return deletedRecord;
 }
 
 export async function clearSavedBonusShareRecords(): Promise<void> {

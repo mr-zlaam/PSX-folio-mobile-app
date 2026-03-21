@@ -1,5 +1,7 @@
 import React from "react";
 import {
+  ActivityIndicator,
+  Modal,
   RefreshControl,
   ScrollView,
   Text,
@@ -10,25 +12,37 @@ import { useRouter } from "expo-router";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
+import AppButton from "@/components/ui/app-button";
+import AppFeedbackModal from "@/components/ui/app-feedback-modal";
 import { formatPKRAmount } from "@/src/features/home/home-formatters";
 import {
   BonusShareRecord,
+  deleteBonusShareRecord,
   getSavedBonusShareRecords,
 } from "@/src/features/bonus-share/bonus-share-records";
 import {
+  deleteDepositRecord,
   DepositRecord,
   getSavedDepositRecords,
 } from "@/src/features/deposit/deposit-records";
 import {
+  deleteTradeOrder,
   getSavedTradeOrders,
   TradeOrderRecord,
 } from "@/src/features/trade/trade-orders";
 import {
+  deleteDividendRecord,
   DividendRecord,
   getSavedDividendRecords,
 } from "@/src/features/dividend/dividend-records";
 import { subscribeToTradeMutations } from "@/src/features/trade/trade-events";
 import { APP_COLORS } from "@/src/theme/colors";
+import {
+  BottomSheetBackdrop,
+  BottomSheetModal,
+  BottomSheetView,
+} from "@gorhom/bottom-sheet";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 type TransactionEntryType = "buy" | "sell" | "dividend" | "deposit" | "bonus";
 
@@ -228,6 +242,51 @@ function canEditEntry(entry: TransactionEntry): boolean {
   );
 }
 
+function canDeleteEntry(entry: TransactionEntry): boolean {
+  return (
+    entry.type === "buy" ||
+    entry.type === "sell" ||
+    entry.type === "deposit" ||
+    entry.type === "dividend" ||
+    entry.type === "bonus"
+  );
+}
+
+function getEntryDeleteCopy(entry: TransactionEntry): {
+  title: string;
+  message: string;
+} {
+  if (entry.type === "buy" || entry.type === "sell") {
+    return {
+      title: "Delete Trade Transaction",
+      message:
+        "This trade will be removed and portfolio values will be recalculated immediately.",
+    };
+  }
+
+  if (entry.type === "deposit") {
+    return {
+      title: "Delete Deposit Transaction",
+      message:
+        "This deposit will be removed and free cash/portfolio values will be recalculated immediately.",
+    };
+  }
+
+  if (entry.type === "dividend") {
+    return {
+      title: "Delete Dividend Transaction",
+      message:
+        "This dividend will be removed and all related totals will be recalculated immediately.",
+    };
+  }
+
+  return {
+    title: "Delete Bonus Share Transaction",
+    message:
+      "This bonus share entry will be removed and holdings/portfolio values will be recalculated immediately.",
+  };
+}
+
 function FilterChip({
   label,
   selected,
@@ -274,6 +333,36 @@ export default function TransactionHistoryScreen() {
   const [entries, setEntries] = React.useState<TransactionEntry[]>([]);
   const [rangeFilter, setRangeFilter] = React.useState<TransactionRangeFilter>("7D");
   const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [deletingEntryId, setDeletingEntryId] = React.useState<string | null>(null);
+  const [pendingDeleteEntry, setPendingDeleteEntry] =
+    React.useState<TransactionEntry | null>(null);
+  const [notice, setNotice] = React.useState<{
+    title: string;
+    message: string;
+    tone: "success" | "error" | "info";
+  } | null>(null);
+  const addTransactionSheetRef = React.useRef<BottomSheetModal>(null);
+  const addTransactionSheetSnapPoints = React.useMemo(() => ["42%"], []);
+
+  const addTransactionSheetBackdrop = React.useCallback(
+    (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        pressBehavior="close"
+      />
+    ),
+    []
+  );
+
+  const closeAddTransactionSheet = React.useCallback(() => {
+    addTransactionSheetRef.current?.dismiss();
+  }, []);
+
+  const openAddTransactionSheet = React.useCallback(() => {
+    addTransactionSheetRef.current?.present();
+  }, []);
 
   const loadTransactionHistory = React.useCallback(async () => {
     const [savedOrders, savedDividends, savedDeposits, savedBonuses] = await Promise.all([
@@ -362,6 +451,103 @@ export default function TransactionHistoryScreen() {
     [router]
   );
 
+  const handleOpenTradeForm = React.useCallback(() => {
+    router.push({
+      pathname: "/(tabs)/transactions",
+      params: {
+        lockSymbol: "0",
+      },
+    });
+  }, [router]);
+
+  const handleOpenDeposit = React.useCallback(() => {
+    closeAddTransactionSheet();
+    router.push("/deposit");
+  }, [closeAddTransactionSheet, router]);
+
+  const handleOpenDividend = React.useCallback(() => {
+    closeAddTransactionSheet();
+    router.push("/dividend");
+  }, [closeAddTransactionSheet, router]);
+
+  const handleOpenBonusShare = React.useCallback(() => {
+    closeAddTransactionSheet();
+    router.push("/bonus-share");
+  }, [closeAddTransactionSheet, router]);
+
+  const deleteEntryAndRefresh = React.useCallback(
+    async (entry: TransactionEntry) => {
+      if (deletingEntryId !== null) {
+        return;
+      }
+
+      setDeletingEntryId(entry.id);
+      try {
+        if (entry.type === "buy" || entry.type === "sell") {
+          await deleteTradeOrder(entry.sourceId);
+        } else if (entry.type === "deposit") {
+          await deleteDepositRecord(entry.sourceId);
+        } else if (entry.type === "dividend") {
+          await deleteDividendRecord(entry.sourceId);
+        } else {
+          await deleteBonusShareRecord(entry.sourceId);
+        }
+
+        await loadTransactionHistory();
+        setNotice({
+          title: "Transaction Deleted",
+          message:
+            "The transaction was removed and your portfolio has been recalculated.",
+          tone: "success",
+        });
+      } catch {
+        setNotice({
+          title: "Delete Failed",
+          message: "Could not delete this transaction. Please try again.",
+          tone: "error",
+        });
+      } finally {
+        setDeletingEntryId(null);
+      }
+    },
+    [deletingEntryId, loadTransactionHistory]
+  );
+
+  const handleDeleteEntry = React.useCallback(
+    (entry: TransactionEntry) => {
+      if (deletingEntryId !== null) {
+        return;
+      }
+
+      setPendingDeleteEntry(entry);
+    },
+    [deletingEntryId]
+  );
+
+  const handleCancelDelete = React.useCallback(() => {
+    if (deletingEntryId !== null) {
+      return;
+    }
+    setPendingDeleteEntry(null);
+  }, [deletingEntryId]);
+
+  const handleConfirmDelete = React.useCallback(() => {
+    if (!pendingDeleteEntry) {
+      return;
+    }
+
+    void deleteEntryAndRefresh(pendingDeleteEntry).finally(() => {
+      setPendingDeleteEntry(null);
+    });
+  }, [deleteEntryAndRefresh, pendingDeleteEntry]);
+
+  const deleteCopy = React.useMemo(() => {
+    if (!pendingDeleteEntry) {
+      return null;
+    }
+    return getEntryDeleteCopy(pendingDeleteEntry);
+  }, [pendingDeleteEntry]);
+
   return (
     <SafeAreaView
       edges={["top", "left", "right"]}
@@ -396,6 +582,28 @@ export default function TransactionHistoryScreen() {
             </Text>
 
             <View className="w-14" />
+          </View>
+
+          <View className="flex-row items-center gap-3">
+            <View className="flex-1">
+              <AppButton
+                label="Trade"
+                variant="danger"
+                size="sm"
+                onPress={handleOpenTradeForm}
+              />
+            </View>
+            <TouchableOpacity
+              activeOpacity={0.9}
+              onPress={openAddTransactionSheet}
+              className="h-11 w-11 items-center justify-center rounded-xl bg-app-highlight dark:bg-app-highlightDark"
+            >
+              <MaterialCommunityIcons
+                name="plus"
+                size={22}
+                color={isDarkMode ? APP_COLORS.brand.purple : APP_COLORS.brand.white}
+              />
+            </TouchableOpacity>
           </View>
 
           <View className="rounded-2xl bg-brand-white/95 p-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
@@ -485,17 +693,31 @@ export default function TransactionHistoryScreen() {
                     <Text className="text-xs font-semibold text-app-text dark:text-app-textDark">
                       {formatRecordDateTime(entry.occurredAt)}
                     </Text>
-                    {canEditEntry(entry) ? (
-                      <TouchableOpacity
-                        activeOpacity={0.88}
-                        onPress={() => handleEditEntry(entry)}
-                        className="rounded-lg border border-app-highlight px-2 py-1 dark:border-app-highlightDark"
-                      >
-                        <Text className="text-[10px] font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                          Edit
-                        </Text>
-                      </TouchableOpacity>
-                    ) : null}
+                    <View className="flex-row items-center gap-2">
+                      {canEditEntry(entry) ? (
+                        <TouchableOpacity
+                          activeOpacity={0.88}
+                          onPress={() => handleEditEntry(entry)}
+                          className="rounded-lg border border-app-highlight px-2 py-1 dark:border-app-highlightDark"
+                        >
+                          <Text className="text-[10px] font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                            Edit
+                          </Text>
+                        </TouchableOpacity>
+                      ) : null}
+                      {canDeleteEntry(entry) ? (
+                        <TouchableOpacity
+                          activeOpacity={0.88}
+                          disabled={deletingEntryId === entry.id}
+                          onPress={() => handleDeleteEntry(entry)}
+                          className="rounded-lg border border-brand-red px-2 py-1"
+                        >
+                          <Text className="text-[10px] font-bold uppercase tracking-wide text-brand-red">
+                            {deletingEntryId === entry.id ? "Deleting" : "Delete"}
+                          </Text>
+                        </TouchableOpacity>
+                      ) : null}
+                    </View>
                   </View>
                 </View>
               ))}
@@ -503,6 +725,148 @@ export default function TransactionHistoryScreen() {
           )}
         </View>
       </ScrollView>
+
+      <BottomSheetModal
+        ref={addTransactionSheetRef}
+        snapPoints={addTransactionSheetSnapPoints}
+        enablePanDownToClose
+        backdropComponent={addTransactionSheetBackdrop}
+        backgroundStyle={{
+          backgroundColor: isDarkMode
+            ? APP_COLORS.brand.purple
+            : APP_COLORS.brand.white,
+        }}
+        handleIndicatorStyle={{
+          backgroundColor: isDarkMode
+            ? APP_COLORS.brand.white
+            : APP_COLORS.brand.purple,
+        }}
+      >
+        <BottomSheetView
+          style={{
+            paddingHorizontal: 16,
+            paddingTop: 8,
+            paddingBottom: insets.bottom + 16,
+          }}
+        >
+          <Text className="text-center text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+            Add Transaction
+          </Text>
+
+          <View className="mt-4 gap-3">
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={handleOpenDeposit}
+              className="rounded-xl bg-brand-white/90 px-4 py-3 shadow-sm shadow-app-highlight/20 dark:bg-brand-white/10 dark:shadow-none dark:border dark:border-app-highlightDark/25"
+            >
+              <Text className="text-base font-bold text-app-text dark:text-app-textDark">
+                Add Deposit
+              </Text>
+              <Text className="mt-0.5 text-xs font-semibold text-app-text dark:text-app-textDark">
+                Add portfolio funding cash.
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={handleOpenDividend}
+              className="rounded-xl bg-brand-white/90 px-4 py-3 shadow-sm shadow-app-highlight/20 dark:bg-brand-white/10 dark:shadow-none dark:border dark:border-app-highlightDark/25"
+            >
+              <Text className="text-base font-bold text-app-text dark:text-app-textDark">
+                Add Dividend
+              </Text>
+              <Text className="mt-0.5 text-xs font-semibold text-app-text dark:text-app-textDark">
+                Record dividend payout for a symbol.
+              </Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={handleOpenBonusShare}
+              className="rounded-xl bg-brand-white/90 px-4 py-3 shadow-sm shadow-app-highlight/20 dark:bg-brand-white/10 dark:shadow-none dark:border dark:border-app-highlightDark/25"
+            >
+              <Text className="text-base font-bold text-app-text dark:text-app-textDark">
+                Add Bonus Share
+              </Text>
+              <Text className="mt-0.5 text-xs font-semibold text-app-text dark:text-app-textDark">
+                Add bonus shares to holdings.
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+        </BottomSheetView>
+      </BottomSheetModal>
+
+      <Modal
+        visible={pendingDeleteEntry !== null}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={handleCancelDelete}
+      >
+        <View className="flex-1 items-center justify-center bg-brand-purple/70 px-6">
+          <View className="w-full max-w-md rounded-3xl border border-app-highlight/20 bg-app-bg p-5 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border-app-highlightDark/20 dark:bg-app-bgDark">
+            <Text className="text-xs font-bold uppercase tracking-wide text-brand-red">
+              Confirm Delete
+            </Text>
+
+            <Text className="mt-3 text-lg font-extrabold text-app-text dark:text-app-textDark">
+              {deleteCopy?.title ?? "Delete Transaction"}
+            </Text>
+            <Text className="mt-2 text-sm font-semibold leading-6 text-app-text dark:text-app-textDark">
+              {deleteCopy?.message ??
+                "This action will remove the transaction and recalculate portfolio values."}
+            </Text>
+
+            <View className="mt-5 flex-row items-center gap-3">
+              <View className="flex-1">
+                <TouchableOpacity
+                  activeOpacity={0.88}
+                  disabled={deletingEntryId !== null}
+                  onPress={handleCancelDelete}
+                  className="rounded-xl border border-app-highlight px-3 py-2 dark:border-app-highlightDark"
+                >
+                  <Text className="text-center text-sm font-semibold text-app-highlight dark:text-app-highlightDark">
+                    Cancel
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <View className="flex-1">
+                <TouchableOpacity
+                  activeOpacity={0.88}
+                  disabled={deletingEntryId !== null}
+                  onPress={handleConfirmDelete}
+                  className={[
+                    "rounded-xl bg-brand-red px-3 py-2",
+                    deletingEntryId !== null ? "opacity-70" : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                >
+                  {deletingEntryId !== null ? (
+                    <View className="items-center justify-center">
+                      <ActivityIndicator size="small" color={APP_COLORS.brand.white} />
+                    </View>
+                  ) : (
+                    <Text className="text-center text-sm font-semibold text-brand-white">
+                      Delete
+                    </Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <AppFeedbackModal
+        visible={notice !== null}
+        title={notice?.title ?? ""}
+        message={notice?.message ?? ""}
+        tone={notice?.tone ?? "info"}
+        actionLabel="Done"
+        onClose={() => setNotice(null)}
+      />
     </SafeAreaView>
   );
 }

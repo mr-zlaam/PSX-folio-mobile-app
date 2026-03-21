@@ -6,6 +6,7 @@ export type HomeInsightDisplayModePreference = "percentage" | "price";
 export type PortfolioGroupingModePreference = "sectors" | "companies";
 export type PortfolioDisplayModePreference = "percentage" | "price";
 export type TaxpayerProfile = "filer" | "nonFiler";
+export type TaxRateByProfile = Record<TaxpayerProfile, number>;
 export type BrokerSettings = {
   brokerName: string;
   transactionFeePct: number;
@@ -18,6 +19,8 @@ const STORAGE_KEYS = {
   portfolioGroupingMode: "@psx-portfolio/portfolio-grouping-mode",
   portfolioDisplayMode: "@psx-portfolio/portfolio-display-mode",
   taxpayerProfile: "@psx-portfolio/taxpayer-profile",
+  filerTaxRatePct: "@psx-portfolio/filer-tax-rate-pct",
+  nonFilerTaxRatePct: "@psx-portfolio/non-filer-tax-rate-pct",
   brokerSettings: "@psx-portfolio/broker-settings",
   cashGuardEnabled: "@psx-portfolio/cash-guard-enabled",
   dividendAutoReinvestEnabled: "@psx-portfolio/dividend-auto-reinvest-enabled",
@@ -39,6 +42,10 @@ const TAXPAYER_PROFILE_VALUES: readonly TaxpayerProfile[] = [
   "filer",
   "nonFiler",
 ];
+const DEFAULT_TAX_RATE_BY_PROFILE: TaxRateByProfile = {
+  filer: 15,
+  nonFiler: 30,
+};
 
 type PreferencesStore = Record<string, string>;
 
@@ -189,6 +196,29 @@ function parseBrokerSettings(rawValue: string | null): BrokerSettings | null {
   }
 }
 
+function parseTaxRatePct(rawValue: string | null): number | null {
+  if (!rawValue) {
+    return null;
+  }
+
+  const parsedValue = Number(rawValue);
+  if (
+    !Number.isFinite(parsedValue) ||
+    parsedValue < 0 ||
+    parsedValue > 100
+  ) {
+    return null;
+  }
+
+  return parsedValue;
+}
+
+function getTaxRateStorageKey(profile: TaxpayerProfile): string {
+  return profile === "filer"
+    ? STORAGE_KEYS.filerTaxRatePct
+    : STORAGE_KEYS.nonFilerTaxRatePct;
+}
+
 export async function getOnboardingComplete(): Promise<boolean> {
   const storedValue = await getStoredItem(STORAGE_KEYS.onboardingComplete);
   return storedValue === "true";
@@ -295,6 +325,60 @@ export async function setTaxpayerProfilePreference(
   profile: TaxpayerProfile
 ): Promise<void> {
   await setStoredItem(STORAGE_KEYS.taxpayerProfile, profile);
+}
+
+export function getDefaultTaxRateByProfile(
+  profile: TaxpayerProfile
+): number {
+  return DEFAULT_TAX_RATE_BY_PROFILE[profile];
+}
+
+export async function getCustomTaxRatePreference(
+  profile: TaxpayerProfile
+): Promise<number | null> {
+  const storageKey = getTaxRateStorageKey(profile);
+  const storedValue = await getStoredItem(storageKey);
+  return parseTaxRatePct(storedValue);
+}
+
+export async function getTaxRateByProfilePreference(
+  profile: TaxpayerProfile
+): Promise<number> {
+  const customRate = await getCustomTaxRatePreference(profile);
+  if (customRate !== null) {
+    return customRate;
+  }
+
+  return getDefaultTaxRateByProfile(profile);
+}
+
+export async function getTaxRatesByProfilePreference(): Promise<TaxRateByProfile> {
+  const [filerRate, nonFilerRate] = await Promise.all([
+    getTaxRateByProfilePreference("filer"),
+    getTaxRateByProfilePreference("nonFiler"),
+  ]);
+
+  return {
+    filer: filerRate,
+    nonFiler: nonFilerRate,
+  };
+}
+
+export async function setCustomTaxRatePreference(
+  profile: TaxpayerProfile,
+  ratePct: number | null
+): Promise<void> {
+  const storageKey = getTaxRateStorageKey(profile);
+  if (ratePct === null) {
+    await removeStoredItem(storageKey);
+    return;
+  }
+
+  if (!Number.isFinite(ratePct) || ratePct < 0 || ratePct > 100) {
+    throw new Error("Invalid tax rate.");
+  }
+
+  await setStoredItem(storageKey, String(ratePct));
 }
 
 export async function getBrokerSettings(): Promise<BrokerSettings | null> {

@@ -1,5 +1,8 @@
 import * as FileSystem from "expo-file-system/legacy";
-import { emitDividendMutation } from "@/src/features/trade/trade-events";
+import {
+  emitDividendDeletedMutation,
+  emitDividendMutation,
+} from "@/src/features/trade/trade-events";
 import { TaxpayerProfile } from "@/src/lib/app-preferences";
 
 export type DividendRecordInput = {
@@ -278,6 +281,42 @@ export async function updateDividendRecord(
 export async function getSavedDividendRecords(): Promise<DividendRecord[]> {
   const store = await readStore();
   return store.records;
+}
+
+export async function deleteDividendRecord(
+  dividendId: string
+): Promise<DividendRecord> {
+  const normalizedDividendId = dividendId.trim();
+  if (normalizedDividendId.length === 0) {
+    throw new Error("Invalid dividend id.");
+  }
+
+  const store = await readStore();
+  const existingRecordIndex = store.records.findIndex(
+    (record) => record.id === normalizedDividendId
+  );
+  if (existingRecordIndex < 0) {
+    throw new Error("Dividend record not found.");
+  }
+
+  const deletedRecord = store.records[existingRecordIndex];
+  const nextRecords = store.records.filter(
+    (record) => record.id !== normalizedDividendId
+  );
+
+  const nextStore: DividendStore = {
+    version: 1,
+    records: nextRecords,
+    updatedAt: new Date().toISOString(),
+  };
+  await writeStore(nextStore);
+  emitDividendDeletedMutation({
+    dividendId: deletedRecord.id,
+    symbol: deletedRecord.symbol,
+    createdAt: new Date().toISOString(),
+  });
+
+  return deletedRecord;
 }
 
 export async function getTotalDividendFinalAmount(): Promise<number> {

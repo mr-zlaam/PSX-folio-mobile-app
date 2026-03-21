@@ -1,5 +1,8 @@
 import * as FileSystem from "expo-file-system/legacy";
-import { emitDepositMutation } from "@/src/features/trade/trade-events";
+import {
+  emitDepositDeletedMutation,
+  emitDepositMutation,
+} from "@/src/features/trade/trade-events";
 
 export type DepositRecordInput = {
   amount: number;
@@ -195,6 +198,39 @@ export async function updateDepositRecord(
 export async function getSavedDepositRecords(): Promise<DepositRecord[]> {
   const store = await readStore();
   return store.records;
+}
+
+export async function deleteDepositRecord(depositId: string): Promise<DepositRecord> {
+  const normalizedDepositId = depositId.trim();
+  if (normalizedDepositId.length === 0) {
+    throw new Error("Invalid deposit id.");
+  }
+
+  const store = await readStore();
+  const existingRecordIndex = store.records.findIndex(
+    (record) => record.id === normalizedDepositId
+  );
+  if (existingRecordIndex < 0) {
+    throw new Error("Deposit record not found.");
+  }
+
+  const deletedRecord = store.records[existingRecordIndex];
+  const nextRecords = store.records.filter(
+    (record) => record.id !== normalizedDepositId
+  );
+  const nextStore: DepositStore = {
+    version: 1,
+    records: nextRecords,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await writeStore(nextStore);
+  emitDepositDeletedMutation({
+    depositId: deletedRecord.id,
+    createdAt: new Date().toISOString(),
+  });
+
+  return deletedRecord;
 }
 
 export async function getTotalDepositAmount(): Promise<number> {

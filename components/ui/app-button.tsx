@@ -27,8 +27,14 @@ const variantClassMap: Record<ButtonVariant, string> = {
   primary:
     "bg-button-primary border-button-primary dark:bg-button-neutral dark:border-button-neutral",
   secondary:
-    "bg-app-highlight/5 border-app-highlight/25 dark:bg-brand-white/5 dark:border-app-highlightDark/35",
+    "bg-brand-white border-app-highlight/25 dark:bg-brand-white/5 dark:border-app-highlightDark/35",
   danger: "bg-button-danger border-button-danger",
+};
+
+const variantShadowClassMap: Record<ButtonVariant, string> = {
+  primary: "shadow-sm shadow-app-highlight/30 dark:shadow-none",
+  secondary: "shadow-none",
+  danger: "shadow-none",
 };
 
 const textVariantClassMap: Record<ButtonVariant, string> = {
@@ -107,11 +113,12 @@ function AppButton({
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
       className={[
-        "items-center justify-center rounded-2xl border shadow-sm",
+        "items-center justify-center rounded-2xl border overflow-hidden",
         "flex-row gap-2",
         fullWidth ? "w-full" : "self-start",
         sizeClassMap[size],
         variantClassMap[variant],
+        variantShadowClassMap[variant],
         isDisabled ? "opacity-60" : "",
         className ?? "",
       ]

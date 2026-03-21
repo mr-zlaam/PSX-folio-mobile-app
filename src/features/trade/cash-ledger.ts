@@ -62,7 +62,7 @@ export async function getCashLedgerSnapshot(options?: {
   const scopedTrades =
     scope === "all"
       ? trades
-      : trades.filter((trade) => trade.cashGuardApplied !== false);
+      : trades.filter((trade) => trade.cashGuardApplied === true);
 
   const effectiveTrades =
     excludeTradeId.length > 0

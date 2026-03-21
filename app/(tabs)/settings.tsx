@@ -1,6 +1,7 @@
 import React from "react";
 import {
   ActivityIndicator,
+  InteractionManager,
   Modal,
   RefreshControl,
   ScrollView,
@@ -37,11 +38,14 @@ import {
 import {
   AppTheme,
   BrokerSettings,
+  getDefaultTaxRateByProfile,
   getCashGuardEnabledPreference,
   getDividendAutoReinvestEnabledPreference,
   getBrokerSettings,
+  getTaxRatesByProfilePreference,
   getTaxpayerProfilePreference,
   setCashGuardEnabledPreference,
+  setCustomTaxRatePreference,
   setDividendAutoReinvestEnabledPreference,
   setTaxpayerProfilePreference,
   TaxpayerProfile,
@@ -167,6 +171,27 @@ function formatBrokerSummary(brokerSettings: BrokerSettings | null): string {
   return `${brokerSettings.brokerName} • ${brokerSettings.transactionFeePct}% fee`;
 }
 
+function parseTaxRateInput(value: string): number | null {
+  const parsed = Number(value.trim().replace(/,/g, ""));
+  if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
+    return null;
+  }
+
+  return parsed;
+}
+
+function formatTaxRateInput(value: number): string {
+  if (!Number.isFinite(value) || value < 0) {
+    return "0";
+  }
+
+  if (Number.isInteger(value)) {
+    return String(value);
+  }
+
+  return value.toFixed(2);
+}
+
 export default function SettingsTabScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -176,12 +201,22 @@ export default function SettingsTabScreen() {
     ? APP_COLORS.text.placeholderDark
     : APP_COLORS.text.placeholderLight;
   const currentTheme: AppTheme = isDarkMode ? "dark" : "light";
+  const pendingThemeTaskRef = React.useRef<ReturnType<
+    typeof InteractionManager.runAfterInteractions
+  > | null>(null);
+  const [themeSwitchValue, setThemeSwitchValue] = React.useState(
+    currentTheme === "dark"
+  );
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [brokerSettings, setBrokerSettingsState] = React.useState<BrokerSettings | null>(
     null
   );
   const [taxpayerProfile, setTaxpayerProfile] =
     React.useState<TaxpayerProfile>("nonFiler");
+  const [filerTaxRateInput, setFilerTaxRateInput] = React.useState("15");
+  const [nonFilerTaxRateInput, setNonFilerTaxRateInput] = React.useState("30");
+  const [taxRateErrorText, setTaxRateErrorText] = React.useState<string | null>(null);
+  const [isSavingTaxRates, setIsSavingTaxRates] = React.useState(false);
   const [cashGuardEnabled, setCashGuardEnabled] = React.useState(false);
   const [dividendAutoReinvestEnabled, setDividendAutoReinvestEnabled] =
     React.useState(false);
@@ -199,9 +234,15 @@ export default function SettingsTabScreen() {
     setBrokerSettingsState(savedBrokerSettings);
   }, []);
 
-  const loadTaxpayerProfile = React.useCallback(async () => {
-    const savedTaxpayerProfile = await getTaxpayerProfilePreference();
+  const loadTaxSettings = React.useCallback(async () => {
+    const [savedTaxpayerProfile, taxRates] = await Promise.all([
+      getTaxpayerProfilePreference(),
+      getTaxRatesByProfilePreference(),
+    ]);
     setTaxpayerProfile(savedTaxpayerProfile);
+    setFilerTaxRateInput(formatTaxRateInput(taxRates.filer));
+    setNonFilerTaxRateInput(formatTaxRateInput(taxRates.nonFiler));
+    setTaxRateErrorText(null);
   }, []);
 
   const loadCashGuardPreference = React.useCallback(async () => {
@@ -217,12 +258,12 @@ export default function SettingsTabScreen() {
   useFocusEffect(
     React.useCallback(() => {
       void loadBrokerSettings();
-      void loadTaxpayerProfile();
+      void loadTaxSettings();
       void loadCashGuardPreference();
       void loadDividendAutoReinvestPreference();
     }, [
       loadBrokerSettings,
-      loadTaxpayerProfile,
+      loadTaxSettings,
       loadCashGuardPreference,
       loadDividendAutoReinvestPreference,
     ])
@@ -235,7 +276,7 @@ export default function SettingsTabScreen() {
         getLatestKse100Summary(),
         getLatestSymbols(),
         loadBrokerSettings(),
-        loadTaxpayerProfile(),
+        loadTaxSettings(),
         loadCashGuardPreference(),
         loadDividendAutoReinvestPreference(),
       ]);
@@ -245,21 +286,33 @@ export default function SettingsTabScreen() {
   }, [
     loadBrokerSettings,
     loadCashGuardPreference,
-    loadTaxpayerProfile,
+    loadTaxSettings,
     loadDividendAutoReinvestPreference,
   ]);
 
   const handleThemeChange = React.useCallback(
-    async (theme: AppTheme) => {
-      setColorScheme(theme);
-      try {
-        await setThemePreference(theme);
-      } catch {
-        // Keep active theme change even if persistence fails.
-      }
+    (theme: AppTheme) => {
+      setThemeSwitchValue(theme === "dark");
+      pendingThemeTaskRef.current?.cancel();
+      pendingThemeTaskRef.current = InteractionManager.runAfterInteractions(() => {
+        setColorScheme(theme);
+        void setThemePreference(theme).catch(() => {
+          // Keep active theme change even if persistence fails.
+        });
+      });
     },
     [setColorScheme]
   );
+
+  React.useEffect(() => {
+    setThemeSwitchValue(currentTheme === "dark");
+  }, [currentTheme]);
+
+  React.useEffect(() => {
+    return () => {
+      pendingThemeTaskRef.current?.cancel();
+    };
+  }, []);
 
   const handleTaxpayerProfileChange = React.useCallback(
     async (nextProfile: TaxpayerProfile) => {
@@ -272,6 +325,53 @@ export default function SettingsTabScreen() {
     },
     []
   );
+
+  const handleSaveTaxRates = React.useCallback(async () => {
+    const parsedFilerRate = parseTaxRateInput(filerTaxRateInput);
+    const parsedNonFilerRate = parseTaxRateInput(nonFilerTaxRateInput);
+
+    if (parsedFilerRate === null || parsedNonFilerRate === null) {
+      setTaxRateErrorText(
+        "Enter valid tax percentages between 0 and 100 for both profiles."
+      );
+      return;
+    }
+
+    setTaxRateErrorText(null);
+    setIsSavingTaxRates(true);
+    try {
+      await Promise.all([
+        setCustomTaxRatePreference("filer", parsedFilerRate),
+        setCustomTaxRatePreference("nonFiler", parsedNonFilerRate),
+      ]);
+      setFilerTaxRateInput(formatTaxRateInput(parsedFilerRate));
+      setNonFilerTaxRateInput(formatTaxRateInput(parsedNonFilerRate));
+    } catch {
+      setTaxRateErrorText("Could not save tax rates. Please try again.");
+    } finally {
+      setIsSavingTaxRates(false);
+    }
+  }, [filerTaxRateInput, nonFilerTaxRateInput]);
+
+  const handleUseDefaultTaxRates = React.useCallback(async () => {
+    setIsSavingTaxRates(true);
+    setTaxRateErrorText(null);
+    try {
+      await Promise.all([
+        setCustomTaxRatePreference("filer", null),
+        setCustomTaxRatePreference("nonFiler", null),
+      ]);
+
+      setFilerTaxRateInput(formatTaxRateInput(getDefaultTaxRateByProfile("filer")));
+      setNonFilerTaxRateInput(
+        formatTaxRateInput(getDefaultTaxRateByProfile("nonFiler"))
+      );
+    } catch {
+      setTaxRateErrorText("Could not reset tax rates. Please try again.");
+    } finally {
+      setIsSavingTaxRates(false);
+    }
+  }, []);
 
   const handleCashGuardToggle = React.useCallback(async (nextValue: boolean) => {
     setCashGuardEnabled(nextValue);
@@ -407,7 +507,7 @@ export default function SettingsTabScreen() {
               <SettingSwitchRow
                 label="Dark Mode"
                 description="Turn on dark mode for the whole app."
-                value={currentTheme === "dark"}
+                value={themeSwitchValue}
                 onValueChange={(nextValue) => {
                   void handleThemeChange(nextValue ? "dark" : "light");
                 }}
@@ -463,7 +563,7 @@ export default function SettingsTabScreen() {
               Tax Profile
             </Text>
             <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
-              Filer: 15% CGT & dividend tax. Non-Filer: 30%.
+              Set CGT/dividend tax percentages for each profile.
             </Text>
 
             <View className="mt-3 flex-row gap-2">
@@ -481,6 +581,71 @@ export default function SettingsTabScreen() {
                   void handleTaxpayerProfileChange("nonFiler");
                 }}
               />
+            </View>
+
+            <View className="mt-4 flex-row gap-3">
+              <View className="flex-1">
+                <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                  Filer Tax %
+                </Text>
+                <TextInput
+                  value={filerTaxRateInput}
+                  onChangeText={setFilerTaxRateInput}
+                  keyboardType="numeric"
+                  placeholder="15"
+                  placeholderTextColor={inputPlaceholderTextColor}
+                  editable={!isSavingTaxRates}
+                  className="mt-1 rounded-xl border border-app-highlight/15 bg-app-highlight/5 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/25 dark:bg-brand-white/5 dark:text-app-textDark"
+                />
+              </View>
+              <View className="flex-1">
+                <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                  Non-Filer Tax %
+                </Text>
+                <TextInput
+                  value={nonFilerTaxRateInput}
+                  onChangeText={setNonFilerTaxRateInput}
+                  keyboardType="numeric"
+                  placeholder="30"
+                  placeholderTextColor={inputPlaceholderTextColor}
+                  editable={!isSavingTaxRates}
+                  className="mt-1 rounded-xl border border-app-highlight/15 bg-app-highlight/5 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/25 dark:bg-brand-white/5 dark:text-app-textDark"
+                />
+              </View>
+            </View>
+
+            {taxRateErrorText ? (
+              <Text className="mt-2 text-xs font-semibold text-brand-red">
+                {taxRateErrorText}
+              </Text>
+            ) : null}
+
+            <View className="mt-3 flex-row gap-2">
+              <View className="flex-1">
+                <AppButton
+                  label="Save Tax Rates"
+                  variant="primary"
+                  size="sm"
+                  loading={isSavingTaxRates}
+                  onPress={() => {
+                    void handleSaveTaxRates();
+                  }}
+                />
+              </View>
+              <View className="flex-1">
+                <TouchableOpacity
+                  activeOpacity={0.88}
+                  disabled={isSavingTaxRates}
+                  onPress={() => {
+                    void handleUseDefaultTaxRates();
+                  }}
+                  className="h-11 items-center justify-center rounded-xl border border-app-highlight bg-button-neutral dark:border-app-highlightDark dark:bg-transparent"
+                >
+                  <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                    Use Defaults
+                  </Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
 

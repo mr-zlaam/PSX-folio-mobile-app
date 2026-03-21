@@ -173,6 +173,7 @@ export default function HomeScreen() {
   const [hasHydratedInsightMode, setHasHydratedInsightMode] =
     React.useState(false);
   const openPulseAnim = React.useRef(new Animated.Value(0)).current;
+  const homeRefreshRequestIdRef = React.useRef(0);
 
   const handleTradePress = React.useCallback(() => {
     router.push({
@@ -213,6 +214,9 @@ export default function HomeScreen() {
   );
 
   const refreshHomeSnapshot = React.useCallback(async () => {
+    const requestId = homeRefreshRequestIdRef.current + 1;
+    homeRefreshRequestIdRef.current = requestId;
+
     const [
       cachedHoldings,
       totalDividendValue,
@@ -228,6 +232,10 @@ export default function HomeScreen() {
       getCashLedgerSnapshot(),
       getCachedMarketIndexDetail("KSE100"),
     ]);
+    if (requestId !== homeRefreshRequestIdRef.current) {
+      return;
+    }
+
     setTotalDividendValue(totalDividendValue);
     setCashGuardEnabled(isCashGuardEnabled);
     setAvailableFreeCash(cashLedgerSnapshot.availableCash);
@@ -238,6 +246,10 @@ export default function HomeScreen() {
       getPortfolioHoldingsWithLatestQuotes(),
       getLatestMarketIndexDetail("KSE100"),
     ]);
+    if (requestId !== homeRefreshRequestIdRef.current) {
+      return;
+    }
+
     if (latestMarketDetail?.snapshot.asOf) {
       setMarketAsOf(latestMarketDetail.snapshot.asOf);
     }
@@ -343,9 +355,7 @@ export default function HomeScreen() {
     if (!cashGuardEnabled) {
       return "Unlimited";
     }
-
-    const normalizedFreeCash = Math.max(0, availableFreeCash);
-    return formatPKRAmount(normalizedFreeCash);
+    return formatPKRAmount(availableFreeCash);
   }, [availableFreeCash, cashGuardEnabled]);
   const marketStatus = React.useMemo(
     () =>
@@ -445,12 +455,12 @@ export default function HomeScreen() {
             <TouchableOpacity
               activeOpacity={0.88}
               onPress={handleOpenNotifications}
-              className="relative h-11 w-11 items-center justify-center rounded-xl bg-app-highlight dark:bg-app-highlightDark"
+              className="relative h-11 w-11 items-center justify-center"
             >
               <MaterialCommunityIcons
                 name="bell-outline"
                 size={22}
-                color={isDarkMode ? APP_COLORS.brand.purple : APP_COLORS.brand.white}
+                color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
               />
 
               {unreadNotificationsCount > 0 ? (

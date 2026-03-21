@@ -29,7 +29,9 @@ import {
 import { maybeAutoReinvestDividend } from "@/src/features/dividend/dividend-auto-reinvest";
 import { APP_COLORS } from "@/src/theme/colors";
 import {
+  getTaxRatesByProfilePreference,
   getTaxpayerProfilePreference,
+  TaxRateByProfile,
   TaxpayerProfile,
 } from "@/src/lib/app-preferences";
 
@@ -38,10 +40,10 @@ type HoldingOption = {
   companyName: string;
   units: number;
 };
-
-function getDefaultTaxPctByProfile(profile: TaxpayerProfile): number {
-  return profile === "filer" ? 15 : 30;
-}
+const FALLBACK_TAX_RATE_BY_PROFILE: TaxRateByProfile = {
+  filer: 15,
+  nonFiler: 30,
+};
 
 function formatDateInput(date: Date): string {
   const year = date.getFullYear();
@@ -120,6 +122,9 @@ export default function DividendScreen() {
   const [holdings, setHoldings] = React.useState<HoldingOption[]>([]);
   const [taxpayerProfile, setTaxpayerProfile] =
     React.useState<TaxpayerProfile>("nonFiler");
+  const [taxRateByProfile, setTaxRateByProfile] = React.useState<TaxRateByProfile>(
+    FALLBACK_TAX_RATE_BY_PROFILE
+  );
   const [symbolSearchQuery, setSymbolSearchQuery] = React.useState("");
   const [selectedSymbol, setSelectedSymbol] = React.useState("");
   const [sharesInput, setSharesInput] = React.useState("");
@@ -151,9 +156,10 @@ export default function DividendScreen() {
     "mt-3 rounded-xl border border-app-text/10 bg-brand-white/90 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/20 dark:bg-brand-white/10 dark:text-app-textDark";
 
   const loadFormContext = React.useCallback(async () => {
-    const [cachedHoldings, savedTaxpayerProfile] = await Promise.all([
+    const [cachedHoldings, savedTaxpayerProfile, taxRates] = await Promise.all([
       getPortfolioHoldingsWithCachedQuotes(),
       getTaxpayerProfilePreference(),
+      getTaxRatesByProfilePreference(),
     ]);
 
     const normalizedCachedHoldings: HoldingOption[] = cachedHoldings
@@ -171,8 +177,9 @@ export default function DividendScreen() {
     if (!isEditingDividend) {
       setTaxpayerProfile(savedTaxpayerProfile);
     }
+    setTaxRateByProfile(taxRates);
     if (!isEditingDividend && !hasManuallyEditedTaxPct) {
-      setTaxDeductionPctInput(String(getDefaultTaxPctByProfile(savedTaxpayerProfile)));
+      setTaxDeductionPctInput(String(taxRates[savedTaxpayerProfile]));
     }
 
     const latestHoldings = await getPortfolioHoldingsWithLatestQuotes();
@@ -589,7 +596,9 @@ export default function DividendScreen() {
               <View className="flex-row gap-3">
                 <View className="flex-1">
                   <Text className="mb-1 text-xs font-semibold text-app-text dark:text-app-textDark">
-                    {`Profile: ${taxpayerProfile === "filer" ? "Filer (15%)" : "Non-Filer (30%)"}`}
+                    {`Profile: ${
+                      taxpayerProfile === "filer" ? "Filer" : "Non-Filer"
+                    } (${taxRateByProfile[taxpayerProfile]}%)`}
                   </Text>
                   <FieldInput
                     label="Tax Deduction %"

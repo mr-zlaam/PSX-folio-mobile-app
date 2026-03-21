@@ -1,7 +1,10 @@
 import * as FileSystem from "expo-file-system/legacy";
 import { getSavedBonusShareRecords } from "@/src/features/bonus-share/bonus-share-records";
 import { getPositionSnapshotForSymbol } from "@/src/features/portfolio/position-ledger";
-import { emitTradeMutation } from "@/src/features/trade/trade-events";
+import {
+  emitTradeDeletedMutation,
+  emitTradeMutation,
+} from "@/src/features/trade/trade-events";
 
 export type TradeSide = "buy" | "sell";
 export type BrokerMode = "saved" | "custom";
@@ -62,7 +65,8 @@ function getSafeOrdersStore(value: unknown): TradeOrdersStore {
 
   const rawStore = value as Partial<TradeOrdersStore>;
   const rawOrders = Array.isArray(rawStore.orders) ? rawStore.orders : [];
-  const validOrders = rawOrders.filter(
+  const validOrders = rawOrders
+    .filter(
     (order): order is TradeOrderRecord =>
       Boolean(order) &&
       typeof order.id === "string" &&
@@ -80,7 +84,12 @@ function getSafeOrdersStore(value: unknown): TradeOrdersStore {
       (typeof order.cashGuardApplied === "boolean" ||
         typeof order.cashGuardApplied === "undefined") &&
       typeof order.createdAt === "string"
-  );
+    )
+    .map((order) => ({
+      ...order,
+      // Legacy records may not have this field; treat them as non-guarded.
+      cashGuardApplied: order.cashGuardApplied === true,
+    }));
 
   return {
     version: 1,
@@ -171,7 +180,7 @@ export async function saveTradeOrder(
     cashGuardApplied:
       typeof orderInput.cashGuardApplied === "boolean"
         ? orderInput.cashGuardApplied
-        : true,
+        : false,
     createdAt: new Date().toISOString(),
   };
 
@@ -267,7 +276,7 @@ export async function updateTradeOrder(
     cashGuardApplied:
       typeof orderInput.cashGuardApplied === "boolean"
         ? orderInput.cashGuardApplied
-        : (existingOrder.cashGuardApplied ?? true),
+        : (existingOrder.cashGuardApplied ?? false),
   };
 
   const nextOrders = [...store.orders];
@@ -294,6 +303,39 @@ export async function updateTradeOrder(
 export async function getSavedTradeOrders(): Promise<TradeOrderRecord[]> {
   const store = await readStore();
   return store.orders;
+}
+
+export async function deleteTradeOrder(orderId: string): Promise<TradeOrderRecord> {
+  const normalizedOrderId = orderId.trim();
+  if (normalizedOrderId.length === 0) {
+    throw new Error("Invalid trade order id.");
+  }
+
+  const store = await readStore();
+  const existingOrderIndex = store.orders.findIndex(
+    (order) => order.id === normalizedOrderId
+  );
+  if (existingOrderIndex < 0) {
+    throw new Error("Trade order not found.");
+  }
+
+  const deletedOrder = store.orders[existingOrderIndex];
+  const nextOrders = store.orders.filter((order) => order.id !== normalizedOrderId);
+  const nextStore: TradeOrdersStore = {
+    version: 1,
+    orders: nextOrders,
+    updatedAt: new Date().toISOString(),
+  };
+
+  await writeStore(nextStore);
+  emitTradeDeletedMutation({
+    orderId: deletedOrder.id,
+    symbol: deletedOrder.symbol,
+    side: deletedOrder.side,
+    createdAt: new Date().toISOString(),
+  });
+
+  return deletedOrder;
 }
 
 export async function clearSavedTradeOrders(): Promise<void> {

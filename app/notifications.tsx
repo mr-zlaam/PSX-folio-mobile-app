@@ -1,7 +1,6 @@
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
 import {
   getInAppNotifications,
-  getInAppNotificationsLastSyncedAt,
   InAppNotification,
   markAllInAppNotificationsRead,
   markInAppNotificationRead,
@@ -24,6 +23,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 const NOTIFICATIONS_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const NOTIFICATIONS_PAGE_SIZE = 20;
 
 function formatTimestamp(value: string | null): string {
   if (!value) {
@@ -36,10 +36,35 @@ function formatTimestamp(value: string | null): string {
   }
 
   return parsedDate.toLocaleString("en-PK", {
+    year: "numeric",
     month: "short",
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
+  });
+}
+
+function getNotificationSortTime(notification: InAppNotification): number {
+  const occurredAt = notification.occurredAt ?? notification.createdAt;
+  const parsed = new Date(occurredAt).getTime();
+  if (Number.isNaN(parsed)) {
+    return 0;
+  }
+  return parsed;
+}
+
+function sortNotificationsByDateDesc(
+  notifications: InAppNotification[],
+): InAppNotification[] {
+  return [...notifications].sort((firstNotification, secondNotification) => {
+    const secondTime = getNotificationSortTime(secondNotification);
+    const firstTime = getNotificationSortTime(firstNotification);
+    if (secondTime === firstTime) {
+      return secondNotification.createdAt.localeCompare(
+        firstNotification.createdAt,
+      );
+    }
+    return secondTime - firstTime;
   });
 }
 
@@ -50,18 +75,18 @@ export default function NotificationsScreen() {
   const isDarkMode = colorScheme === "dark";
 
   const [notifications, setNotifications] = React.useState<InAppNotification[]>([]);
-  const [lastSyncedAt, setLastSyncedAt] = React.useState<string | null>(null);
   const [isInitialLoading, setIsInitialLoading] = React.useState(true);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [visibleUnreadCount, setVisibleUnreadCount] = React.useState(
+    NOTIFICATIONS_PAGE_SIZE,
+  );
+  const [visibleReadCount, setVisibleReadCount] = React.useState(
+    NOTIFICATIONS_PAGE_SIZE,
+  );
 
   const loadNotifications = React.useCallback(async () => {
-    const [storedNotifications, syncedAt] = await Promise.all([
-      getInAppNotifications(),
-      getInAppNotificationsLastSyncedAt(),
-    ]);
-
+    const storedNotifications = await getInAppNotifications();
     setNotifications(storedNotifications);
-    setLastSyncedAt(syncedAt);
   }, []);
 
   const syncNotifications = React.useCallback(
@@ -77,6 +102,8 @@ export default function NotificationsScreen() {
 
     async function hydrateNotifications() {
       try {
+        setVisibleUnreadCount(NOTIFICATIONS_PAGE_SIZE);
+        setVisibleReadCount(NOTIFICATIONS_PAGE_SIZE);
         await syncNotifications(true);
       } finally {
         if (isMounted) {
@@ -107,10 +134,41 @@ export default function NotificationsScreen() {
     [notifications],
   );
 
+  const unreadNotifications = React.useMemo(
+    () =>
+      sortNotificationsByDateDesc(
+        notifications.filter((notification) => !notification.readAt),
+      ),
+    [notifications],
+  );
+
+  const readNotifications = React.useMemo(
+    () =>
+      sortNotificationsByDateDesc(
+        notifications.filter((notification) => Boolean(notification.readAt)),
+      ),
+    [notifications],
+  );
+
+  const visibleUnreadNotifications = React.useMemo(
+    () => unreadNotifications.slice(0, visibleUnreadCount),
+    [unreadNotifications, visibleUnreadCount],
+  );
+
+  const visibleReadNotifications = React.useMemo(
+    () => readNotifications.slice(0, visibleReadCount),
+    [readNotifications, visibleReadCount],
+  );
+
+  const hasMoreUnread = visibleUnreadNotifications.length < unreadNotifications.length;
+  const hasMoreRead = visibleReadNotifications.length < readNotifications.length;
+
   const handleRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
 
     try {
+      setVisibleUnreadCount(NOTIFICATIONS_PAGE_SIZE);
+      setVisibleReadCount(NOTIFICATIONS_PAGE_SIZE);
       await syncNotifications(true);
     } finally {
       setIsRefreshing(false);
@@ -191,7 +249,7 @@ export default function NotificationsScreen() {
           <View className="flex-row items-center justify-between">
             <AppBackIconButton onPress={() => router.back()} />
 
-            <Text className="max-w-[58%] text-center text-2xl font-extrabold text-app-text dark:text-app-textDark">
+            <Text className="max-w-[52%] text-center text-2xl font-extrabold text-app-text dark:text-app-textDark">
               Notifications
             </Text>
 
@@ -220,30 +278,9 @@ export default function NotificationsScreen() {
                   .filter(Boolean)
                   .join(" ")}
               >
-                Read All
+                {`Read All (${unreadCount})`}
               </Text>
             </TouchableOpacity>
-          </View>
-
-          <View className="rounded-3xl bg-brand-white px-4 py-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
-            <View className="flex-row items-center justify-between">
-              <Text className="text-xs font-bold uppercase tracking-wider text-app-highlight dark:text-app-highlightDark">
-                In-App Feed
-              </Text>
-              <View className="rounded-lg bg-brand-red px-2 py-1">
-                <Text className="text-[11px] font-bold text-brand-white">
-                  {unreadCount}
-                </Text>
-              </View>
-            </View>
-
-            <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
-              Tap any notification to open related details.
-            </Text>
-
-            <Text className="mt-1 text-[11px] font-semibold text-text-light dark:text-text-dark">
-              Synced {formatTimestamp(lastSyncedAt)}
-            </Text>
           </View>
 
           {isInitialLoading ? (
@@ -268,51 +305,150 @@ export default function NotificationsScreen() {
               </Text>
             </View>
           ) : (
-            <View className="gap-3">
-              {notifications.map((notification) => {
-                const occurredAt = notification.occurredAt ?? notification.createdAt;
-                return (
+            <View className="gap-5">
+              <View className="gap-3">
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-xs font-bold uppercase tracking-wider text-app-highlight dark:text-app-highlightDark">
+                    Unread
+                  </Text>
+                  <View className="rounded-lg bg-brand-red px-2 py-1">
+                    <Text className="text-[11px] font-bold text-brand-white">
+                      {unreadNotifications.length}
+                    </Text>
+                  </View>
+                </View>
+
+                {visibleUnreadNotifications.length === 0 ? (
+                  <View className="items-center rounded-3xl bg-brand-white p-5 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+                    <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+                      No unread notifications.
+                    </Text>
+                  </View>
+                ) : (
+                  visibleUnreadNotifications.map((notification) => {
+                    const occurredAt = notification.occurredAt ?? notification.createdAt;
+                    return (
+                      <TouchableOpacity
+                        key={notification.id}
+                        activeOpacity={0.88}
+                        onPress={() => {
+                          void handleOpenNotification(notification);
+                        }}
+                        className="rounded-3xl border border-brand-red/30 bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border-brand-red/40 dark:bg-brand-white/10"
+                      >
+                        <View className="flex-row items-start justify-between gap-3">
+                          <View className="flex-1">
+                            <Text className="text-base font-bold leading-6 text-app-text dark:text-app-textDark">
+                              {notification.title}
+                            </Text>
+                            <Text className="mt-1 text-sm font-semibold leading-5 text-app-text dark:text-app-textDark">
+                              {notification.message}
+                            </Text>
+                          </View>
+
+                          <View className="h-2.5 w-2.5 rounded-full bg-brand-red" />
+                        </View>
+
+                        <View className="mt-3 flex-row items-center justify-between">
+                          <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                            {notification.sourceLabel}
+                          </Text>
+                          <Text className="text-[11px] font-semibold text-text-light dark:text-text-dark">
+                            {formatTimestamp(occurredAt)}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })
+                )}
+
+                {hasMoreUnread ? (
                   <TouchableOpacity
-                    key={notification.id}
                     activeOpacity={0.88}
                     onPress={() => {
-                      void handleOpenNotification(notification);
+                      setVisibleUnreadCount((current) => {
+                        return current + NOTIFICATIONS_PAGE_SIZE;
+                      });
                     }}
-                    className={[
-                      "rounded-3xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10",
-                      !notification.readAt
-                        ? "border border-brand-red/30 dark:border-brand-red/40"
-                        : "",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
+                    className="self-center rounded-xl bg-brand-white/80 px-3 py-2 dark:bg-brand-white/10"
                   >
-                    <View className="flex-row items-start justify-between gap-3">
-                      <View className="flex-1">
-                        <Text className="text-base font-bold leading-6 text-app-text dark:text-app-textDark">
-                          {notification.title}
-                        </Text>
-                        <Text className="mt-1 text-sm font-semibold leading-5 text-app-text dark:text-app-textDark">
-                          {notification.message}
-                        </Text>
-                      </View>
-
-                      {!notification.readAt ? (
-                        <View className="h-2.5 w-2.5 rounded-full bg-brand-red" />
-                      ) : null}
-                    </View>
-
-                    <View className="mt-3 flex-row items-center justify-between">
-                      <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                        {notification.sourceLabel}
-                      </Text>
-                      <Text className="text-[11px] font-semibold text-text-light dark:text-text-dark">
-                        {formatTimestamp(occurredAt)}
-                      </Text>
-                    </View>
+                    <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                      Load More Unread
+                    </Text>
                   </TouchableOpacity>
-                );
-              })}
+                ) : null}
+              </View>
+
+              <View className="gap-3">
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-xs font-bold uppercase tracking-wider text-app-highlight dark:text-app-highlightDark">
+                    Read
+                  </Text>
+                  <View className="rounded-lg bg-brand-white/80 px-2 py-1 dark:bg-brand-white/10">
+                    <Text className="text-[11px] font-bold text-text-light dark:text-text-dark">
+                      {readNotifications.length}
+                    </Text>
+                  </View>
+                </View>
+
+                {visibleReadNotifications.length === 0 ? (
+                  <View className="items-center rounded-3xl bg-brand-white p-5 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+                    <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+                      No read notifications yet.
+                    </Text>
+                  </View>
+                ) : (
+                  visibleReadNotifications.map((notification) => {
+                    const occurredAt = notification.occurredAt ?? notification.createdAt;
+                    return (
+                      <TouchableOpacity
+                        key={notification.id}
+                        activeOpacity={0.88}
+                        onPress={() => {
+                          void handleOpenNotification(notification);
+                        }}
+                        className="rounded-3xl border border-zinc-300/80 bg-zinc-100 p-4 shadow-sm shadow-zinc-300/60 dark:shadow-none dark:border-zinc-700/60 dark:bg-zinc-900/50"
+                      >
+                        <View className="flex-row items-start justify-between gap-3">
+                          <View className="flex-1">
+                            <Text className="text-base font-bold leading-6 text-zinc-700 dark:text-zinc-300">
+                              {notification.title}
+                            </Text>
+                            <Text className="mt-1 text-sm font-semibold leading-5 text-zinc-600 dark:text-zinc-400">
+                              {notification.message}
+                            </Text>
+                          </View>
+                        </View>
+
+                        <View className="mt-3 flex-row items-center justify-between">
+                          <Text className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
+                            {notification.sourceLabel}
+                          </Text>
+                          <Text className="text-[11px] font-semibold text-zinc-500 dark:text-zinc-400">
+                            {formatTimestamp(occurredAt)}
+                          </Text>
+                        </View>
+                      </TouchableOpacity>
+                    );
+                  })
+                )}
+
+                {hasMoreRead ? (
+                  <TouchableOpacity
+                    activeOpacity={0.88}
+                    onPress={() => {
+                      setVisibleReadCount((current) => {
+                        return current + NOTIFICATIONS_PAGE_SIZE;
+                      });
+                    }}
+                    className="self-center rounded-xl bg-brand-white/80 px-3 py-2 dark:bg-brand-white/10"
+                  >
+                    <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                      Load More Read
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
             </View>
           )}
         </View>

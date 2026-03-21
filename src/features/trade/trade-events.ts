@@ -9,7 +9,20 @@ export type TradeMutationEvent =
       createdAt: string;
     }
   | {
+      type: "trade-deleted";
+      orderId: string;
+      symbol: string;
+      side: TradeSide;
+      createdAt: string;
+    }
+  | {
       type: "dividend-created";
+      dividendId: string;
+      symbol: string;
+      createdAt: string;
+    }
+  | {
+      type: "dividend-deleted";
       dividendId: string;
       symbol: string;
       createdAt: string;
@@ -20,7 +33,18 @@ export type TradeMutationEvent =
       createdAt: string;
     }
   | {
+      type: "deposit-deleted";
+      depositId: string;
+      createdAt: string;
+    }
+  | {
       type: "bonus-share-created";
+      bonusShareId: string;
+      symbol: string;
+      createdAt: string;
+    }
+  | {
+      type: "bonus-share-deleted";
       bonusShareId: string;
       symbol: string;
       createdAt: string;
@@ -92,6 +116,58 @@ export function emitBonusShareMutation(event: {
 }): void {
   emitTradeMutation({
     type: "bonus-share-created",
+    bonusShareId: event.bonusShareId,
+    symbol: event.symbol,
+    createdAt: event.createdAt,
+  });
+}
+
+export function emitTradeDeletedMutation(event: {
+  orderId: string;
+  symbol: string;
+  side: TradeSide;
+  createdAt: string;
+}): void {
+  emitTradeMutation({
+    type: "trade-deleted",
+    orderId: event.orderId,
+    symbol: event.symbol,
+    side: event.side,
+    createdAt: event.createdAt,
+  });
+}
+
+export function emitDividendDeletedMutation(event: {
+  dividendId: string;
+  symbol: string;
+  createdAt: string;
+}): void {
+  emitTradeMutation({
+    type: "dividend-deleted",
+    dividendId: event.dividendId,
+    symbol: event.symbol,
+    createdAt: event.createdAt,
+  });
+}
+
+export function emitDepositDeletedMutation(event: {
+  depositId: string;
+  createdAt: string;
+}): void {
+  emitTradeMutation({
+    type: "deposit-deleted",
+    depositId: event.depositId,
+    createdAt: event.createdAt,
+  });
+}
+
+export function emitBonusShareDeletedMutation(event: {
+  bonusShareId: string;
+  symbol: string;
+  createdAt: string;
+}): void {
+  emitTradeMutation({
+    type: "bonus-share-deleted",
     bonusShareId: event.bonusShareId,
     symbol: event.symbol,
     createdAt: event.createdAt,

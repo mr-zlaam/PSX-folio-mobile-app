@@ -450,7 +450,7 @@ function parseCsvContent(csvContent: string): {
       const brokerNameRaw = getCell(row, "brokerName").trim();
       const brokerFeePct = parseFiniteNumber(getCell(row, "brokerFeePct"));
       const cashGuardApplied =
-        parseBoolean(getCell(row, "cashGuardApplied")) ?? true;
+        parseBoolean(getCell(row, "cashGuardApplied")) ?? false;
 
       trades.push({
         id,
