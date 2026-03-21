@@ -94,6 +94,17 @@ function SettingSwitchRow({
   onValueChange: (nextValue: boolean) => void;
   disabled?: boolean;
 }) {
+  const { colorScheme } = useColorScheme();
+  const isDarkMode = colorScheme === "dark";
+
+  const trackOnColor = isDarkMode
+    ? "rgba(255, 255, 255, 0.82)"
+    : APP_COLORS.app.highlight;
+  const trackOffColor = isDarkMode
+    ? "rgba(255, 255, 255, 0.28)"
+    : "rgba(20, 10, 38, 0.22)";
+  const thumbColor = APP_COLORS.brand.white;
+
   return (
     <View className="rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5">
       <View className="flex-row items-center justify-between gap-3">
@@ -109,10 +120,11 @@ function SettingSwitchRow({
           value={value}
           disabled={disabled}
           onValueChange={onValueChange}
-          thumbColor={APP_COLORS.brand.white}
+          thumbColor={thumbColor}
+          ios_backgroundColor={trackOffColor}
           trackColor={{
-            true: APP_COLORS.app.highlight,
-            false: APP_COLORS.text.placeholderLight,
+            true: trackOnColor,
+            false: trackOffColor,
           }}
         />
       </View>
