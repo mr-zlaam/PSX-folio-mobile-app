@@ -20,7 +20,9 @@ type MoreGridItem = {
     | "/dividend"
     | "/deposit"
     | "/bonus-share"
-    | "/analytics";
+    | "/analytics"
+    | "/announcements"
+    | "/notifications";
 };
 
 type MoreSection = {
@@ -62,6 +64,21 @@ const MARKET_ITEMS: MoreGridItem[] = [
     label: "Market",
     icon: "chart-box-outline",
     route: "/(tabs)/market",
+  },
+];
+
+const NEWS_ITEMS: MoreGridItem[] = [
+  {
+    id: "announcements",
+    label: "Notices",
+    icon: "bullhorn-outline",
+    route: "/announcements",
+  },
+  {
+    id: "notifications",
+    label: "Alerts",
+    icon: "bell-outline",
+    route: "/notifications",
   },
 ];
 
@@ -111,6 +128,11 @@ const MORE_SECTIONS: MoreSection[] = [
     id: "market",
     title: "Market",
     items: MARKET_ITEMS,
+  },
+  {
+    id: "news",
+    title: "News & Notices",
+    items: NEWS_ITEMS,
   },
   {
     id: "portfolio-actions",

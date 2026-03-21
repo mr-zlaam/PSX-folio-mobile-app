@@ -29,12 +29,13 @@ import {
   getHomeInsightDisplayModePreference,
   setHomeInsightDisplayModePreference,
 } from "@/src/lib/app-preferences";
-import { APP_COLORS } from "@/src/theme/colors";
 import {
-  BottomSheetBackdrop,
-  BottomSheetModal,
-  BottomSheetView,
-} from "@gorhom/bottom-sheet";
+  getUnreadInAppNotificationCount,
+  subscribeToInAppNotifications,
+  syncPsxAnnouncementsToInAppNotifications,
+} from "@/src/features/notifications/in-app-notifications";
+import { APP_COLORS } from "@/src/theme/colors";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";
 import { useColorScheme } from "nativewind";
@@ -54,8 +55,6 @@ import {
 } from "react-native-safe-area-context";
 
 const HOME_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
-
-type QuickActionType = "dividend" | "deposit" | "bonus";
 
 function getToneClassName(tone: ValueTone): string {
   if (tone === "positive") {
@@ -169,10 +168,10 @@ export default function HomeScreen() {
   const [availableFreeCash, setAvailableFreeCash] = React.useState(0);
   const [marketAsOf, setMarketAsOf] = React.useState<string | null>(null);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [unreadNotificationsCount, setUnreadNotificationsCount] =
+    React.useState(0);
   const [hasHydratedInsightMode, setHasHydratedInsightMode] =
     React.useState(false);
-  const quickActionSheetRef = React.useRef<BottomSheetModal>(null);
-  const quickActionSheetSnapPoints = React.useMemo(() => ["42%"], []);
   const openPulseAnim = React.useRef(new Animated.Value(0)).current;
 
   const handleTradePress = React.useCallback(() => {
@@ -191,6 +190,10 @@ export default function HomeScreen() {
 
   const handleOpenTransactionHistory = React.useCallback(() => {
     router.push("/transaction-history");
+  }, [router]);
+
+  const handleOpenNotifications = React.useCallback(() => {
+    router.push("/notifications");
   }, [router]);
 
   const applyHomeSnapshot = React.useCallback(
@@ -239,46 +242,9 @@ export default function HomeScreen() {
       setMarketAsOf(latestMarketDetail.snapshot.asOf);
     }
     applyHomeSnapshot(latestHoldings, totalDividendValue, totalDepositValue);
+
+    void syncPsxAnnouncementsToInAppNotifications();
   }, [applyHomeSnapshot]);
-
-  const handleDismissQuickActionSheet = React.useCallback(() => {
-    quickActionSheetRef.current?.dismiss();
-  }, []);
-
-  const handleSelectQuickAction = React.useCallback(
-    (action: QuickActionType) => {
-      handleDismissQuickActionSheet();
-
-      if (action === "dividend") {
-        router.push("/dividend");
-        return;
-      }
-
-      if (action === "deposit") {
-        router.push("/deposit");
-        return;
-      }
-
-      router.push("/bonus-share");
-    },
-    [handleDismissQuickActionSheet, router],
-  );
-
-  const handleOpenQuickActionSheet = React.useCallback(() => {
-    quickActionSheetRef.current?.present();
-  }, []);
-
-  const quickActionSheetBackdrop = React.useCallback(
-    (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
-      <BottomSheetBackdrop
-        {...props}
-        appearsOnIndex={0}
-        disappearsOnIndex={-1}
-        pressBehavior="close"
-      />
-    ),
-    [],
-  );
 
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
@@ -288,6 +254,21 @@ export default function HomeScreen() {
       setIsRefreshing(false);
     }
   }, [refreshHomeSnapshot]);
+
+  const refreshUnreadNotificationsCount = React.useCallback(async () => {
+    const nextUnreadCount = await getUnreadInAppNotificationCount();
+    setUnreadNotificationsCount(nextUnreadCount);
+  }, []);
+
+  React.useEffect(() => {
+    void refreshUnreadNotificationsCount();
+
+    const unsubscribe = subscribeToInAppNotifications(() => {
+      void refreshUnreadNotificationsCount();
+    });
+
+    return unsubscribe;
+  }, [refreshUnreadNotificationsCount]);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -463,12 +444,24 @@ export default function HomeScreen() {
 
             <TouchableOpacity
               activeOpacity={0.88}
-              onPress={handleOpenQuickActionSheet}
-              className="rounded-xl bg-app-highlight px-4 py-2 dark:bg-app-highlightDark"
+              onPress={handleOpenNotifications}
+              className="relative h-11 w-11 items-center justify-center rounded-xl bg-app-highlight dark:bg-app-highlightDark"
             >
-              <Text className="text-sm font-bold uppercase tracking-wide text-brand-white dark:text-brand-purple">
-                + Add
-              </Text>
+              <MaterialCommunityIcons
+                name="bell-outline"
+                size={22}
+                color={isDarkMode ? APP_COLORS.brand.purple : APP_COLORS.brand.white}
+              />
+
+              {unreadNotificationsCount > 0 ? (
+                <View className="absolute -right-1 -top-1 min-h-5 min-w-5 items-center justify-center rounded-full bg-brand-red px-1">
+                  <Text className="text-[10px] font-bold text-brand-white">
+                    {unreadNotificationsCount > 99
+                      ? "99+"
+                      : String(unreadNotificationsCount)}
+                  </Text>
+                </View>
+              ) : null}
             </TouchableOpacity>
           </View>
 
@@ -644,77 +637,6 @@ export default function HomeScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
-
-      <BottomSheetModal
-        ref={quickActionSheetRef}
-        snapPoints={quickActionSheetSnapPoints}
-        enablePanDownToClose
-        backdropComponent={quickActionSheetBackdrop}
-        backgroundStyle={{
-          backgroundColor: isDarkMode
-            ? APP_COLORS.brand.purple
-            : APP_COLORS.brand.white,
-        }}
-        handleIndicatorStyle={{
-          backgroundColor: isDarkMode
-            ? APP_COLORS.brand.white
-            : APP_COLORS.brand.purple,
-        }}
-      >
-        <BottomSheetView
-          style={{
-            paddingHorizontal: 16,
-            paddingBottom: insets.bottom + 16,
-            paddingTop: 8,
-          }}
-        >
-          <Text className="text-center text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-            Quick Add
-          </Text>
-
-          <View className="mt-3 gap-2">
-            <TouchableOpacity
-              activeOpacity={0.9}
-              onPress={() => handleSelectQuickAction("dividend")}
-              className="rounded-xl bg-brand-white px-4 py-3 dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
-            >
-              <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
-                Add Dividend
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              activeOpacity={0.9}
-              onPress={() => handleSelectQuickAction("deposit")}
-              className="rounded-xl bg-brand-white px-4 py-3 dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
-            >
-              <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
-                Add Deposit
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              activeOpacity={0.9}
-              onPress={() => handleSelectQuickAction("bonus")}
-              className="rounded-xl bg-brand-white px-4 py-3 dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
-            >
-              <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
-                Bonus Share
-              </Text>
-            </TouchableOpacity>
-
-            <TouchableOpacity
-              activeOpacity={0.9}
-              onPress={handleDismissQuickActionSheet}
-              className="rounded-xl bg-button-neutral px-4 py-3 dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/5"
-            >
-              <Text className="text-sm font-bold text-app-highlight dark:text-app-highlightDark">
-                Cancel
-              </Text>
-            </TouchableOpacity>
-          </View>
-        </BottomSheetView>
-      </BottomSheetModal>
     </SafeAreaView>
   );
 }

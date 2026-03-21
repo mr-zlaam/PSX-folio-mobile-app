@@ -1,0 +1,322 @@
+import AppBackIconButton from "@/components/ui/app-back-icon-button";
+import {
+  getInAppNotifications,
+  getInAppNotificationsLastSyncedAt,
+  InAppNotification,
+  markAllInAppNotificationsRead,
+  markInAppNotificationRead,
+  subscribeToInAppNotifications,
+  syncPsxAnnouncementsToInAppNotifications,
+} from "@/src/features/notifications/in-app-notifications";
+import { APP_COLORS } from "@/src/theme/colors";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useRouter } from "expo-router";
+import { useColorScheme } from "nativewind";
+import React from "react";
+import {
+  ActivityIndicator,
+  RefreshControl,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+
+const NOTIFICATIONS_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+
+function formatTimestamp(value: string | null): string {
+  if (!value) {
+    return "--";
+  }
+
+  const parsedDate = new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return "--";
+  }
+
+  return parsedDate.toLocaleString("en-PK", {
+    month: "short",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
+export default function NotificationsScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { colorScheme } = useColorScheme();
+  const isDarkMode = colorScheme === "dark";
+
+  const [notifications, setNotifications] = React.useState<InAppNotification[]>([]);
+  const [lastSyncedAt, setLastSyncedAt] = React.useState<string | null>(null);
+  const [isInitialLoading, setIsInitialLoading] = React.useState(true);
+  const [isRefreshing, setIsRefreshing] = React.useState(false);
+
+  const loadNotifications = React.useCallback(async () => {
+    const [storedNotifications, syncedAt] = await Promise.all([
+      getInAppNotifications(),
+      getInAppNotificationsLastSyncedAt(),
+    ]);
+
+    setNotifications(storedNotifications);
+    setLastSyncedAt(syncedAt);
+  }, []);
+
+  const syncNotifications = React.useCallback(
+    async (force = false) => {
+      await syncPsxAnnouncementsToInAppNotifications({ force });
+      await loadNotifications();
+    },
+    [loadNotifications],
+  );
+
+  React.useEffect(() => {
+    let isMounted = true;
+
+    async function hydrateNotifications() {
+      try {
+        await syncNotifications(true);
+      } finally {
+        if (isMounted) {
+          setIsInitialLoading(false);
+        }
+      }
+    }
+
+    void hydrateNotifications();
+
+    const unsubscribe = subscribeToInAppNotifications(() => {
+      void loadNotifications();
+    });
+
+    const intervalId = setInterval(() => {
+      void syncNotifications();
+    }, NOTIFICATIONS_REFRESH_INTERVAL_MS);
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+      clearInterval(intervalId);
+    };
+  }, [loadNotifications, syncNotifications]);
+
+  const unreadCount = React.useMemo(
+    () => notifications.filter((notification) => !notification.readAt).length,
+    [notifications],
+  );
+
+  const handleRefresh = React.useCallback(async () => {
+    setIsRefreshing(true);
+
+    try {
+      await syncNotifications(true);
+    } finally {
+      setIsRefreshing(false);
+    }
+  }, [syncNotifications]);
+
+  const handleMarkAllAsRead = React.useCallback(async () => {
+    await markAllInAppNotificationsRead();
+    await loadNotifications();
+  }, [loadNotifications]);
+
+  const handleOpenNotification = React.useCallback(
+    async (notification: InAppNotification) => {
+      if (!notification.readAt) {
+        await markInAppNotificationRead(notification.id);
+      }
+
+      if (notification.pdfUrl) {
+        router.push({
+          pathname: "/pdf-viewer",
+          params: {
+            title: notification.symbol
+              ? `${notification.symbol} Announcement`
+              : "PSX Announcement",
+            url: notification.pdfUrl,
+          },
+        });
+        return;
+      }
+
+      if (notification.symbol) {
+        router.push({
+          pathname: "/stock-detail",
+          params: {
+            symbol: notification.symbol,
+            origin: "market",
+          },
+        });
+        return;
+      }
+
+      router.push({
+        pathname: "/announcements",
+        params: {
+          source: notification.sourceKey,
+        },
+      });
+    },
+    [router],
+  );
+
+  return (
+    <SafeAreaView
+      edges={["top", "left", "right"]}
+      className="flex-1 bg-app-bg dark:bg-app-bgDark"
+    >
+      <ScrollView
+        className="flex-1"
+        contentContainerStyle={{
+          paddingTop: 14,
+          paddingHorizontal: 20,
+          paddingBottom: insets.bottom + 24,
+        }}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
+            colors={[isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple]}
+            progressBackgroundColor={
+              isDarkMode ? APP_COLORS.brand.purple : APP_COLORS.brand.white
+            }
+          />
+        }
+      >
+        <View className="gap-4">
+          <View className="flex-row items-center justify-between">
+            <AppBackIconButton onPress={() => router.back()} />
+
+            <Text className="max-w-[58%] text-center text-2xl font-extrabold text-app-text dark:text-app-textDark">
+              Notifications
+            </Text>
+
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={() => {
+                void handleMarkAllAsRead();
+              }}
+              disabled={unreadCount <= 0}
+              className={[
+                "rounded-xl px-3 py-2",
+                unreadCount > 0
+                  ? "bg-app-highlight dark:bg-app-highlightDark"
+                  : "bg-brand-white/80 dark:bg-brand-white/10",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            >
+              <Text
+                className={[
+                  "text-[11px] font-bold uppercase tracking-wide",
+                  unreadCount > 0
+                    ? "text-brand-white dark:text-brand-purple"
+                    : "text-text-light dark:text-text-dark",
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
+                Read All
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          <View className="rounded-3xl bg-brand-white px-4 py-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+            <View className="flex-row items-center justify-between">
+              <Text className="text-xs font-bold uppercase tracking-wider text-app-highlight dark:text-app-highlightDark">
+                In-App Feed
+              </Text>
+              <View className="rounded-lg bg-brand-red px-2 py-1">
+                <Text className="text-[11px] font-bold text-brand-white">
+                  {unreadCount}
+                </Text>
+              </View>
+            </View>
+
+            <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
+              Tap any notification to open related details.
+            </Text>
+
+            <Text className="mt-1 text-[11px] font-semibold text-text-light dark:text-text-dark">
+              Synced {formatTimestamp(lastSyncedAt)}
+            </Text>
+          </View>
+
+          {isInitialLoading ? (
+            <View className="items-center justify-center rounded-3xl bg-brand-white p-8 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+              <ActivityIndicator
+                size="small"
+                color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
+              />
+              <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
+                Checking latest updates...
+              </Text>
+            </View>
+          ) : notifications.length === 0 ? (
+            <View className="items-center rounded-3xl bg-brand-white p-6 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+              <MaterialCommunityIcons
+                name="bell-off-outline"
+                size={26}
+                color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
+              />
+              <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
+                No notifications yet.
+              </Text>
+            </View>
+          ) : (
+            <View className="gap-3">
+              {notifications.map((notification) => {
+                const occurredAt = notification.occurredAt ?? notification.createdAt;
+                return (
+                  <TouchableOpacity
+                    key={notification.id}
+                    activeOpacity={0.88}
+                    onPress={() => {
+                      void handleOpenNotification(notification);
+                    }}
+                    className={[
+                      "rounded-3xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10",
+                      !notification.readAt
+                        ? "border border-brand-red/30 dark:border-brand-red/40"
+                        : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
+                    <View className="flex-row items-start justify-between gap-3">
+                      <View className="flex-1">
+                        <Text className="text-base font-bold leading-6 text-app-text dark:text-app-textDark">
+                          {notification.title}
+                        </Text>
+                        <Text className="mt-1 text-sm font-semibold leading-5 text-app-text dark:text-app-textDark">
+                          {notification.message}
+                        </Text>
+                      </View>
+
+                      {!notification.readAt ? (
+                        <View className="h-2.5 w-2.5 rounded-full bg-brand-red" />
+                      ) : null}
+                    </View>
+
+                    <View className="mt-3 flex-row items-center justify-between">
+                      <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                        {notification.sourceLabel}
+                      </Text>
+                      <Text className="text-[11px] font-semibold text-text-light dark:text-text-dark">
+                        {formatTimestamp(occurredAt)}
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+          )}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}

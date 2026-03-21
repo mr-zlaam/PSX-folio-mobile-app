@@ -54,6 +54,8 @@ export default function RootLayout() {
           <Stack.Screen name="stock-detail" />
           <Stack.Screen name="pdf-viewer" />
           <Stack.Screen name="analytics" />
+          <Stack.Screen name="announcements" />
+          <Stack.Screen name="notifications" />
         </Stack>
       </BottomSheetModalProvider>
     </GestureHandlerRootView>

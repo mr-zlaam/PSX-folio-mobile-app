@@ -19,6 +19,8 @@ const MORE_MANAGED_ROUTES = new Set([
   "transactions",
   "stocks",
   "settings",
+  "announcements",
+  "notifications",
 ]);
 
 function getTabIconName(routeName: string): TabIconName {

@@ -1,5 +1,6 @@
 import React from "react";
 import {
+  KeyboardAvoidingView,
   Platform,
   RefreshControl,
   ScrollView,
@@ -882,38 +883,46 @@ export default function TransactionsTabScreen() {
       edges={["top", "left", "right"]}
       className="flex-1 bg-app-bg dark:bg-app-bgDark"
     >
-      <ScrollView
+      <KeyboardAvoidingView
         className="flex-1"
-        contentContainerStyle={{
-          paddingTop: 14,
-          paddingHorizontal: 20,
-          paddingBottom: insets.bottom + 24,
-        }}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handlePullToRefresh}
-            tintColor={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
-            colors={[isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple]}
-            progressBackgroundColor={
-              isDarkMode ? APP_COLORS.brand.purple : APP_COLORS.brand.white
-            }
-          />
-        }
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
+        keyboardVerticalOffset={Platform.OS === "ios" ? insets.top : 0}
       >
-        <View className="gap-5">
-          <View className="flex-row items-center justify-between">
-            <AppBackIconButton onPress={handleBackFromTrade} />
+        <ScrollView
+          className="flex-1"
+          automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
+          keyboardShouldPersistTaps="handled"
+          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+          contentContainerStyle={{
+            paddingTop: 14,
+            paddingHorizontal: 20,
+            paddingBottom: insets.bottom + 24,
+          }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handlePullToRefresh}
+              tintColor={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
+              colors={[isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple]}
+              progressBackgroundColor={
+                isDarkMode ? APP_COLORS.brand.purple : APP_COLORS.brand.white
+              }
+            />
+          }
+        >
+          <View className="gap-5">
+            <View className="flex-row items-center justify-between">
+              <AppBackIconButton onPress={handleBackFromTrade} />
 
-            <Text className="text-2xl font-extrabold text-app-text dark:text-app-textDark">
-              {isEditingTrade ? "Edit Trade" : "Trade"}
-            </Text>
+              <Text className="text-2xl font-extrabold text-app-text dark:text-app-textDark">
+                {isEditingTrade ? "Edit Trade" : "Trade"}
+              </Text>
 
-            <View className="w-14" />
-          </View>
+              <View className="w-14" />
+            </View>
 
-          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
+            <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
             <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
               Symbol Search
             </Text>
@@ -1012,7 +1021,7 @@ export default function TransactionsTabScreen() {
             </View>
           </View>
 
-          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
+            <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
             <View className="flex-row items-center justify-between">
               <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                 Trade Form
@@ -1220,9 +1229,10 @@ export default function TransactionsTabScreen() {
                 />
               </View>
             ) : null}
+            </View>
           </View>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </KeyboardAvoidingView>
 
       <AppFeedbackModal
         visible={tradeNotice !== null}
