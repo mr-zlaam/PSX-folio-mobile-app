@@ -37,6 +37,9 @@ export type AnalyticsPerformer = {
   symbol: string;
   name: string;
   returnPct: number;
+  weightPct: number;
+  impactPkr: number;
+  impactPct: number;
 };
 
 export type AnalyticsRiskMetrics = {
@@ -260,23 +263,47 @@ function buildPerformers(holdings: PortfolioHolding[]): {
     };
   }
 
-  const sortedByReturn = [...holdings].sort(
-    (firstHolding, secondHolding) => secondHolding.pnlPct - firstHolding.pnlPct
+  const totalMarketValue = holdings.reduce(
+    (sum, holding) => sum + toNonNegativeNumber(holding.marketValue),
+    0
   );
-  const best = sortedByReturn[0];
-  const worst = sortedByReturn[sortedByReturn.length - 1];
+  if (totalMarketValue <= 0) {
+    return {
+      bestPerformer: null,
+      worstPerformer: null,
+    };
+  }
+
+  const performers = holdings.map((holding) => {
+    const marketValue = toNonNegativeNumber(holding.marketValue);
+    const pnl = toFiniteNumber(holding.pnl);
+    const weightPct = (marketValue / totalMarketValue) * 100;
+    const impactPct = (pnl / totalMarketValue) * 100;
+
+    return {
+      symbol: holding.symbol,
+      name: holding.companyName,
+      returnPct: toFiniteNumber(holding.pnlPct),
+      weightPct: toFiniteNumber(weightPct),
+      impactPkr: pnl,
+      impactPct: toFiniteNumber(impactPct),
+    };
+  });
+
+  const sortedByImpact = [...performers].sort((firstPerformer, secondPerformer) => {
+    const byImpact = secondPerformer.impactPkr - firstPerformer.impactPkr;
+    if (Math.abs(byImpact) > 1e-8) {
+      return byImpact;
+    }
+
+    return secondPerformer.returnPct - firstPerformer.returnPct;
+  });
+  const best = sortedByImpact[0];
+  const worst = sortedByImpact[sortedByImpact.length - 1];
 
   return {
-    bestPerformer: {
-      symbol: best.symbol,
-      name: best.companyName,
-      returnPct: toFiniteNumber(best.pnlPct),
-    },
-    worstPerformer: {
-      symbol: worst.symbol,
-      name: worst.companyName,
-      returnPct: toFiniteNumber(worst.pnlPct),
-    },
+    bestPerformer: best,
+    worstPerformer: worst,
   };
 }
 

@@ -591,12 +591,24 @@ export default function AnalyticsScreen() {
                   <Text
                     className={[
                       "mt-1 text-sm font-bold",
-                      getToneTextClassName(snapshot.bestPerformer?.returnPct ?? 0),
+                      getToneTextClassName(snapshot.bestPerformer?.impactPkr ?? 0),
                     ]
                       .filter(Boolean)
                       .join(" ")}
                   >
-                    {formatSignedPercentage(snapshot.bestPerformer?.returnPct ?? 0)}
+                    {formatSignedPkr(snapshot.bestPerformer?.impactPkr ?? 0)}
+                  </Text>
+                  <Text className="mt-1 text-[11px] font-semibold text-app-text dark:text-app-textDark">
+                    {`${formatSignedPercentage(
+                      snapshot.bestPerformer?.impactPct ?? 0
+                    )} impact • ${(snapshot.bestPerformer?.weightPct ?? 0).toFixed(
+                      1
+                    )}% weight`}
+                  </Text>
+                  <Text className="mt-1 text-[11px] font-semibold text-app-text dark:text-app-textDark">
+                    {`Return ${formatSignedPercentage(
+                      snapshot.bestPerformer?.returnPct ?? 0
+                    )}`}
                   </Text>
                 </View>
 
@@ -610,12 +622,24 @@ export default function AnalyticsScreen() {
                   <Text
                     className={[
                       "mt-1 text-sm font-bold",
-                      getToneTextClassName(snapshot.worstPerformer?.returnPct ?? 0),
+                      getToneTextClassName(snapshot.worstPerformer?.impactPkr ?? 0),
                     ]
                       .filter(Boolean)
                       .join(" ")}
                   >
-                    {formatSignedPercentage(snapshot.worstPerformer?.returnPct ?? 0)}
+                    {formatSignedPkr(snapshot.worstPerformer?.impactPkr ?? 0)}
+                  </Text>
+                  <Text className="mt-1 text-[11px] font-semibold text-app-text dark:text-app-textDark">
+                    {`${formatSignedPercentage(
+                      snapshot.worstPerformer?.impactPct ?? 0
+                    )} impact • ${(snapshot.worstPerformer?.weightPct ?? 0).toFixed(
+                      1
+                    )}% weight`}
+                  </Text>
+                  <Text className="mt-1 text-[11px] font-semibold text-app-text dark:text-app-textDark">
+                    {`Return ${formatSignedPercentage(
+                      snapshot.worstPerformer?.returnPct ?? 0
+                    )}`}
                   </Text>
                 </View>
               </View>
