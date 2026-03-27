@@ -184,10 +184,12 @@ function ActionButton({
   label,
   icon,
   onPress,
+  isDarkMode,
 }: {
   label: string;
   icon: React.ComponentProps<typeof MaterialCommunityIcons>["name"];
   onPress: () => void;
+  isDarkMode: boolean;
 }) {
   return (
     <TouchableOpacity
@@ -198,7 +200,7 @@ function ActionButton({
       <MaterialCommunityIcons
         name={icon}
         size={16}
-        color={APP_COLORS.app.highlight}
+        color={isDarkMode ? APP_COLORS.app.highlightDark : APP_COLORS.app.highlight}
       />
       <Text className="text-sm font-bold text-app-highlight dark:text-app-highlightDark">
         {label}
@@ -500,6 +502,7 @@ export default function NotificationDetailScreen() {
                     label="Open Source Feed"
                     icon="format-list-bulleted"
                     onPress={handleOpenSource}
+                    isDarkMode={isDarkMode}
                   />
 
                   {notification.symbol ? (
@@ -507,6 +510,7 @@ export default function NotificationDetailScreen() {
                       label="Open Stock Detail"
                       icon="chart-line"
                       onPress={handleOpenStock}
+                      isDarkMode={isDarkMode}
                     />
                   ) : null}
 
@@ -515,6 +519,7 @@ export default function NotificationDetailScreen() {
                       label="Open PDF"
                       icon="file-pdf-box"
                       onPress={handleOpenPdf}
+                      isDarkMode={isDarkMode}
                     />
                   ) : null}
                 </View>
