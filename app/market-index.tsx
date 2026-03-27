@@ -508,6 +508,22 @@ export default function MarketIndexScreen() {
                   ))}
                 </View>
 
+                {selectedChartPoint ? (
+                  <View className="mt-3 rounded-2xl bg-brand-white/70 px-3 py-2 dark:bg-brand-white/5">
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                        Selected Point
+                      </Text>
+                      <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                        {formatPKRAmount(selectedChartPoint.price)}
+                      </Text>
+                    </View>
+                    <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
+                      {formatPointTimestamp(selectedChartPoint.timestamp, chartRange)}
+                    </Text>
+                  </View>
+                ) : null}
+
                 <View className="mt-4">
                   {isChartLoading ? (
                     <View className="items-center justify-center rounded-2xl bg-brand-white/70 p-6 dark:bg-brand-white/5">
@@ -529,22 +545,6 @@ export default function MarketIndexScreen() {
                     />
                   )}
                 </View>
-
-                {selectedChartPoint ? (
-                  <View className="mt-3 rounded-2xl bg-brand-white/70 px-3 py-2 dark:bg-brand-white/5">
-                    <View className="flex-row items-center justify-between">
-                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                        Selected Point
-                      </Text>
-                      <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
-                        {formatPKRAmount(selectedChartPoint.price)}
-                      </Text>
-                    </View>
-                    <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
-                      {formatPointTimestamp(selectedChartPoint.timestamp, chartRange)}
-                    </Text>
-                  </View>
-                ) : null}
 
                 {chartFirstPoint && chartLastPoint ? (
                   <View className="mt-3 gap-1">

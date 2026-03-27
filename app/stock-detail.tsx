@@ -167,6 +167,76 @@ function normalizeExternalUrl(rawUrl: string): string {
   return `https://${trimmedUrl}`;
 }
 
+function parseNumericMetricValue(value: string): number | null {
+  if (value.includes("%")) {
+    return null;
+  }
+
+  const normalizedValue = value
+    .replace(/,/g, "")
+    .replace(/\u2014/g, "-")
+    .replace(/\u2013/g, "-")
+    .trim();
+
+  if (normalizedValue.length === 0) {
+    return null;
+  }
+
+  const numberMatch = normalizedValue.match(/(\(?-?\d+(?:\.\d+)?\)?)(?:\s*([kmbt]))?/i);
+  if (!numberMatch || !numberMatch[1]) {
+    return null;
+  }
+
+  const rawNumber = numberMatch[1];
+  const negativeByParentheses =
+    rawNumber.startsWith("(") && rawNumber.endsWith(")");
+  const parsedNumber = Number.parseFloat(rawNumber.replace(/[()]/g, ""));
+  if (!Number.isFinite(parsedNumber)) {
+    return null;
+  }
+
+  let scaledValue = parsedNumber;
+  const scaleToken = (numberMatch[2] ?? "").toUpperCase();
+  if (scaleToken === "K") {
+    scaledValue *= 1_000;
+  } else if (scaleToken === "M") {
+    scaledValue *= 1_000_000;
+  } else if (scaleToken === "B") {
+    scaledValue *= 1_000_000_000;
+  } else if (scaleToken === "T") {
+    scaledValue *= 1_000_000_000_000;
+  }
+
+  return negativeByParentheses ? -Math.abs(scaledValue) : scaledValue;
+}
+
+function parseEmbeddedPercentage(value: string): number | null {
+  const percentageMatch = value.match(/-?\d+(?:\.\d+)?\s*%/);
+  if (!percentageMatch || !percentageMatch[0]) {
+    return null;
+  }
+
+  const parsedPercentage = Number.parseFloat(percentageMatch[0].replace("%", "").trim());
+  return Number.isFinite(parsedPercentage) ? parsedPercentage : null;
+}
+
+function formatMetricPercentage(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "0.00%";
+  }
+
+  const absoluteValue = Math.abs(value).toFixed(2);
+  if (value > 0) {
+    return `+${absoluteValue}%`;
+  }
+
+  if (value < 0) {
+    return `-${absoluteValue}%`;
+  }
+
+  return "0.00%";
+}
+
 function ChartRangeChip({
   label,
   selected,
@@ -280,10 +350,12 @@ function CompanyMetricRows({
   metrics,
   emptyText,
   onOpenUrl,
+  showCalculatedPercentage = false,
 }: {
   metrics: CompanyDetailMetric[];
   emptyText: string;
   onOpenUrl?: (url: string) => void;
+  showCalculatedPercentage?: boolean;
 }) {
   if (metrics.length === 0) {
     return (
@@ -293,11 +365,62 @@ function CompanyMetricRows({
     );
   }
 
+  const metricNumbers = React.useMemo(
+    () =>
+      metrics.map((metricItem) => ({
+        label: metricItem.label,
+        value: metricItem.value,
+        numericValue: parseNumericMetricValue(metricItem.value),
+        embeddedPercentage: parseEmbeddedPercentage(metricItem.value),
+      })),
+    [metrics]
+  );
+
+  const percentageDenominator = React.useMemo(() => {
+    if (!showCalculatedPercentage) {
+      return null;
+    }
+
+    const marketCapMetric = metricNumbers.find(
+      (metricItem) =>
+        /market\s*cap/i.test(metricItem.label) &&
+        typeof metricItem.numericValue === "number" &&
+        metricItem.numericValue > 0
+    );
+    if (marketCapMetric && marketCapMetric.numericValue) {
+      return marketCapMetric.numericValue;
+    }
+
+    const total = metricNumbers.reduce((runningTotal, metricItem) => {
+      if (typeof metricItem.numericValue !== "number" || metricItem.numericValue <= 0) {
+        return runningTotal;
+      }
+
+      return runningTotal + metricItem.numericValue;
+    }, 0);
+
+    return total > 0 ? total : null;
+  }, [metricNumbers, showCalculatedPercentage]);
+
   return (
     <View className="gap-2">
-      {metrics.map((metricItem) => {
+      {metricNumbers.map((metricItem) => {
         const detectedUrl = extractUrlFromText(metricItem.value);
         const canOpenUrl = Boolean(detectedUrl) && Boolean(onOpenUrl);
+        const computedPercentage =
+          showCalculatedPercentage &&
+          metricItem.embeddedPercentage === null &&
+          typeof metricItem.numericValue === "number" &&
+          percentageDenominator &&
+          percentageDenominator > 0
+            ? (metricItem.numericValue / percentageDenominator) * 100
+            : null;
+        const percentageText =
+          metricItem.embeddedPercentage !== null
+            ? formatMetricPercentage(metricItem.embeddedPercentage)
+            : computedPercentage !== null
+              ? formatMetricPercentage(computedPercentage)
+              : null;
 
         return (
           <View
@@ -328,6 +451,11 @@ function CompanyMetricRows({
             ) : (
               <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
                 {metricItem.value}
+                {percentageText ? (
+                  <Text className="text-xs font-bold text-app-highlight dark:text-app-highlightDark">
+                    {`  (${percentageText})`}
+                  </Text>
+                ) : null}
               </Text>
             )}
           </View>
@@ -696,6 +824,10 @@ export default function StockDetailScreen() {
 
   const chartLastPoint = chartSeries.points[chartSeries.points.length - 1] ?? null;
   const activePoint = selectedChartPoint ?? chartLastPoint;
+  const latestPriceFromChart = chartLastPoint?.price ?? 0;
+  const displayPrice = quote.lastPrice > 0 ? quote.lastPrice : latestPriceFromChart;
+  const displayChange = quote.change;
+  const displayChangePct = quote.changePct;
 
   const headerTitle = normalizedSymbol.length > 0 ? normalizedSymbol : "Stock Detail";
   const companyName =
@@ -786,18 +918,18 @@ export default function StockDetailScreen() {
                 </Text>
 
                 <Text className="mt-4 text-4xl font-extrabold text-app-text dark:text-app-textDark">
-                  {formatPKRAmount(quote.lastPrice)}
+                  {formatPKRAmount(displayPrice)}
                 </Text>
                 <Text
                   className={[
                     "mt-1 text-sm font-semibold",
-                    getValueToneClassName(quote.change),
+                    getValueToneClassName(displayChange),
                   ]
                     .filter(Boolean)
                     .join(" ")}
                 >
-                  {`${formatPKRAmount(quote.change)} (${formatSignedPercentage(
-                    quote.changePct
+                  {`${formatPKRAmount(displayChange)} (${formatSignedPercentage(
+                    displayChangePct
                   )})`}
                 </Text>
               </View>
@@ -980,6 +1112,7 @@ export default function StockDetailScreen() {
                                 metrics={companyDetail.equityMetrics}
                                 emptyText="No equity metrics available."
                                 onOpenUrl={handleOpenExternalUrl}
+                                showCalculatedPercentage
                               />
                             </View>
                           </View>

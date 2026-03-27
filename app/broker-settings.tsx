@@ -1,14 +1,16 @@
 import React from "react";
 import { useGuardedRouter } from "@/src/lib/navigation";
-import { ScrollView, Text, TextInput, View } from "react-native";
+import { ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
 
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import AppButton from "@/components/ui/app-button";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
+import BrokerFeeCalculatorModal from "@/components/ui/broker-fee-calculator-modal";
 import AppFeedbackModal, {
   AppFeedbackModalTone,
 } from "@/components/ui/app-feedback-modal";
+import { BrokerFeeType } from "@/src/lib/broker-fee";
 import {
   getBrokerSettings,
   setBrokerSettings,
@@ -21,6 +23,44 @@ type BrokerSettingsNotice = {
   tone: AppFeedbackModalTone;
 };
 
+function FeeTypeChip({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.88}
+      onPress={onPress}
+      className={[
+        "rounded-xl px-3 py-2",
+        selected
+          ? "bg-app-highlight dark:bg-app-highlightDark"
+          : "bg-brand-white/70 dark:bg-brand-white/5",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <Text
+        className={[
+          "text-xs font-bold uppercase tracking-wide",
+          selected
+            ? "text-brand-white dark:text-brand-purple"
+            : "text-app-highlight dark:text-app-highlightDark",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 export default function BrokerSettingsScreen() {
   const router = useGuardedRouter();
   const insets = useSafeAreaInsets();
@@ -30,8 +70,10 @@ export default function BrokerSettingsScreen() {
     ? APP_COLORS.text.placeholderDark
     : APP_COLORS.text.placeholderLight;
 
-  const [brokerNameInput, setBrokerNameInput] = React.useState("");
+  const [transactionFeeType, setTransactionFeeType] =
+    React.useState<BrokerFeeType>("percentage");
   const [transactionFeeInput, setTransactionFeeInput] = React.useState("");
+  const [isCalculatorVisible, setIsCalculatorVisible] = React.useState(false);
   const [isSaving, setIsSaving] = React.useState(false);
   const [notice, setNotice] = React.useState<BrokerSettingsNotice | null>(null);
 
@@ -44,8 +86,8 @@ export default function BrokerSettingsScreen() {
         return;
       }
 
-      setBrokerNameInput(savedBrokerSettings.brokerName);
-      setTransactionFeeInput(String(savedBrokerSettings.transactionFeePct));
+      setTransactionFeeType(savedBrokerSettings.transactionFeeType);
+      setTransactionFeeInput(String(savedBrokerSettings.transactionFeeValue));
     }
 
     void hydrateBrokerSettings();
@@ -67,17 +109,13 @@ export default function BrokerSettingsScreen() {
   );
 
   const handleSaveBrokerSettings = React.useCallback(async () => {
-    const normalizedBrokerName = brokerNameInput.trim();
-    if (normalizedBrokerName.length === 0) {
-      showNotice("Broker Required", "Please enter your broker name.", "error");
-      return;
-    }
-
     const parsedTransactionFee = Number(transactionFeeInput.trim().replace(/,/g, ""));
     if (!Number.isFinite(parsedTransactionFee) || parsedTransactionFee < 0) {
       showNotice(
         "Invalid Transaction Fee",
-        "Enter a valid transaction fee percentage (0 or above).",
+        transactionFeeType === "percentage"
+          ? "Enter a valid transaction fee percentage (0 or above)."
+          : "Enter a valid fixed broker fee in PKR (0 or above).",
         "error"
       );
       return;
@@ -86,8 +124,9 @@ export default function BrokerSettingsScreen() {
     setIsSaving(true);
     try {
       await setBrokerSettings({
-        brokerName: normalizedBrokerName,
-        transactionFeePct: parsedTransactionFee,
+        brokerName: "Default Broker",
+        transactionFeeType,
+        transactionFeeValue: parsedTransactionFee,
       });
       showNotice(
         "Broker Saved",
@@ -103,7 +142,7 @@ export default function BrokerSettingsScreen() {
     } finally {
       setIsSaving(false);
     }
-  }, [brokerNameInput, showNotice, transactionFeeInput]);
+  }, [showNotice, transactionFeeInput, transactionFeeType]);
 
   return (
     <SafeAreaView
@@ -135,37 +174,53 @@ export default function BrokerSettingsScreen() {
               Default Broker
             </Text>
             <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
-              These values are used automatically in trade form when Broker Mode is set
-              to Saved.
+              These values are used automatically in trade form when Broker Mode is set to Saved.
             </Text>
 
             <View className="mt-4 gap-3">
               <View>
                 <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                  Broker Name
+                  Fee Type
                 </Text>
-                <TextInput
-                  value={brokerNameInput}
-                  onChangeText={setBrokerNameInput}
-                  placeholder="e.g. XYZ Securities"
-                  placeholderTextColor={placeholderTextColor}
-                  className="mt-1 rounded-xl border border-app-highlight/25 bg-app-highlight/5 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/35 dark:bg-brand-white/5 dark:text-app-textDark"
-                />
+                <View className="mt-1 flex-row gap-2">
+                  <FeeTypeChip
+                    label="Percent"
+                    selected={transactionFeeType === "percentage"}
+                    onPress={() => setTransactionFeeType("percentage")}
+                  />
+                  <FeeTypeChip
+                    label="Fixed PKR"
+                    selected={transactionFeeType === "fixed"}
+                    onPress={() => setTransactionFeeType("fixed")}
+                  />
+                </View>
               </View>
 
               <View>
                 <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                  Transaction Fee %
+                  {transactionFeeType === "percentage"
+                    ? "Transaction Fee %"
+                    : "Transaction Fee (PKR)"}
                 </Text>
                 <TextInput
                   value={transactionFeeInput}
                   onChangeText={setTransactionFeeInput}
-                  placeholder="e.g. 0.15"
+                  placeholder={transactionFeeType === "percentage" ? "e.g. 0.15" : "e.g. 50"}
                   placeholderTextColor={placeholderTextColor}
                   keyboardType="numeric"
                   className="mt-1 rounded-xl border border-app-highlight/25 bg-app-highlight/5 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/35 dark:bg-brand-white/5 dark:text-app-textDark"
                 />
               </View>
+
+              <TouchableOpacity
+                activeOpacity={0.88}
+                onPress={() => setIsCalculatorVisible(true)}
+                className="self-start rounded-xl bg-app-highlight/8 px-3 py-2 dark:bg-brand-white/10"
+              >
+                <Text className="text-xs font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                  Calculate Broker Fee
+                </Text>
+              </TouchableOpacity>
             </View>
 
             <View className="mt-5">
@@ -187,6 +242,20 @@ export default function BrokerSettingsScreen() {
         tone={notice?.tone ?? "info"}
         actionLabel="Done"
         onClose={() => setNotice(null)}
+      />
+
+      <BrokerFeeCalculatorModal
+        visible={isCalculatorVisible}
+        title="Calculate Broker Fee"
+        subtitle="Use calculator and tap Add Fee."
+        defaultFeeType={transactionFeeType}
+        defaultFeeValueInput={transactionFeeInput}
+        onClose={() => setIsCalculatorVisible(false)}
+        onApply={(payload) => {
+          setTransactionFeeType(payload.feeType);
+          setTransactionFeeInput(String(payload.feeValue));
+          setIsCalculatorVisible(false);
+        }}
       />
     </SafeAreaView>
   );

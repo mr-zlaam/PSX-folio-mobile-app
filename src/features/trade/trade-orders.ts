@@ -2,6 +2,11 @@ import * as FileSystem from "expo-file-system/legacy";
 import { getSavedBonusShareRecords } from "@/src/features/bonus-share/bonus-share-records";
 import { getPositionSnapshotForSymbol } from "@/src/features/portfolio/position-ledger";
 import {
+  BrokerFeeType,
+  normalizeBrokerFeeType,
+  resolveBrokerFeeValue,
+} from "@/src/lib/broker-fee";
+import {
   emitTradeDeletedMutation,
   emitTradeMutation,
 } from "@/src/features/trade/trade-events";
@@ -17,13 +22,15 @@ export type TradeOrderInput = {
   tradedAt: string;
   brokerMode: BrokerMode;
   brokerName: string | null;
-  brokerFeePct: number | null;
-  cashGuardApplied?: boolean;
+  brokerFeeType: BrokerFeeType;
+  brokerFeeValue: number | null;
 };
 
 export type TradeOrderRecord = TradeOrderInput & {
   id: string;
   createdAt: string;
+  // Legacy compatibility for old backups/records.
+  brokerFeePct?: number | null;
 };
 
 type TradeOrdersStore = {
@@ -79,17 +86,46 @@ function getSafeOrdersStore(value: unknown): TradeOrdersStore {
       typeof order.tradedAt === "string" &&
       (order.brokerMode === "saved" || order.brokerMode === "custom") &&
       (typeof order.brokerName === "string" || order.brokerName === null) &&
+      (typeof order.brokerFeeType === "string" ||
+        typeof order.brokerFeeType === "undefined") &&
+      (typeof order.brokerFeeValue === "number" ||
+        order.brokerFeeValue === null ||
+        typeof order.brokerFeeValue === "undefined") &&
       (typeof order.brokerFeePct === "number" ||
-        order.brokerFeePct === null) &&
-      (typeof order.cashGuardApplied === "boolean" ||
-        typeof order.cashGuardApplied === "undefined") &&
+        order.brokerFeePct === null ||
+        typeof order.brokerFeePct === "undefined") &&
       typeof order.createdAt === "string"
     )
-    .map((order) => ({
-      ...order,
-      // Legacy records may not have this field; treat them as non-guarded.
-      cashGuardApplied: order.cashGuardApplied === true,
-    }));
+    .map((order) => {
+      const normalizedBrokerFeeType = normalizeBrokerFeeType(
+        typeof order.brokerFeeType === "string" ? order.brokerFeeType : null
+      );
+      const normalizedBrokerFeeValue = resolveBrokerFeeValue({
+        brokerFeeValue:
+          typeof order.brokerFeeValue === "number" &&
+          Number.isFinite(order.brokerFeeValue)
+            ? order.brokerFeeValue
+            : null,
+        brokerFeePct:
+          typeof order.brokerFeePct === "number" && Number.isFinite(order.brokerFeePct)
+            ? order.brokerFeePct
+            : null,
+      });
+
+      return {
+        id: order.id,
+        side: order.side,
+        symbol: order.symbol.trim().toUpperCase(),
+        price: order.price,
+        units: order.units,
+        tradedAt: order.tradedAt,
+        brokerMode: order.brokerMode,
+        brokerName: order.brokerName,
+        brokerFeeType: normalizedBrokerFeeType,
+        brokerFeeValue: normalizedBrokerFeeValue,
+        createdAt: order.createdAt,
+      };
+    });
 
   return {
     version: 1,
@@ -176,11 +212,10 @@ export async function saveTradeOrder(
     tradedAt: orderInput.tradedAt,
     brokerMode: orderInput.brokerMode,
     brokerName: orderInput.brokerName,
-    brokerFeePct: orderInput.brokerFeePct,
-    cashGuardApplied:
-      typeof orderInput.cashGuardApplied === "boolean"
-        ? orderInput.cashGuardApplied
-        : false,
+    brokerFeeType: normalizeBrokerFeeType(orderInput.brokerFeeType),
+    brokerFeeValue: resolveBrokerFeeValue({
+      brokerFeeValue: orderInput.brokerFeeValue,
+    }),
     createdAt: new Date().toISOString(),
   };
 
@@ -272,11 +307,10 @@ export async function updateTradeOrder(
     tradedAt: orderInput.tradedAt,
     brokerMode: orderInput.brokerMode,
     brokerName: orderInput.brokerName,
-    brokerFeePct: orderInput.brokerFeePct,
-    cashGuardApplied:
-      typeof orderInput.cashGuardApplied === "boolean"
-        ? orderInput.cashGuardApplied
-        : (existingOrder.cashGuardApplied ?? false),
+    brokerFeeType: normalizeBrokerFeeType(orderInput.brokerFeeType),
+    brokerFeeValue: resolveBrokerFeeValue({
+      brokerFeeValue: orderInput.brokerFeeValue,
+    }),
   };
 
   const nextOrders = [...store.orders];

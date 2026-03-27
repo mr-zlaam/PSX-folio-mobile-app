@@ -76,9 +76,22 @@ export default function StockLineChart({
 }: StockLineChartProps) {
   const [width, setWidth] = React.useState(0);
   const [selectedX, setSelectedX] = React.useState<number | null>(null);
+  const lastSelectedXRef = React.useRef<number | null>(null);
+  const pendingRelativeXRef = React.useRef<number | null>(null);
+  const animationFrameRef = React.useRef<number | null>(null);
+  const lastEmittedSelectionRef = React.useRef<{
+    point: StockLineChartPoint | null;
+    callback: StockLineChartProps["onPointSelected"];
+  }>({
+    point: null,
+    callback: undefined,
+  });
 
   const handleLayout = React.useCallback((event: LayoutChangeEvent) => {
-    setWidth(event.nativeEvent.layout.width);
+    const nextWidth = event.nativeEvent.layout.width;
+    setWidth((previousWidth) =>
+      previousWidth === nextWidth ? previousWidth : nextWidth
+    );
   }, []);
 
   const chartWidth = React.useMemo(
@@ -104,7 +117,7 @@ export default function StockLineChart({
       return null;
     }
 
-    const clampedX = clamp(selectedX, 0, chartWidth);
+    const clampedX = clampToFinite(clamp(selectedX, 0, chartWidth));
     if (chartCoordinates.length === 1) {
       const coordinate = chartCoordinates[0];
       return {
@@ -139,16 +152,71 @@ export default function StockLineChart({
     };
   }, [chartCoordinates, chartWidth, selectedX]);
 
-  const handleSelectAtRelativeX = React.useCallback(
+  const setSelectedXIfChanged = React.useCallback(
+    (nextX: number | null) => {
+      setSelectedX((previousX) => {
+        if (nextX === null) {
+          if (previousX === null) {
+            return previousX;
+          }
+
+          lastSelectedXRef.current = null;
+          return null;
+        }
+
+        if (!Number.isFinite(nextX) || chartWidth <= 0) {
+          return previousX;
+        }
+
+        const normalizedX = clamp(nextX, 0, chartWidth);
+        const lastSelectedX = lastSelectedXRef.current;
+        if (
+          previousX !== null &&
+          lastSelectedX !== null &&
+          Math.abs(normalizedX - lastSelectedX) < 0.25
+        ) {
+          return previousX;
+        }
+
+        if (previousX !== null && Math.abs(normalizedX - previousX) < 0.25) {
+          return previousX;
+        }
+
+        lastSelectedXRef.current = normalizedX;
+        return normalizedX;
+      });
+    },
+    [chartWidth]
+  );
+
+  const flushPendingSelection = React.useCallback(() => {
+    const relativeX = pendingRelativeXRef.current;
+    if (
+      relativeX === null ||
+      chartCoordinates.length < 2 ||
+      chartWidth <= 0 ||
+      !Number.isFinite(relativeX)
+    ) {
+      setSelectedXIfChanged(null);
+      return;
+    }
+
+    setSelectedXIfChanged(relativeX);
+  }, [chartCoordinates.length, chartWidth, setSelectedXIfChanged]);
+
+  const scheduleSelectionFromRelativeX = React.useCallback(
     (relativeX: number) => {
-      if (chartCoordinates.length < 2 || chartWidth <= 0) {
-        setSelectedX(null);
+      pendingRelativeXRef.current = relativeX;
+      if (animationFrameRef.current !== null) {
         return;
       }
 
-      setSelectedX(clamp(relativeX, 0, chartWidth));
+      animationFrameRef.current = requestAnimationFrame(() => {
+        animationFrameRef.current = null;
+        flushPendingSelection();
+      });
     },
-    [chartCoordinates.length, chartWidth]
+    [flushPendingSelection]
   );
 
   const panResponder = React.useMemo(
@@ -157,38 +225,76 @@ export default function StockLineChart({
         onStartShouldSetPanResponder: () => true,
         onMoveShouldSetPanResponder: () => true,
         onPanResponderGrant: (event) => {
-          handleSelectAtRelativeX(event.nativeEvent.locationX);
+          scheduleSelectionFromRelativeX(event.nativeEvent.locationX);
         },
         onPanResponderMove: (event) => {
-          handleSelectAtRelativeX(event.nativeEvent.locationX);
+          scheduleSelectionFromRelativeX(event.nativeEvent.locationX);
+        },
+        onPanResponderRelease: (event) => {
+          scheduleSelectionFromRelativeX(event.nativeEvent.locationX);
+        },
+        onPanResponderTerminate: (event) => {
+          scheduleSelectionFromRelativeX(event.nativeEvent.locationX);
         },
       }),
-    [handleSelectAtRelativeX]
+    [scheduleSelectionFromRelativeX]
+  );
+
+  React.useEffect(
+    () => () => {
+      if (animationFrameRef.current !== null) {
+        cancelAnimationFrame(animationFrameRef.current);
+      }
+    },
+    []
   );
 
   React.useEffect(() => {
-    if (chartCoordinates.length < 2) {
-      setSelectedX(null);
+    if (chartCoordinates.length < 2 || chartWidth <= 0) {
+      setSelectedXIfChanged(null);
       return;
     }
 
-    if (selectedX !== null) {
-      setSelectedX((previousValue) => {
-        if (previousValue === null) {
-          return previousValue;
-        }
+    setSelectedX((previousValue) => {
+      if (previousValue === null) {
+        return previousValue;
+      }
 
-        return clamp(previousValue, 0, chartWidth);
-      });
-    }
-  }, [chartCoordinates.length, chartWidth, selectedX]);
+      const normalizedX = clamp(previousValue, 0, chartWidth);
+      if (normalizedX === previousValue) {
+        return previousValue;
+      }
+
+      lastSelectedXRef.current = normalizedX;
+      return normalizedX;
+    });
+  }, [chartCoordinates.length, chartWidth, setSelectedXIfChanged]);
 
   React.useEffect(() => {
     if (!onPointSelected) {
       return;
     }
 
-    onPointSelected(selectedPoint?.point ?? null);
+    const nextPoint = selectedPoint?.point ?? null;
+    const { point: previousPoint, callback: previousCallback } =
+      lastEmittedSelectionRef.current;
+    const isSamePoint =
+      previousPoint === nextPoint ||
+      (previousPoint !== null &&
+        nextPoint !== null &&
+        previousPoint.timestamp === nextPoint.timestamp &&
+        previousPoint.price === nextPoint.price) ||
+      (previousPoint === null && nextPoint === null);
+
+    if (isSamePoint && previousCallback === onPointSelected) {
+      return;
+    }
+
+    lastEmittedSelectionRef.current = {
+      point: nextPoint,
+      callback: onPointSelected,
+    };
+    onPointSelected(nextPoint);
   }, [onPointSelected, selectedPoint]);
 
   return (

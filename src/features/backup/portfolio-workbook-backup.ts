@@ -36,8 +36,9 @@ type RawColumn =
   | "units"
   | "brokerMode"
   | "brokerName"
+  | "brokerFeeType"
+  | "brokerFeeValue"
   | "brokerFeePct"
-  | "cashGuardApplied"
   | "amount"
   | "note"
   | "shares"
@@ -85,8 +86,9 @@ const RAW_COLUMNS: readonly RawColumn[] = [
   "units",
   "brokerMode",
   "brokerName",
+  "brokerFeeType",
+  "brokerFeeValue",
   "brokerFeePct",
-  "cashGuardApplied",
   "amount",
   "note",
   "shares",
@@ -117,17 +119,6 @@ function parseFiniteNumber(value: string): number | null {
   }
 
   return parsedValue;
-}
-
-function parseBoolean(value: string): boolean | null {
-  const normalizedValue = value.trim().toLowerCase();
-  if (normalizedValue === "true") {
-    return true;
-  }
-  if (normalizedValue === "false") {
-    return false;
-  }
-  return null;
 }
 
 function escapeHtml(rawValue: string): string {
@@ -212,7 +203,7 @@ async function readBackupSnapshot(): Promise<BackupSnapshot> {
       getSavedDividendRecords(),
       getSavedBonusShareRecords(),
       getPortfolioHoldingsWithCachedQuotes(),
-      getCashLedgerSnapshot({ scope: "all" }),
+      getCashLedgerSnapshot(),
     ]);
 
   return {
@@ -252,11 +243,13 @@ function buildRawRows(snapshot: BackupSnapshot): RawRow[] {
       units: String(trade.units),
       brokerMode: trade.brokerMode,
       brokerName: trade.brokerName ?? "",
+      brokerFeeType: trade.brokerFeeType,
+      brokerFeeValue:
+        typeof trade.brokerFeeValue === "number" ? String(trade.brokerFeeValue) : "",
       brokerFeePct:
-        typeof trade.brokerFeePct === "number" ? String(trade.brokerFeePct) : "",
-      cashGuardApplied:
-        typeof trade.cashGuardApplied === "boolean"
-          ? String(trade.cashGuardApplied)
+        trade.brokerFeeType === "percentage" &&
+        typeof trade.brokerFeeValue === "number"
+          ? String(trade.brokerFeeValue)
           : "",
     });
   }
@@ -641,9 +634,15 @@ function parseFlatRows(parsedRows: string[][]): {
       }
 
       const brokerNameRaw = getCell(row, "brokerName").trim();
+      const brokerFeeTypeRaw = getCell(row, "brokerFeeType").trim();
+      const brokerFeeValueRaw = parseFiniteNumber(getCell(row, "brokerFeeValue"));
       const brokerFeePct = parseFiniteNumber(getCell(row, "brokerFeePct"));
-      const cashGuardApplied =
-        parseBoolean(getCell(row, "cashGuardApplied")) ?? false;
+      const brokerFeeType =
+        brokerFeeTypeRaw === "fixed" || brokerFeeTypeRaw === "percentage"
+          ? brokerFeeTypeRaw
+          : "percentage";
+      const brokerFeeValue =
+        brokerFeeValueRaw === null ? (brokerFeePct === null ? 0 : brokerFeePct) : brokerFeeValueRaw;
 
       trades.push({
         id,
@@ -655,8 +654,8 @@ function parseFlatRows(parsedRows: string[][]): {
         units: Math.round(units),
         brokerMode: brokerModeRaw,
         brokerName: brokerNameRaw.length > 0 ? brokerNameRaw : null,
-        brokerFeePct: brokerFeePct === null ? null : brokerFeePct,
-        cashGuardApplied,
+        brokerFeeType,
+        brokerFeeValue,
       });
       continue;
     }

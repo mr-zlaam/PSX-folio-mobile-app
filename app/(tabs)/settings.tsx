@@ -1,5 +1,6 @@
 import React from "react";
 import { useGuardedRouter } from "@/src/lib/navigation";
+import { useLocalSearchParams } from "expo-router";
 import {
   ActivityIndicator,
   InteractionManager,
@@ -16,6 +17,7 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import { useFocusEffect } from "@react-navigation/native";
+import AppBackIconButton from "@/components/ui/app-back-icon-button";
 import AppButton from "@/components/ui/app-button";
 import AppFeedbackModal from "@/components/ui/app-feedback-modal";
 import { APP_COLORS } from "@/src/theme/colors";
@@ -39,10 +41,8 @@ import {
 import {
   AppTheme,
   BrokerSettings,
-  getCashGuardEnabledPreference,
   getDividendAutoReinvestEnabledPreference,
   getBrokerSettings,
-  setCashGuardEnabledPreference,
   setDividendAutoReinvestEnabledPreference,
   setThemePreference,
 } from "@/src/lib/app-preferences";
@@ -137,18 +137,33 @@ function formatBrokerSummary(brokerSettings: BrokerSettings | null): string {
     return "Not configured yet.";
   }
 
-  return `${brokerSettings.brokerName} • ${brokerSettings.transactionFeePct}% fee`;
+  const feeText =
+    brokerSettings.transactionFeeType === "fixed"
+      ? `PKR ${brokerSettings.transactionFeeValue} fee`
+      : `${brokerSettings.transactionFeeValue}% fee`;
+
+  return `${brokerSettings.brokerName} • ${feeText}`;
 }
 
 export default function SettingsTabScreen() {
   const insets = useSafeAreaInsets();
   const router = useGuardedRouter();
+  const searchParams = useLocalSearchParams<{
+    originTab?: string | string[];
+  }>();
   const { colorScheme, setColorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
   const inputPlaceholderTextColor = isDarkMode
     ? APP_COLORS.text.placeholderDark
     : APP_COLORS.text.placeholderLight;
   const currentTheme: AppTheme = isDarkMode ? "dark" : "light";
+  const routeOriginTab = React.useMemo(() => {
+    const rawOriginTab = Array.isArray(searchParams.originTab)
+      ? searchParams.originTab[0]
+      : searchParams.originTab;
+    return typeof rawOriginTab === "string" ? rawOriginTab.trim().toLowerCase() : "";
+  }, [searchParams.originTab]);
+  const shouldShowBackToMore = routeOriginTab === "more";
   const pendingThemeTaskRef = React.useRef<ReturnType<
     typeof InteractionManager.runAfterInteractions
   > | null>(null);
@@ -159,7 +174,6 @@ export default function SettingsTabScreen() {
   const [brokerSettings, setBrokerSettingsState] = React.useState<BrokerSettings | null>(
     null
   );
-  const [cashGuardEnabled, setCashGuardEnabled] = React.useState(false);
   const [dividendAutoReinvestEnabled, setDividendAutoReinvestEnabled] =
     React.useState(false);
   const [isResetModalVisible, setIsResetModalVisible] = React.useState(false);
@@ -176,11 +190,6 @@ export default function SettingsTabScreen() {
     setBrokerSettingsState(savedBrokerSettings);
   }, []);
 
-  const loadCashGuardPreference = React.useCallback(async () => {
-    const isEnabled = await getCashGuardEnabledPreference();
-    setCashGuardEnabled(isEnabled);
-  }, []);
-
   const loadDividendAutoReinvestPreference = React.useCallback(async () => {
     const isEnabled = await getDividendAutoReinvestEnabledPreference();
     setDividendAutoReinvestEnabled(isEnabled);
@@ -189,13 +198,8 @@ export default function SettingsTabScreen() {
   useFocusEffect(
     React.useCallback(() => {
       void loadBrokerSettings();
-      void loadCashGuardPreference();
       void loadDividendAutoReinvestPreference();
-    }, [
-      loadBrokerSettings,
-      loadCashGuardPreference,
-      loadDividendAutoReinvestPreference,
-    ])
+    }, [loadBrokerSettings, loadDividendAutoReinvestPreference])
   );
 
   const handlePullToRefresh = React.useCallback(async () => {
@@ -205,7 +209,6 @@ export default function SettingsTabScreen() {
         getLatestKse100Summary(),
         getLatestSymbols(),
         loadBrokerSettings(),
-        loadCashGuardPreference(),
         loadDividendAutoReinvestPreference(),
       ]);
     } finally {
@@ -213,7 +216,6 @@ export default function SettingsTabScreen() {
     }
   }, [
     loadBrokerSettings,
-    loadCashGuardPreference,
     loadDividendAutoReinvestPreference,
   ]);
 
@@ -239,15 +241,6 @@ export default function SettingsTabScreen() {
     return () => {
       pendingThemeTaskRef.current?.cancel();
     };
-  }, []);
-
-  const handleCashGuardToggle = React.useCallback(async (nextValue: boolean) => {
-    setCashGuardEnabled(nextValue);
-    try {
-      await setCashGuardEnabledPreference(nextValue);
-    } catch {
-      // Keep selected value in UI even if persistence fails.
-    }
   }, []);
 
   const handleDividendAutoReinvestToggle = React.useCallback(
@@ -331,6 +324,9 @@ export default function SettingsTabScreen() {
       setIsResettingPortfolio(false);
     }
   }, [resetAnswerInput, resetChallenge.answer]);
+  const handleBackToMore = React.useCallback(() => {
+    router.replace("/(tabs)/more");
+  }, [router]);
 
   return (
     <SafeAreaView
@@ -358,12 +354,18 @@ export default function SettingsTabScreen() {
         }
       >
         <View className="gap-4">
+          {shouldShowBackToMore ? (
+            <View className="flex-row items-center">
+              <AppBackIconButton onPress={handleBackToMore} />
+            </View>
+          ) : null}
+
           <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
             <Text className="text-3xl font-extrabold text-app-text dark:text-app-textDark">
               Settings
             </Text>
             <Text className="mt-2 text-base text-app-text dark:text-app-textDark">
-              Manage appearance, trading controls, and profile options.
+              Manage appearance, broker profile, and portfolio options.
             </Text>
           </View>
 
@@ -407,14 +409,6 @@ export default function SettingsTabScreen() {
               Trading Rules
             </Text>
             <View className="mt-3 gap-3">
-              <SettingSwitchRow
-                label="Cash Guard"
-                description="Require available cash before creating buy orders."
-                value={cashGuardEnabled}
-                onValueChange={(nextValue) => {
-                  void handleCashGuardToggle(nextValue);
-                }}
-              />
               <SettingSwitchRow
                 label="Dividend Auto Reinvest"
                 description="Automatically buy same-stock units from dividend; any remainder stays as free cash."

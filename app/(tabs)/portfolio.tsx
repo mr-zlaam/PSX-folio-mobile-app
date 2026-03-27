@@ -1,7 +1,15 @@
 import React from "react";
 import { useGuardedRouter } from "@/src/lib/navigation";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
-import { RefreshControl, ScrollView, Text, TouchableOpacity, View } from "react-native";
+import {
+  AppState,
+  RefreshControl,
+  ScrollView,
+  Text,
+  TouchableOpacity,
+  View,
+} from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
 
 import * as DocumentPicker from "expo-document-picker";
 import * as Sharing from "expo-sharing";
@@ -368,9 +376,11 @@ export default function PortfolioTabScreen() {
     [holdings]
   );
 
-  const refreshPortfolio = React.useCallback(async () => {
-    const cachedHoldings = await getPortfolioHoldingsWithCachedQuotes();
-    setHoldings(cachedHoldings);
+  const refreshPortfolio = React.useCallback(async (preferCachedFirst = true) => {
+    if (preferCachedFirst) {
+      const cachedHoldings = await getPortfolioHoldingsWithCachedQuotes();
+      setHoldings(cachedHoldings);
+    }
 
     const latestHoldings = await getPortfolioHoldingsWithLatestQuotes();
     setHoldings(latestHoldings);
@@ -379,7 +389,7 @@ export default function PortfolioTabScreen() {
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await refreshPortfolio();
+      await refreshPortfolio(false);
     } finally {
       setIsRefreshing(false);
     }
@@ -420,9 +430,9 @@ export default function PortfolioTabScreen() {
   }, [displayMode, groupingMode, hasHydratedViewPreferences]);
 
   React.useEffect(() => {
-    void refreshPortfolio();
+    void refreshPortfolio(true);
     const intervalId = setInterval(() => {
-      void refreshPortfolio();
+      void refreshPortfolio(true);
     }, PORTFOLIO_REFRESH_INTERVAL_MS);
 
     return () => {
@@ -430,9 +440,27 @@ export default function PortfolioTabScreen() {
     };
   }, [refreshPortfolio]);
 
+  useFocusEffect(
+    React.useCallback(() => {
+      void refreshPortfolio(true);
+    }, [refreshPortfolio])
+  );
+
+  React.useEffect(() => {
+    const appStateSubscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        void refreshPortfolio(true);
+      }
+    });
+
+    return () => {
+      appStateSubscription.remove();
+    };
+  }, [refreshPortfolio]);
+
   React.useEffect(() => {
     const unsubscribe = subscribeToTradeMutations(() => {
-      void refreshPortfolio();
+      void refreshPortfolio(true);
     });
 
     return unsubscribe;

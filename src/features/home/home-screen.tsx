@@ -10,6 +10,7 @@ import { InsightDisplayMode } from "@/src/features/home/home-data";
 import {
   formatCompactPKRAmount,
   formatPKRAmount,
+  formatSignedPercentage,
 } from "@/src/features/home/home-formatters";
 import {
   buildHomeSnapshotFromHoldings,
@@ -33,11 +34,14 @@ import {
   getPortfolioHoldingsWithLatestQuotes,
   PortfolioHolding,
 } from "@/src/features/portfolio/portfolio-data";
-import { getCashLedgerSnapshot } from "@/src/features/trade/cash-ledger";
+import { getSavedBonusShareRecords } from "@/src/features/bonus-share/bonus-share-records";
+import { calculateRealizedProfitLoss } from "@/src/features/portfolio/realized-pnl";
 import { subscribeToTradeMutations } from "@/src/features/trade/trade-events";
+import { getSavedTradeOrders } from "@/src/features/trade/trade-orders";
 import {
-  getCashGuardEnabledPreference,
+  getAllTimeHighPortfolioWorthPreference,
   getHomeInsightDisplayModePreference,
+  setAllTimeHighPortfolioWorthPreference,
   setHomeInsightDisplayModePreference,
 } from "@/src/lib/app-preferences";
 import {
@@ -54,6 +58,7 @@ import { useColorScheme } from "nativewind";
 import React from "react";
 import {
   Animated,
+  AppState,
   Easing,
   RefreshControl,
   ScrollView,
@@ -98,6 +103,58 @@ function getInsightValueClassName(valueText: string): string {
   }
 
   return "text-app-text dark:text-app-textDark";
+}
+
+function formatSignedPkrAmount(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "PKR 0";
+  }
+
+  if (value > 0) {
+    return `+${formatPKRAmount(value)}`;
+  }
+
+  if (value < 0) {
+    return `-${formatPKRAmount(Math.abs(value))}`;
+  }
+
+  return formatPKRAmount(0);
+}
+
+function isCompactPkrValue(
+  value: number,
+  options?: {
+    compactFrom?: number;
+  },
+): boolean {
+  if (!Number.isFinite(value)) {
+    return false;
+  }
+
+  const compactFrom = options?.compactFrom ?? 100_000;
+  return Math.abs(value) >= compactFrom;
+}
+
+function formatSignedCompactPkrAmount(
+  value: number,
+  options?: {
+    compactFrom?: number;
+  },
+): string {
+  if (!Number.isFinite(value)) {
+    return "PKR 0";
+  }
+
+  const absoluteCompactText = formatCompactPKRAmount(Math.abs(value), options);
+  if (value > 0) {
+    return `+${absoluteCompactText}`;
+  }
+
+  if (value < 0) {
+    return `-${absoluteCompactText}`;
+  }
+
+  return formatCompactPKRAmount(0, options);
 }
 
 function formatUpdatedAt(value: string | null): string {
@@ -182,9 +239,14 @@ export default function HomeScreen() {
   const [insightDisplayValues, setInsightDisplayValues] =
     React.useState<InsightDisplayValues>(DEFAULT_INSIGHT_DISPLAY_VALUES);
   const [totalDividendValue, setTotalDividendValue] = React.useState(0);
-  const [cashGuardEnabled, setCashGuardEnabled] = React.useState(false);
-  const [availableFreeCash, setAvailableFreeCash] = React.useState(0);
+  const [realizedProfitLoss, setRealizedProfitLoss] = React.useState(0);
+  const [investedAmount, setInvestedAmount] = React.useState(0);
+  const [totalProfitAmount, setTotalProfitAmount] = React.useState(0);
+  const [totalReturnPct, setTotalReturnPct] = React.useState(0);
   const [currentPortfolioWorth, setCurrentPortfolioWorth] = React.useState(0);
+  const [todayWorthChange, setTodayWorthChange] = React.useState(0);
+  const [todayWorthChangePct, setTodayWorthChangePct] = React.useState(0);
+  const [allTimeHighWorth, setAllTimeHighWorth] = React.useState(0);
   const [marketAsOf, setMarketAsOf] = React.useState<string | null>(null);
   const [dpsMarketStatus, setDpsMarketStatus] =
     React.useState<DpsMarketStatusSnapshot>({
@@ -206,11 +268,17 @@ export default function HomeScreen() {
     React.useState(false);
   const [isPortfolioWorthTooltipVisible, setIsPortfolioWorthTooltipVisible] =
     React.useState(false);
+  const [activeMetricTooltipKey, setActiveMetricTooltipKey] = React.useState<
+    "invested" | "totalPl" | "todayPl" | "realizedPl" | null
+  >(null);
   const openPulseAnim = React.useRef(new Animated.Value(0)).current;
   const homeRefreshRequestIdRef = React.useRef(0);
   const portfolioWorthTooltipTimeoutRef = React.useRef<
     ReturnType<typeof setTimeout> | null
   >(null);
+  const metricTooltipTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(
+    null,
+  );
 
   const handleTradePress = React.useCallback(() => {
     router.push({
@@ -250,49 +318,95 @@ export default function HomeScreen() {
       holdings: PortfolioHolding[],
       totalDividendValue: number,
       totalDepositValue: number,
-    ) => {
+      allTimeHighWorthBaseline: number,
+    ): number => {
       const nextHomeData = buildHomeSnapshotFromHoldings(holdings, {
         contributedCapitalAdjustment: totalDepositValue,
         returnCashAdjustment: totalDividendValue,
       });
-      setCurrentPortfolioWorth(nextHomeData.snapshot.summary.value);
+      const nextPortfolioWorth = nextHomeData.snapshot.summary.value;
+      const todayChange = holdings.reduce((runningTotal, holding) => {
+        const units = Number.isFinite(holding.units) ? holding.units : 0;
+        const currentPrice = Number.isFinite(holding.currentPrice)
+          ? holding.currentPrice
+          : 0;
+        const previousClose =
+          Number.isFinite(holding.previousClose) && holding.previousClose > 0
+            ? holding.previousClose
+            : currentPrice;
+
+        return runningTotal + units * (currentPrice - previousClose);
+      }, 0);
+      const previousWorth = nextPortfolioWorth - todayChange;
+      const todayChangePct = previousWorth > 0 ? (todayChange / previousWorth) * 100 : 0;
+      const nextAllTimeHighWorth = Math.max(allTimeHighWorthBaseline, nextPortfolioWorth);
+
+      setCurrentPortfolioWorth(nextPortfolioWorth);
+      setInvestedAmount(nextHomeData.snapshot.summary.invested);
+      setTotalProfitAmount(nextHomeData.snapshot.summary.profit);
+      setTotalReturnPct(nextHomeData.snapshot.summary.returnPct);
+      setTodayWorthChange(todayChange);
+      setTodayWorthChangePct(todayChangePct);
+      setAllTimeHighWorth(nextAllTimeHighWorth);
+
+      if (nextAllTimeHighWorth > allTimeHighWorthBaseline) {
+        void setAllTimeHighPortfolioWorthPreference(nextAllTimeHighWorth);
+      }
+
       setViewModel(buildHomeViewModel(nextHomeData.snapshot));
       setInsightDisplayValues(nextHomeData.insightDisplayValues);
+      return nextAllTimeHighWorth;
     },
     [],
   );
 
-  const refreshHomeSnapshot = React.useCallback(async () => {
+  const refreshHomeSnapshot = React.useCallback(async (preferCachedFirst = true) => {
     const requestId = homeRefreshRequestIdRef.current + 1;
     homeRefreshRequestIdRef.current = requestId;
 
     const [
-      cachedHoldings,
       totalDividendValue,
       totalDepositValue,
-      isCashGuardEnabled,
-      cashLedgerSnapshot,
-      cachedMarketDetail,
-      cachedDpsStatus,
+      storedAllTimeHighWorth,
+      savedTradeOrders,
+      savedBonusShareRecords,
     ] = await Promise.all([
-      getPortfolioHoldingsWithCachedQuotes(),
       getTotalDividendFinalAmount(),
       getTotalDepositAmount(),
-      getCashGuardEnabledPreference(),
-      getCashLedgerSnapshot(),
-      getCachedMarketIndexDetail("KSE100"),
-      getCachedDpsMarketStatus(),
+      getAllTimeHighPortfolioWorthPreference(),
+      getSavedTradeOrders(),
+      getSavedBonusShareRecords(),
     ]);
     if (requestId !== homeRefreshRequestIdRef.current) {
       return;
     }
 
     setTotalDividendValue(totalDividendValue);
-    setCashGuardEnabled(isCashGuardEnabled);
-    setAvailableFreeCash(cashLedgerSnapshot.availableCash);
-    setMarketAsOf(cachedMarketDetail?.snapshot.asOf ?? null);
-    setDpsMarketStatus(cachedDpsStatus);
-    applyHomeSnapshot(cachedHoldings, totalDividendValue, totalDepositValue);
+    setRealizedProfitLoss(
+      calculateRealizedProfitLoss(savedTradeOrders, savedBonusShareRecords),
+    );
+    let allTimeHighWorthBaseline = storedAllTimeHighWorth;
+    setAllTimeHighWorth(allTimeHighWorthBaseline);
+
+    if (preferCachedFirst) {
+      const [cachedHoldings, cachedMarketDetail, cachedDpsStatus] = await Promise.all([
+        getPortfolioHoldingsWithCachedQuotes(),
+        getCachedMarketIndexDetail("KSE100"),
+        getCachedDpsMarketStatus(),
+      ]);
+      if (requestId !== homeRefreshRequestIdRef.current) {
+        return;
+      }
+
+      setMarketAsOf(cachedMarketDetail?.snapshot.asOf ?? null);
+      setDpsMarketStatus(cachedDpsStatus);
+      allTimeHighWorthBaseline = applyHomeSnapshot(
+        cachedHoldings,
+        totalDividendValue,
+        totalDepositValue,
+        allTimeHighWorthBaseline,
+      );
+    }
 
     const [latestHoldings, latestMarketDetail, latestDpsStatus] = await Promise.all([
       getPortfolioHoldingsWithLatestQuotes(),
@@ -307,7 +421,12 @@ export default function HomeScreen() {
       setMarketAsOf(latestMarketDetail.snapshot.asOf);
     }
     setDpsMarketStatus(latestDpsStatus);
-    applyHomeSnapshot(latestHoldings, totalDividendValue, totalDepositValue);
+    applyHomeSnapshot(
+      latestHoldings,
+      totalDividendValue,
+      totalDepositValue,
+      allTimeHighWorthBaseline,
+    );
 
     void syncPsxAnnouncementsToInAppNotifications();
   }, [applyHomeSnapshot]);
@@ -324,7 +443,7 @@ export default function HomeScreen() {
         );
         return;
       }
-      await refreshHomeSnapshot();
+      await refreshHomeSnapshot(false);
     } finally {
       setIsRefreshing(false);
     }
@@ -386,7 +505,7 @@ export default function HomeScreen() {
 
   React.useEffect(() => {
     const unsubscribe = subscribeToTradeMutations(() => {
-      void refreshHomeSnapshot();
+      void refreshHomeSnapshot(true);
     });
 
     return unsubscribe;
@@ -394,24 +513,28 @@ export default function HomeScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
-      void refreshHomeSnapshot();
+      void refreshHomeSnapshot(true);
     }, [refreshHomeSnapshot]),
   );
+
+  React.useEffect(() => {
+    const appStateSubscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        void refreshHomeSnapshot(true);
+      }
+    });
+
+    return () => {
+      appStateSubscription.remove();
+    };
+  }, [refreshHomeSnapshot]);
 
   const profitSummaryItem = React.useMemo(
     () => viewModel.summaryItems.find((item) => item.key === "profit"),
     [viewModel.summaryItems],
   );
-  const investedSummaryItem = React.useMemo(
-    () => viewModel.summaryItems.find((item) => item.key === "invested"),
-    [viewModel.summaryItems],
-  );
   const valueSummaryItem = React.useMemo(
     () => viewModel.summaryItems.find((item) => item.key === "value"),
-    [viewModel.summaryItems],
-  );
-  const returnSummaryItem = React.useMemo(
-    () => viewModel.summaryItems.find((item) => item.key === "returnPct"),
     [viewModel.summaryItems],
   );
   const isPortfolioWorthCompact = Math.abs(currentPortfolioWorth) >= 100_000;
@@ -423,12 +546,77 @@ export default function HomeScreen() {
     () => formatPKRAmount(currentPortfolioWorth),
     [currentPortfolioWorth],
   );
-  const freeCashText = React.useMemo(() => {
-    if (!cashGuardEnabled) {
-      return "Unlimited";
+  const totalProfitWithPercentageText = React.useMemo(() => {
+    const returnText = formatSignedPercentage(totalReturnPct);
+    const compactAmountText = isCompactPkrValue(totalProfitAmount)
+      ? formatSignedCompactPkrAmount(totalProfitAmount, { compactFrom: 100_000 })
+      : formatSignedPkrAmount(totalProfitAmount);
+    return `${compactAmountText} (${returnText})`;
+  }, [totalProfitAmount, totalReturnPct]);
+  const totalProfitFullText = React.useMemo(
+    () =>
+      `${formatSignedPkrAmount(totalProfitAmount)} (${formatSignedPercentage(
+        totalReturnPct,
+      )})`,
+    [totalProfitAmount, totalReturnPct],
+  );
+  const investedDisplayText = React.useMemo(
+    () =>
+      isCompactPkrValue(investedAmount)
+        ? formatCompactPKRAmount(investedAmount, { compactFrom: 100_000 })
+        : formatPKRAmount(investedAmount),
+    [investedAmount],
+  );
+  const todayProfitDisplayText = React.useMemo(() => {
+    const compactAmountText = isCompactPkrValue(todayWorthChange)
+      ? formatSignedCompactPkrAmount(todayWorthChange, { compactFrom: 100_000 })
+      : formatSignedPkrAmount(todayWorthChange);
+    return `${compactAmountText} (${formatSignedPercentage(todayWorthChangePct)})`;
+  }, [todayWorthChange, todayWorthChangePct]);
+  const todayProfitFullText = React.useMemo(
+    () =>
+      `${formatSignedPkrAmount(todayWorthChange)} (${formatSignedPercentage(
+        todayWorthChangePct,
+      )})`,
+    [todayWorthChange, todayWorthChangePct],
+  );
+  const realizedProfitLossText = React.useMemo(
+    () =>
+      isCompactPkrValue(realizedProfitLoss)
+        ? formatSignedCompactPkrAmount(realizedProfitLoss, { compactFrom: 100_000 })
+        : formatSignedPkrAmount(realizedProfitLoss),
+    [realizedProfitLoss],
+  );
+  const realizedProfitLossFullText = React.useMemo(
+    () => formatSignedPkrAmount(realizedProfitLoss),
+    [realizedProfitLoss],
+  );
+  const realizedProfitLossTone = React.useMemo(() => {
+    if (realizedProfitLoss > 0) {
+      return "positive";
     }
-    return formatPKRAmount(availableFreeCash);
-  }, [availableFreeCash, cashGuardEnabled]);
+
+    if (realizedProfitLoss < 0) {
+      return "negative";
+    }
+
+    return "neutral";
+  }, [realizedProfitLoss]);
+  const allTimeHighWorthText = React.useMemo(
+    () => formatPKRAmount(allTimeHighWorth),
+    [allTimeHighWorth],
+  );
+  const todayWorthChangeTone = React.useMemo(() => {
+    if (todayWorthChange > 0) {
+      return "positive";
+    }
+
+    if (todayWorthChange < 0) {
+      return "negative";
+    }
+
+    return "neutral";
+  }, [todayWorthChange]);
   const marketStatusLabel = dpsMarketStatus.stateText;
   const marketStatusTextClassName =
     dpsMarketStatus.uiStatus === "OPEN" ? "text-success-green" : "text-brand-red";
@@ -482,6 +670,9 @@ export default function HomeScreen() {
       if (portfolioWorthTooltipTimeoutRef.current) {
         clearTimeout(portfolioWorthTooltipTimeoutRef.current);
       }
+      if (metricTooltipTimeoutRef.current) {
+        clearTimeout(metricTooltipTimeoutRef.current);
+      }
     };
   }, []);
 
@@ -499,6 +690,22 @@ export default function HomeScreen() {
       setIsPortfolioWorthTooltipVisible(false);
     }, 2000);
   }, [isPortfolioWorthCompact]);
+
+  const showMetricTooltip = React.useCallback(
+    (metricKey: "invested" | "totalPl" | "todayPl" | "realizedPl") => {
+      setActiveMetricTooltipKey(metricKey);
+      if (metricTooltipTimeoutRef.current) {
+        clearTimeout(metricTooltipTimeoutRef.current);
+      }
+
+      metricTooltipTimeoutRef.current = setTimeout(() => {
+        setActiveMetricTooltipKey((currentValue) =>
+          currentValue === metricKey ? null : currentValue,
+        );
+      }, 2000);
+    },
+    [],
+  );
 
   return (
     <SafeAreaView
@@ -627,27 +834,132 @@ export default function HomeScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
-            <Text
-              className={[
-                "mt-1 text-sm font-semibold",
-                getToneClassName(profitSummaryItem?.tone ?? "neutral"),
-              ]
-                .filter(Boolean)
-                .join(" ")}
-            >
-              Profit: {profitSummaryItem?.value ?? "PKR 0"}
-            </Text>
+            <View className="mt-3 rounded-2xl bg-app-highlight/8 px-3 py-3 dark:bg-brand-white/5">
+              <View className="flex-row flex-wrap">
+                <View className="w-1/2 pb-3 pr-2">
+                  <Text className="text-[10px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                    Invested
+                  </Text>
+                  <View className="relative mt-1 self-start">
+                    {activeMetricTooltipKey === "invested" &&
+                    isCompactPkrValue(investedAmount) ? (
+                      <View className="absolute -top-9 left-0 z-20 rounded-lg bg-app-highlight px-2.5 py-1.5 dark:bg-brand-white/90">
+                        <Text className="text-[11px] font-semibold text-brand-white dark:text-brand-purple">
+                          {formatPKRAmount(investedAmount)}
+                        </Text>
+                      </View>
+                    ) : null}
+                    <TouchableOpacity
+                      activeOpacity={isCompactPkrValue(investedAmount) ? 0.82 : 1}
+                      disabled={!isCompactPkrValue(investedAmount)}
+                      onPress={() => showMetricTooltip("invested")}
+                    >
+                      <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                        {investedDisplayText}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <View className="w-1/2 pb-3 pl-2">
+                  <Text className="text-[10px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                    Total P/L
+                  </Text>
+                  <View className="relative mt-1 self-start">
+                    {activeMetricTooltipKey === "totalPl" &&
+                    isCompactPkrValue(totalProfitAmount) ? (
+                      <View className="absolute -top-9 left-0 z-20 rounded-lg bg-app-highlight px-2.5 py-1.5 dark:bg-brand-white/90">
+                        <Text className="text-[11px] font-semibold text-brand-white dark:text-brand-purple">
+                          {totalProfitFullText}
+                        </Text>
+                      </View>
+                    ) : null}
+                    <TouchableOpacity
+                      activeOpacity={isCompactPkrValue(totalProfitAmount) ? 0.82 : 1}
+                      disabled={!isCompactPkrValue(totalProfitAmount)}
+                      onPress={() => showMetricTooltip("totalPl")}
+                    >
+                      <Text
+                        className={[
+                          "text-sm font-bold",
+                          getToneClassName(profitSummaryItem?.tone ?? "neutral"),
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                      >
+                        {totalProfitWithPercentageText}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <View className="w-1/2 pr-2">
+                  <Text className="text-[10px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                    Today P/L
+                  </Text>
+                  <View className="relative mt-1 self-start">
+                    {activeMetricTooltipKey === "todayPl" &&
+                    isCompactPkrValue(todayWorthChange) ? (
+                      <View className="absolute -top-9 left-0 z-20 rounded-lg bg-app-highlight px-2.5 py-1.5 dark:bg-brand-white/90">
+                        <Text className="text-[11px] font-semibold text-brand-white dark:text-brand-purple">
+                          {todayProfitFullText}
+                        </Text>
+                      </View>
+                    ) : null}
+                    <TouchableOpacity
+                      activeOpacity={isCompactPkrValue(todayWorthChange) ? 0.82 : 1}
+                      disabled={!isCompactPkrValue(todayWorthChange)}
+                      onPress={() => showMetricTooltip("todayPl")}
+                    >
+                      <Text
+                        className={[
+                          "text-sm font-bold",
+                          getToneClassName(todayWorthChangeTone),
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                      >
+                        {todayProfitDisplayText}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+                <View className="w-1/2 pl-2">
+                  <Text className="text-[10px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                    Realized P/L
+                  </Text>
+                  <View className="relative mt-1 self-start">
+                    {activeMetricTooltipKey === "realizedPl" &&
+                    isCompactPkrValue(realizedProfitLoss) ? (
+                      <View className="absolute -top-9 left-0 z-20 rounded-lg bg-app-highlight px-2.5 py-1.5 dark:bg-brand-white/90">
+                        <Text className="text-[11px] font-semibold text-brand-white dark:text-brand-purple">
+                          {realizedProfitLossFullText}
+                        </Text>
+                      </View>
+                    ) : null}
+                    <TouchableOpacity
+                      activeOpacity={isCompactPkrValue(realizedProfitLoss) ? 0.82 : 1}
+                      disabled={!isCompactPkrValue(realizedProfitLoss)}
+                      onPress={() => showMetricTooltip("realizedPl")}
+                    >
+                      <Text
+                        className={[
+                          "text-sm font-bold",
+                          getToneClassName(realizedProfitLossTone),
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                      >
+                        {realizedProfitLossText}
+                      </Text>
+                    </TouchableOpacity>
+                  </View>
+                </View>
+              </View>
+            </View>
             <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
-              Invested: {investedSummaryItem?.value ?? "PKR 0"}
-            </Text>
-            <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
-              Return: {returnSummaryItem?.value ?? "0.0%"}
+              All-Time High: {allTimeHighWorthText}
             </Text>
             <Text className="mt-1 text-sm font-semibold text-success-green">
               Dividend: {formatPKRAmount(totalDividendValue)}
-            </Text>
-            <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
-              Free Cash: {freeCashText}
             </Text>
             <View className="mt-2 items-end">
               <Text className="text-[9px] font-semibold text-text-light dark:text-text-dark">

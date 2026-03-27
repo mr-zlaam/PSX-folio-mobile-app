@@ -1,5 +1,6 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system/legacy";
+import { BrokerFeeType, normalizeBrokerFeeType } from "@/src/lib/broker-fee";
 
 export type AppTheme = "light" | "dark";
 export type HomeInsightDisplayModePreference = "percentage" | "price";
@@ -10,7 +11,8 @@ export type TaxComputationMode = "default" | "custom";
 export type TaxRateByProfile = Record<TaxpayerProfile, number>;
 export type BrokerSettings = {
   brokerName: string;
-  transactionFeePct: number;
+  transactionFeeType: BrokerFeeType;
+  transactionFeeValue: number;
 };
 
 const STORAGE_KEYS = {
@@ -29,8 +31,8 @@ const STORAGE_KEYS = {
   filerTaxRatePct: "@psx-portfolio/filer-tax-rate-pct",
   nonFilerTaxRatePct: "@psx-portfolio/non-filer-tax-rate-pct",
   brokerSettings: "@psx-portfolio/broker-settings",
-  cashGuardEnabled: "@psx-portfolio/cash-guard-enabled",
   dividendAutoReinvestEnabled: "@psx-portfolio/dividend-auto-reinvest-enabled",
+  allTimeHighPortfolioWorth: "@psx-portfolio/all-time-high-portfolio-worth",
 } as const;
 
 const HOME_INSIGHT_DISPLAY_MODE_VALUES: readonly HomeInsightDisplayModePreference[] = [
@@ -182,7 +184,12 @@ function parseBrokerSettings(rawValue: string | null): BrokerSettings | null {
   }
 
   try {
-    const parsedValue = JSON.parse(rawValue) as Partial<BrokerSettings>;
+    const parsedValue = JSON.parse(rawValue) as
+      | (Partial<BrokerSettings> & { transactionFeePct?: unknown })
+      | null;
+    if (!parsedValue || typeof parsedValue !== "object" || Array.isArray(parsedValue)) {
+      return null;
+    }
     if (
       typeof parsedValue.brokerName !== "string" ||
       parsedValue.brokerName.trim().length === 0
@@ -190,17 +197,32 @@ function parseBrokerSettings(rawValue: string | null): BrokerSettings | null {
       return null;
     }
 
-    if (
-      typeof parsedValue.transactionFeePct !== "number" ||
-      !Number.isFinite(parsedValue.transactionFeePct) ||
-      parsedValue.transactionFeePct < 0
-    ) {
+    const legacyFeePct =
+      typeof parsedValue.transactionFeePct === "number" &&
+      Number.isFinite(parsedValue.transactionFeePct) &&
+      parsedValue.transactionFeePct >= 0
+        ? parsedValue.transactionFeePct
+        : null;
+
+    const normalizedFeeType = normalizeBrokerFeeType(
+      typeof parsedValue.transactionFeeType === "string"
+        ? parsedValue.transactionFeeType
+        : null
+    );
+    const parsedFeeValue =
+      typeof parsedValue.transactionFeeValue === "number" &&
+      Number.isFinite(parsedValue.transactionFeeValue) &&
+      parsedValue.transactionFeeValue >= 0
+        ? parsedValue.transactionFeeValue
+        : legacyFeePct;
+    if (parsedFeeValue === null) {
       return null;
     }
 
     return {
       brokerName: parsedValue.brokerName.trim(),
-      transactionFeePct: parsedValue.transactionFeePct,
+      transactionFeeType: normalizedFeeType,
+      transactionFeeValue: parsedFeeValue,
     };
   } catch {
     return null;
@@ -253,17 +275,6 @@ export async function setThemePreference(theme: AppTheme): Promise<void> {
 
 export async function clearThemePreference(): Promise<void> {
   await removeStoredItem(STORAGE_KEYS.themePreference);
-}
-
-export async function getCashGuardEnabledPreference(): Promise<boolean> {
-  const storedValue = await getStoredItem(STORAGE_KEYS.cashGuardEnabled);
-  return storedValue === "true";
-}
-
-export async function setCashGuardEnabledPreference(
-  enabled: boolean
-): Promise<void> {
-  await setStoredItem(STORAGE_KEYS.cashGuardEnabled, String(enabled));
 }
 
 export async function getDividendAutoReinvestEnabledPreference(): Promise<boolean> {
@@ -527,12 +538,15 @@ export async function setBrokerSettings(
   brokerSettings: BrokerSettings
 ): Promise<void> {
   const normalizedBrokerName = brokerSettings.brokerName.trim();
-  const normalizedTransactionFeePct = brokerSettings.transactionFeePct;
+  const normalizedTransactionFeeType = normalizeBrokerFeeType(
+    brokerSettings.transactionFeeType
+  );
+  const normalizedTransactionFeeValue = brokerSettings.transactionFeeValue;
 
   if (
     normalizedBrokerName.length === 0 ||
-    !Number.isFinite(normalizedTransactionFeePct) ||
-    normalizedTransactionFeePct < 0
+    !Number.isFinite(normalizedTransactionFeeValue) ||
+    normalizedTransactionFeeValue < 0
   ) {
     throw new Error("Invalid broker settings");
   }
@@ -541,11 +555,36 @@ export async function setBrokerSettings(
     STORAGE_KEYS.brokerSettings,
     JSON.stringify({
       brokerName: normalizedBrokerName,
-      transactionFeePct: normalizedTransactionFeePct,
+      transactionFeeType: normalizedTransactionFeeType,
+      transactionFeeValue: normalizedTransactionFeeValue,
     })
   );
 }
 
 export async function clearBrokerSettings(): Promise<void> {
   await removeStoredItem(STORAGE_KEYS.brokerSettings);
+}
+
+export async function getAllTimeHighPortfolioWorthPreference(): Promise<number> {
+  const storedValue = await getStoredItem(STORAGE_KEYS.allTimeHighPortfolioWorth);
+  if (!storedValue) {
+    return 0;
+  }
+
+  const parsedValue = Number(storedValue);
+  if (!Number.isFinite(parsedValue) || parsedValue < 0) {
+    return 0;
+  }
+
+  return parsedValue;
+}
+
+export async function setAllTimeHighPortfolioWorthPreference(
+  value: number
+): Promise<void> {
+  if (!Number.isFinite(value) || value < 0) {
+    throw new Error("Invalid all-time high portfolio worth value.");
+  }
+
+  await setStoredItem(STORAGE_KEYS.allTimeHighPortfolioWorth, String(value));
 }

@@ -19,6 +19,7 @@ import DateTimePicker, {
 } from "@react-native-community/datetimepicker";
 import AppButton from "@/components/ui/app-button";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
+import BrokerFeeCalculatorModal from "@/components/ui/broker-fee-calculator-modal";
 import AppFeedbackModal, {
   AppFeedbackModalTone,
 } from "@/components/ui/app-feedback-modal";
@@ -40,7 +41,6 @@ import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
 import {
   getAutoTaxDeductionEnabledPreference,
   BrokerSettings,
-  getCashGuardEnabledPreference,
   getDeductTaxFromCgtEnabledPreference,
   getEffectiveCgtTaxRatePreference,
   getBrokerSettings,
@@ -49,6 +49,10 @@ import {
   TaxComputationMode,
   TaxpayerProfile,
 } from "@/src/lib/app-preferences";
+import {
+  BrokerFeeType,
+  formatBrokerFeeValueLabel,
+} from "@/src/lib/broker-fee";
 import { APP_COLORS } from "@/src/theme/colors";
 import {
   getSavedBonusShareRecords,
@@ -60,7 +64,6 @@ import {
   saveTradeOrder,
   updateTradeOrder,
 } from "@/src/features/trade/trade-orders";
-import { getCashLedgerSnapshot } from "@/src/features/trade/cash-ledger";
 import { getPositionSnapshotForSymbol } from "@/src/features/portfolio/position-ledger";
 
 const TRADE_QUOTE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
@@ -116,6 +119,10 @@ function getChangeTextClassName(change: number): string {
 
 function getTradeSideActionText(side: TradeSide): "bought" | "sold" {
   return side === "buy" ? "bought" : "sold";
+}
+
+function getBrokerFeeTypeLabel(type: BrokerFeeType): string {
+  return type === "fixed" ? "Fixed PKR" : "Percent";
 }
 
 function ToggleChip({
@@ -191,7 +198,7 @@ function FieldInput({
         placeholderTextColor={placeholderTextColor}
         keyboardType={keyboardType}
         editable={editable}
-        className="mt-1 rounded-xl bg-brand-white/70 px-3 py-2 text-sm font-semibold text-app-text dark:bg-brand-white/5 dark:text-app-textDark"
+        className="mt-1 rounded-xl border border-app-highlight/25 bg-app-highlight/8 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/35 dark:bg-brand-white/5 dark:text-app-textDark"
       />
     </View>
   );
@@ -232,8 +239,12 @@ export default function TransactionsTabScreen() {
     React.useState(false);
   const [isAwaitingTimeSelection, setIsAwaitingTimeSelection] =
     React.useState(false);
-  const [customBrokerNameInput, setCustomBrokerNameInput] = React.useState("");
-  const [customBrokerFeePctInput, setCustomBrokerFeePctInput] = React.useState("");
+  const [customBrokerFeeType, setCustomBrokerFeeType] =
+    React.useState<BrokerFeeType>("percentage");
+  const [customBrokerFeeValueInput, setCustomBrokerFeeValueInput] =
+    React.useState("");
+  const [isBrokerFeeCalculatorVisible, setIsBrokerFeeCalculatorVisible] =
+    React.useState(false);
   const [savedBrokerSettings, setSavedBrokerSettings] =
     React.useState<BrokerSettings | null>(null);
   const [taxpayerProfile, setTaxpayerProfile] =
@@ -247,8 +258,6 @@ export default function TransactionsTabScreen() {
     React.useState(true);
   const [deductTaxFromCgtEnabled, setDeductTaxFromCgtEnabled] =
     React.useState(true);
-  const [cashGuardEnabled, setCashGuardEnabled] = React.useState(false);
-  const [availableCash, setAvailableCash] = React.useState(0);
   const [hasEditedPrice, setHasEditedPrice] = React.useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = React.useState(false);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
@@ -343,17 +352,6 @@ export default function TransactionsTabScreen() {
     setSymbolQuote(latestQuote);
   }, []);
 
-  const refreshCashLedger = React.useCallback(async () => {
-    const [isCashGuardEnabled, cashLedger] = await Promise.all([
-      getCashGuardEnabledPreference(),
-      getCashLedgerSnapshot({
-        excludeTradeId: isEditingTrade ? normalizedEditTradeId : undefined,
-      }),
-    ]);
-    setCashGuardEnabled(isCashGuardEnabled);
-    setAvailableCash(cashLedger.availableCash);
-  }, [isEditingTrade, normalizedEditTradeId]);
-
   const loadTaxpayerProfile = React.useCallback(async () => {
     const [
       savedTaxpayerProfile,
@@ -381,13 +379,11 @@ export default function TransactionsTabScreen() {
       await refreshSymbols();
       await refreshQuoteForSymbol(selectedSymbol);
       await loadTaxpayerProfile();
-      await refreshCashLedger();
     } finally {
       setIsRefreshing(false);
     }
   }, [
     loadTaxpayerProfile,
-    refreshCashLedger,
     refreshQuoteForSymbol,
     refreshSymbols,
     selectedSymbol,
@@ -414,10 +410,6 @@ export default function TransactionsTabScreen() {
     void refreshSymbols();
   }, [refreshSymbols]);
 
-  React.useEffect(() => {
-    void refreshCashLedger();
-  }, [refreshCashLedger]);
-
   const loadSavedBrokerSettings = React.useCallback(async () => {
     const brokerSettings = await getBrokerSettings();
     setSavedBrokerSettings(brokerSettings);
@@ -427,8 +419,7 @@ export default function TransactionsTabScreen() {
     React.useCallback(() => {
       void loadSavedBrokerSettings();
       void loadTaxpayerProfile();
-      void refreshCashLedger();
-    }, [loadSavedBrokerSettings, loadTaxpayerProfile, refreshCashLedger])
+    }, [loadSavedBrokerSettings, loadTaxpayerProfile])
   );
 
   React.useEffect(() => {
@@ -467,11 +458,11 @@ export default function TransactionsTabScreen() {
       );
 
       setBrokerMode(existingTrade.brokerMode);
-      setCustomBrokerNameInput(existingTrade.brokerName ?? "");
-      setCustomBrokerFeePctInput(
-        typeof existingTrade.brokerFeePct === "number" &&
-          Number.isFinite(existingTrade.brokerFeePct)
-          ? String(existingTrade.brokerFeePct)
+      setCustomBrokerFeeType(existingTrade.brokerFeeType);
+      setCustomBrokerFeeValueInput(
+        typeof existingTrade.brokerFeeValue === "number" &&
+          Number.isFinite(existingTrade.brokerFeeValue)
+          ? String(existingTrade.brokerFeeValue)
           : ""
       );
     }
@@ -616,7 +607,8 @@ export default function TransactionsTabScreen() {
     }
 
     let brokerName: string | null = null;
-    let brokerFeePct: number | null = null;
+    let brokerFeeType: BrokerFeeType = "percentage";
+    let brokerFeeValue: number | null = null;
 
     if (brokerMode === "saved") {
       if (!savedBrokerSettings) {
@@ -628,52 +620,27 @@ export default function TransactionsTabScreen() {
         return;
       }
 
-      brokerName = savedBrokerSettings.brokerName;
-      brokerFeePct = savedBrokerSettings.transactionFeePct;
+      brokerFeeType = savedBrokerSettings.transactionFeeType;
+      brokerFeeValue = savedBrokerSettings.transactionFeeValue;
     }
 
     if (brokerMode === "custom") {
-      const normalizedBrokerName = customBrokerNameInput.trim();
-      if (normalizedBrokerName.length === 0) {
-        showTradeNotice("Broker Required", "Enter your custom broker name.", "error");
-        return;
-      }
-
-      const parsedBrokerFeePct = Number(
-        customBrokerFeePctInput.trim().replace(/,/g, "")
+      const parsedBrokerFeeValue = Number(
+        customBrokerFeeValueInput.trim().replace(/,/g, "")
       );
-      if (!Number.isFinite(parsedBrokerFeePct) || parsedBrokerFeePct < 0) {
+      if (!Number.isFinite(parsedBrokerFeeValue) || parsedBrokerFeeValue < 0) {
         showTradeNotice(
           "Invalid Broker Fee",
-          "Enter broker fee percentage (0 or above).",
+          customBrokerFeeType === "percentage"
+            ? "Enter broker fee percentage (0 or above)."
+            : "Enter fixed broker fee in PKR (0 or above).",
           "error"
         );
         return;
       }
 
-      brokerName = normalizedBrokerName;
-      brokerFeePct = parsedBrokerFeePct;
-    }
-
-    if (cashGuardEnabled && tradeSide === "buy") {
-      const grossBuyAmount = parsedPrice * parsedUnits;
-      const feePct = brokerFeePct && brokerFeePct > 0 ? brokerFeePct : 0;
-      const estimatedBrokerFee = (grossBuyAmount * feePct) / 100;
-      const estimatedOrderCost = grossBuyAmount + estimatedBrokerFee;
-      const cashLedger = await getCashLedgerSnapshot({
-        excludeTradeId: isEditingTrade ? normalizedEditTradeId : undefined,
-      });
-
-      if (estimatedOrderCost > cashLedger.availableCash) {
-        showTradeNotice(
-          "Insufficient Cash",
-          `Cash Guard is enabled.\nAvailable cash: ${formatPKRAmount(
-            cashLedger.availableCash
-          )}.\nRequired for this buy: ${formatPKRAmount(estimatedOrderCost)}.`,
-          "error"
-        );
-        return;
-      }
+      brokerFeeType = customBrokerFeeType;
+      brokerFeeValue = parsedBrokerFeeValue;
     }
 
     let sellGrossProfit = 0;
@@ -739,8 +706,8 @@ export default function TransactionsTabScreen() {
             tradedAt: tradeDateTime.toISOString(),
             brokerMode,
             brokerName,
-            brokerFeePct,
-            cashGuardApplied: cashGuardEnabled,
+            brokerFeeType,
+            brokerFeeValue,
           })
         : await saveTradeOrder({
             side: tradeSide,
@@ -750,8 +717,8 @@ export default function TransactionsTabScreen() {
             tradedAt: tradeDateTime.toISOString(),
             brokerMode,
             brokerName,
-            brokerFeePct,
-            cashGuardApplied: cashGuardEnabled,
+            brokerFeeType,
+            brokerFeeValue,
           });
 
       if (tradeSide === "sell") {
@@ -787,16 +754,14 @@ export default function TransactionsTabScreen() {
           messageLines.join("\n"),
           "success"
         );
-        await refreshCashLedger();
-
         if (isEditingTrade) {
           setShouldGoBackAfterNotice(true);
           return;
         }
 
         setUnitsInput("");
-        setCustomBrokerNameInput("");
-        setCustomBrokerFeePctInput("");
+        setCustomBrokerFeeType("percentage");
+        setCustomBrokerFeeValueInput("");
         setTradeDateTime(new Date());
         setHasEditedPrice(false);
         if (symbolQuote.lastPrice > 0) {
@@ -814,16 +779,14 @@ export default function TransactionsTabScreen() {
         )} per share.`,
         "success"
       );
-      await refreshCashLedger();
-
       if (isEditingTrade) {
         setShouldGoBackAfterNotice(true);
         return;
       }
 
       setUnitsInput("");
-      setCustomBrokerNameInput("");
-      setCustomBrokerFeePctInput("");
+      setCustomBrokerFeeType("percentage");
+      setCustomBrokerFeeValueInput("");
       setTradeDateTime(new Date());
       setHasEditedPrice(false);
       if (symbolQuote.lastPrice > 0) {
@@ -851,8 +814,8 @@ export default function TransactionsTabScreen() {
     }
   }, [
     brokerMode,
-    customBrokerFeePctInput,
-    customBrokerNameInput,
+    customBrokerFeeType,
+    customBrokerFeeValueInput,
     priceInput,
     selectedSymbol,
     savedBrokerSettings,
@@ -867,8 +830,6 @@ export default function TransactionsTabScreen() {
     unitsInput,
     isEditingTrade,
     normalizedEditTradeId,
-    cashGuardEnabled,
-    refreshCashLedger,
     showTradeNotice,
   ]);
 
@@ -978,7 +939,7 @@ export default function TransactionsTabScreen() {
               placeholder="Search symbol or company"
               placeholderTextColor={inputPlaceholderTextColor}
               editable={!isSymbolLocked}
-              className="mt-3 rounded-xl bg-brand-white/70 px-3 py-2 text-sm font-semibold text-app-text dark:bg-brand-white/5 dark:text-app-textDark"
+              className="mt-3 rounded-xl border border-app-highlight/25 bg-app-highlight/8 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/35 dark:bg-brand-white/5 dark:text-app-textDark"
             />
 
             {isSymbolLocked ? (
@@ -1088,20 +1049,6 @@ export default function TransactionsTabScreen() {
             </View>
 
             <View className="mt-4 gap-3">
-              {cashGuardEnabled ? (
-                <View className="rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5">
-                  <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                    Cash Guard
-                  </Text>
-                  <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
-                    {`Available Cash: ${formatPKRAmount(availableCash)}`}
-                  </Text>
-                  <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
-                    Buy orders cannot exceed available cash while Cash Guard is enabled.
-                  </Text>
-                </View>
-              ) : null}
-
               <View className="flex-row gap-3">
                 <FieldInput
                   label="Price"
@@ -1150,7 +1097,7 @@ export default function TransactionsTabScreen() {
                   <TouchableOpacity
                     activeOpacity={0.88}
                     onPress={handleStartTradeDateTimeSelection}
-                    className="mt-1 rounded-xl bg-brand-white/70 px-3 py-2 dark:bg-brand-white/5"
+                    className="mt-1 rounded-xl border border-app-highlight/25 bg-app-highlight/8 px-3 py-2 dark:border-app-highlightDark/35 dark:bg-brand-white/5"
                   >
                     <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
                       {formatDateTimeInput(tradeDateTime)}
@@ -1159,39 +1106,82 @@ export default function TransactionsTabScreen() {
                 </View>
               </View>
 
-              <View className="flex-row gap-3">
-                {brokerMode === "saved" ? (
-                  <FieldInput
-                    label="Broker"
-                    value={savedBrokerSettings?.brokerName ?? "Not configured"}
-                    placeholderTextColor={inputPlaceholderTextColor}
-                    editable={false}
-                  />
-                ) : (
-                  <FieldInput
-                    label="Broker"
-                    value={customBrokerNameInput}
-                    onChangeText={setCustomBrokerNameInput}
-                    placeholderTextColor={inputPlaceholderTextColor}
-                    placeholder="Custom broker name"
-                  />
-                )}
+              {brokerMode === "custom" ? (
+                <View>
+                  <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                    Fee Type
+                  </Text>
+                  <View className="mt-1 flex-row gap-2">
+                    <ToggleChip
+                      label="Percent"
+                      selected={customBrokerFeeType === "percentage"}
+                      onPress={() => setCustomBrokerFeeType("percentage")}
+                    />
+                    <ToggleChip
+                      label="Fixed PKR"
+                      selected={customBrokerFeeType === "fixed"}
+                      onPress={() => setCustomBrokerFeeType("fixed")}
+                    />
+                  </View>
+                </View>
+              ) : (
+                <FieldInput
+                  label="Fee Type"
+                  value={
+                    savedBrokerSettings
+                      ? getBrokerFeeTypeLabel(savedBrokerSettings.transactionFeeType)
+                      : "Not configured"
+                  }
+                  placeholderTextColor={inputPlaceholderTextColor}
+                  editable={false}
+                />
+              )}
 
+              <View className="flex-row gap-3">
                 {brokerMode === "custom" ? (
-                  <FieldInput
-                    label="Broker Fee %"
-                    value={customBrokerFeePctInput}
-                    onChangeText={setCustomBrokerFeePctInput}
-                    placeholderTextColor={inputPlaceholderTextColor}
-                    keyboardType="numeric"
-                    placeholder="e.g. 0.15"
-                  />
+                  <>
+                    <FieldInput
+                      label={
+                        customBrokerFeeType === "percentage"
+                          ? "Broker Fee %"
+                          : "Broker Fee (PKR)"
+                      }
+                      value={customBrokerFeeValueInput}
+                      onChangeText={setCustomBrokerFeeValueInput}
+                      placeholderTextColor={inputPlaceholderTextColor}
+                      keyboardType="numeric"
+                      placeholder={
+                        customBrokerFeeType === "percentage" ? "e.g. 0.15" : "e.g. 50"
+                      }
+                    />
+                    <View className="flex-1">
+                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                        Tools
+                      </Text>
+                      <TouchableOpacity
+                        activeOpacity={0.88}
+                        onPress={() => setIsBrokerFeeCalculatorVisible(true)}
+                        className="mt-1 rounded-xl border border-app-highlight/25 bg-app-highlight/8 px-3 py-2 dark:border-app-highlightDark/35 dark:bg-brand-white/5"
+                      >
+                        <Text className="text-sm font-semibold text-app-highlight dark:text-app-highlightDark">
+                          Calculate Broker Fee
+                        </Text>
+                      </TouchableOpacity>
+                    </View>
+                  </>
                 ) : (
                   <FieldInput
-                    label="Broker Fee %"
+                    label={
+                      savedBrokerSettings?.transactionFeeType === "fixed"
+                        ? "Broker Fee (PKR)"
+                        : "Broker Fee %"
+                    }
                     value={
                       savedBrokerSettings
-                        ? `${savedBrokerSettings.transactionFeePct}%`
+                        ? formatBrokerFeeValueLabel({
+                            brokerFeeType: savedBrokerSettings.transactionFeeType,
+                            brokerFeeValue: savedBrokerSettings.transactionFeeValue,
+                          })
                         : "Not configured"
                     }
                     placeholderTextColor={inputPlaceholderTextColor}
@@ -1276,6 +1266,34 @@ export default function TransactionsTabScreen() {
         tone={tradeNotice?.tone ?? "info"}
         actionLabel="Done"
         onClose={handleCloseTradeNotice}
+      />
+
+      <BrokerFeeCalculatorModal
+        visible={isBrokerFeeCalculatorVisible}
+        title="Calculate Broker Fee"
+        subtitle="Use calculator and tap Add Fee."
+        defaultFeeType={
+          brokerMode === "saved"
+            ? savedBrokerSettings?.transactionFeeType ?? "percentage"
+            : customBrokerFeeType
+        }
+        defaultFeeValueInput={
+          brokerMode === "saved"
+            ? savedBrokerSettings
+              ? String(savedBrokerSettings.transactionFeeValue)
+              : ""
+            : customBrokerFeeValueInput
+        }
+        onClose={() => setIsBrokerFeeCalculatorVisible(false)}
+        onApply={
+          brokerMode === "custom"
+            ? (payload) => {
+                setCustomBrokerFeeType(payload.feeType);
+                setCustomBrokerFeeValueInput(String(payload.feeValue));
+                setIsBrokerFeeCalculatorVisible(false);
+              }
+            : undefined
+        }
       />
     </SafeAreaView>
   );

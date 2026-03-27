@@ -56,6 +56,7 @@ export default function RootLayout() {
           <Stack.Screen name="analytics" />
           <Stack.Screen name="announcements" />
           <Stack.Screen name="notifications" />
+          <Stack.Screen name="notification-detail" />
           <Stack.Screen name="tax-settings" />
         </Stack>
       </BottomSheetModalProvider>

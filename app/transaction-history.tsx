@@ -343,7 +343,7 @@ export default function TransactionHistoryScreen() {
     tone: "success" | "error" | "info";
   } | null>(null);
   const addTransactionSheetRef = React.useRef<BottomSheetModal>(null);
-  const addTransactionSheetSnapPoints = React.useMemo(() => ["42%"], []);
+  const addTransactionSheetSnapPoints = React.useMemo(() => ["32%"], []);
 
   const addTransactionSheetBackdrop = React.useCallback(
     (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
@@ -460,11 +460,6 @@ export default function TransactionHistoryScreen() {
       },
     });
   }, [router]);
-
-  const handleOpenDeposit = React.useCallback(() => {
-    closeAddTransactionSheet();
-    router.push("/deposit");
-  }, [closeAddTransactionSheet, router]);
 
   const handleOpenDividend = React.useCallback(() => {
     closeAddTransactionSheet();
@@ -774,19 +769,6 @@ export default function TransactionHistoryScreen() {
           </Text>
 
           <View className="mt-4 gap-3">
-            <TouchableOpacity
-              activeOpacity={0.88}
-              onPress={handleOpenDeposit}
-              className="rounded-xl bg-brand-white/90 px-4 py-3 shadow-sm shadow-app-highlight/20 dark:bg-brand-white/10 dark:shadow-none dark:border dark:border-app-highlightDark/25"
-            >
-              <Text className="text-base font-bold text-app-text dark:text-app-textDark">
-                Add Deposit
-              </Text>
-              <Text className="mt-0.5 text-xs font-semibold text-app-text dark:text-app-textDark">
-                Add portfolio funding cash.
-              </Text>
-            </TouchableOpacity>
-
             <TouchableOpacity
               activeOpacity={0.88}
               onPress={handleOpenDividend}

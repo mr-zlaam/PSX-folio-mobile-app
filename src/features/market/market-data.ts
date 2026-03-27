@@ -347,6 +347,50 @@ function mapEodRowsToTimeseriesRows(rows: MarketEodRow[]): MarketTimeseriesRow[]
   }));
 }
 
+function getDayKeyFromEpochSeconds(timestamp: number): number {
+  return Math.floor(timestamp / 86_400);
+}
+
+function getPreviousCloseFromTimeseriesRows(rows: MarketTimeseriesRow[]): number | null {
+  if (rows.length < 2) {
+    return null;
+  }
+
+  const latestDayKey = getDayKeyFromEpochSeconds(rows[0].timestamp);
+  for (let index = 1; index < rows.length; index += 1) {
+    const row = rows[index];
+    if (!row) {
+      continue;
+    }
+
+    const rowDayKey = getDayKeyFromEpochSeconds(row.timestamp);
+    if (rowDayKey < latestDayKey && Number.isFinite(row.price) && row.price > 0) {
+      return row.price;
+    }
+  }
+
+  return null;
+}
+
+function getPreviousCloseFromEodRows(
+  rows: MarketEodRow[],
+  latestTimeseriesTimestamp: number
+): number | null {
+  if (rows.length === 0 || latestTimeseriesTimestamp <= 0) {
+    return null;
+  }
+
+  const latestDayKey = getDayKeyFromEpochSeconds(latestTimeseriesTimestamp);
+  for (const row of rows) {
+    const rowDayKey = getDayKeyFromEpochSeconds(row.timestamp);
+    if (rowDayKey < latestDayKey && Number.isFinite(row.closePrice) && row.closePrice > 0) {
+      return row.closePrice;
+    }
+  }
+
+  return null;
+}
+
 function parseConstituentRowsFromHtml(html: string): MarketIndexConstituent[] {
   const tbodyMatch = html.match(/<tbody[^>]*>([\s\S]*?)<\/tbody>/i);
   if (!tbodyMatch || !tbodyMatch[1]) {
@@ -405,7 +449,8 @@ function getConstituentEndpointCandidates(code: string): string[] {
 function toSnapshot(
   definition: MarketIndexDefinition,
   rows: MarketTimeseriesRow[],
-  source: MarketSource
+  source: MarketSource,
+  previousCloseOverride?: number | null
 ): MarketIndexSnapshot {
   if (rows.length === 0) {
     return getFallbackSnapshot(definition, source);
@@ -424,8 +469,14 @@ function toSnapshot(
   const volume = rows.reduce((runningVolume, row) => runningVolume + row.volume, 0);
   const value = latestRow.price * latestRow.volume;
   const latestPrice = latestRow.price;
-  const change = latestPrice - previousRow.price;
-  const changePct = previousRow.price === 0 ? 0 : (change / previousRow.price) * 100;
+  const previousClose =
+    typeof previousCloseOverride === "number" &&
+    Number.isFinite(previousCloseOverride) &&
+    previousCloseOverride > 0
+      ? previousCloseOverride
+      : getPreviousCloseFromTimeseriesRows(rows) ?? previousRow.price;
+  const change = latestPrice - previousClose;
+  const changePct = previousClose === 0 ? 0 : (change / previousClose) * 100;
 
   return {
     code: definition.code,
@@ -842,8 +893,21 @@ export async function getLatestMarketSnapshot(): Promise<MarketIndexSnapshot[]> 
   const latestItems = await Promise.all(
     MARKET_INDEX_DEFINITIONS.map(async (definition) => {
       try {
-        const rows = await fetchRowsFromApi(definition);
-        return toSnapshot(definition, rows, "live");
+        if (definition.endpointType === "eod") {
+          const rows = await fetchRowsFromApi(definition);
+          return toSnapshot(definition, rows, "live");
+        }
+
+        const [intradayRows, eodRows] = await Promise.all([
+          fetchTimeseriesRowsFromApi(definition.code, "int"),
+          fetchEodRowsFromApi(definition.code).catch(() => []),
+        ]);
+        const previousCloseFromEod =
+          intradayRows.length > 0
+            ? getPreviousCloseFromEodRows(eodRows, intradayRows[0].timestamp)
+            : null;
+
+        return toSnapshot(definition, intradayRows, "live", previousCloseFromEod);
       } catch {
         const cachedItem = cachedByCode.get(definition.code);
         return cachedItem ?? getFallbackSnapshot(definition, "fallback");
@@ -904,7 +968,16 @@ export async function getLatestMarketIndexDetail(
       return cachedDetail;
     }
 
-    const snapshot = toSnapshot(definition, primaryRows, "live");
+    const previousCloseFromEod =
+      primaryRows.length > 0
+        ? getPreviousCloseFromEodRows(normalizedEodRows, primaryRows[0].timestamp)
+        : null;
+    const snapshot = toSnapshot(
+      definition,
+      primaryRows,
+      "live",
+      previousCloseFromEod
+    );
     await upsertCachedSnapshot(snapshot);
     return buildMarketIndexDetail(snapshot, normalizedEodRows);
   } catch {

@@ -29,7 +29,6 @@ import {
   clearBrokerSettings,
   clearThemePreference,
   getBrokerSettings,
-  getCashGuardEnabledPreference,
   getDividendAutoReinvestEnabledPreference,
   getHomeInsightDisplayModePreference,
   getOnboardingComplete,
@@ -38,7 +37,6 @@ import {
   getTaxpayerProfilePreference,
   getThemePreference,
   setBrokerSettings,
-  setCashGuardEnabledPreference,
   setDividendAutoReinvestEnabledPreference,
   setHomeInsightDisplayModePreference,
   setOnboardingComplete,
@@ -94,8 +92,9 @@ const CSV_COLUMNS = [
   "units",
   "brokerMode",
   "brokerName",
+  "brokerFeeType",
+  "brokerFeeValue",
   "brokerFeePct",
-  "cashGuardApplied",
   "amount",
   "note",
   "shares",
@@ -224,7 +223,6 @@ async function readBackupSnapshot(): Promise<BackupSnapshot> {
     portfolioGroupingMode,
     portfolioDisplayMode,
     taxpayerProfile,
-    cashGuardEnabled,
     dividendAutoReinvestEnabled,
     brokerSettings,
   ] = await Promise.all([
@@ -239,7 +237,6 @@ async function readBackupSnapshot(): Promise<BackupSnapshot> {
     getPortfolioGroupingModePreference(),
     getPortfolioDisplayModePreference(),
     getTaxpayerProfilePreference(),
-    getCashGuardEnabledPreference(),
     getDividendAutoReinvestEnabledPreference(),
     getBrokerSettings(),
   ]);
@@ -250,7 +247,6 @@ async function readBackupSnapshot(): Promise<BackupSnapshot> {
     portfolioGroupingMode,
     portfolioDisplayMode,
     taxpayerProfile,
-    cashGuardEnabled: String(cashGuardEnabled),
     dividendAutoReinvestEnabled: String(dividendAutoReinvestEnabled),
   };
 
@@ -260,7 +256,11 @@ async function readBackupSnapshot(): Promise<BackupSnapshot> {
 
   if (brokerSettings) {
     preferences.brokerName = brokerSettings.brokerName;
-    preferences.brokerFeePct = String(brokerSettings.transactionFeePct);
+    preferences.brokerFeeType = brokerSettings.transactionFeeType;
+    preferences.brokerFeeValue = String(brokerSettings.transactionFeeValue);
+    if (brokerSettings.transactionFeeType === "percentage") {
+      preferences.brokerFeePct = String(brokerSettings.transactionFeeValue);
+    }
   }
 
   return {
@@ -305,11 +305,13 @@ function buildCsvContent(snapshot: BackupSnapshot): string {
         units: String(trade.units),
         brokerMode: trade.brokerMode,
         brokerName: trade.brokerName ?? "",
+        brokerFeeType: trade.brokerFeeType,
+        brokerFeeValue:
+          typeof trade.brokerFeeValue === "number" ? String(trade.brokerFeeValue) : "",
         brokerFeePct:
-          typeof trade.brokerFeePct === "number" ? String(trade.brokerFeePct) : "",
-        cashGuardApplied:
-          typeof trade.cashGuardApplied === "boolean"
-            ? String(trade.cashGuardApplied)
+          trade.brokerFeeType === "percentage" &&
+          typeof trade.brokerFeeValue === "number"
+            ? String(trade.brokerFeeValue)
             : "",
       })
     );
@@ -448,9 +450,15 @@ function parseCsvContent(csvContent: string): {
       }
 
       const brokerNameRaw = getCell(row, "brokerName").trim();
+      const brokerFeeTypeRaw = getCell(row, "brokerFeeType").trim();
+      const brokerFeeValueRaw = parseFiniteNumber(getCell(row, "brokerFeeValue"));
       const brokerFeePct = parseFiniteNumber(getCell(row, "brokerFeePct"));
-      const cashGuardApplied =
-        parseBoolean(getCell(row, "cashGuardApplied")) ?? false;
+      const brokerFeeType =
+        brokerFeeTypeRaw === "fixed" || brokerFeeTypeRaw === "percentage"
+          ? brokerFeeTypeRaw
+          : "percentage";
+      const brokerFeeValue =
+        brokerFeeValueRaw === null ? (brokerFeePct === null ? 0 : brokerFeePct) : brokerFeeValueRaw;
 
       trades.push({
         id,
@@ -462,8 +470,8 @@ function parseCsvContent(csvContent: string): {
         units: Math.round(units),
         brokerMode: brokerModeRaw,
         brokerName: brokerNameRaw.length > 0 ? brokerNameRaw : null,
-        brokerFeePct: brokerFeePct === null ? null : brokerFeePct,
-        cashGuardApplied,
+        brokerFeeType,
+        brokerFeeValue,
       });
       continue;
     }
@@ -653,19 +661,29 @@ async function applyPreferences(preferences: Record<string, string>): Promise<vo
     await setTaxpayerProfilePreference("nonFiler");
   }
 
-  const cashGuardEnabled = parseBoolean(preferences.cashGuardEnabled ?? "") ?? false;
-  await setCashGuardEnabledPreference(cashGuardEnabled);
-
   const dividendAutoReinvestEnabled =
     parseBoolean(preferences.dividendAutoReinvestEnabled ?? "") ?? false;
   await setDividendAutoReinvestEnabledPreference(dividendAutoReinvestEnabled);
 
   const brokerName = (preferences.brokerName ?? "").trim();
+  const brokerFeeTypeRaw = (preferences.brokerFeeType ?? "").trim();
+  const brokerFeeValue = parseFiniteNumber(preferences.brokerFeeValue ?? "");
   const brokerFeePct = parseFiniteNumber(preferences.brokerFeePct ?? "");
-  if (brokerName.length > 0 && brokerFeePct !== null && brokerFeePct >= 0) {
+  const brokerFeeType =
+    brokerFeeTypeRaw === "fixed" || brokerFeeTypeRaw === "percentage"
+      ? brokerFeeTypeRaw
+      : "percentage";
+  const resolvedBrokerFeeValue =
+    brokerFeeValue === null ? brokerFeePct : brokerFeeValue;
+  if (
+    brokerName.length > 0 &&
+    resolvedBrokerFeeValue !== null &&
+    resolvedBrokerFeeValue >= 0
+  ) {
     await setBrokerSettings({
       brokerName,
-      transactionFeePct: brokerFeePct,
+      transactionFeeType: brokerFeeType,
+      transactionFeeValue: resolvedBrokerFeeValue,
     });
   } else {
     await clearBrokerSettings();

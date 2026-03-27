@@ -1,5 +1,6 @@
 import { getSavedDepositRecords } from "@/src/features/deposit/deposit-records";
 import { getSavedDividendRecords } from "@/src/features/dividend/dividend-records";
+import { calculateBrokerFeeAmount } from "@/src/lib/broker-fee";
 import {
   getSavedTradeOrders,
   TradeOrderRecord,
@@ -22,14 +23,13 @@ function toNonNegativeFiniteNumber(value: number): number {
 }
 
 function getBrokerFeeAmount(order: TradeOrderRecord): number {
-  const brokerFeePct = toNonNegativeFiniteNumber(order.brokerFeePct ?? 0);
-  if (brokerFeePct === 0) {
-    return 0;
-  }
-
-  const grossAmount =
-    toNonNegativeFiniteNumber(order.price) * toNonNegativeFiniteNumber(order.units);
-  return (grossAmount * brokerFeePct) / 100;
+  return calculateBrokerFeeAmount({
+    price: order.price,
+    units: order.units,
+    brokerFeeType: order.brokerFeeType,
+    brokerFeeValue: order.brokerFeeValue,
+    brokerFeePct: order.brokerFeePct,
+  });
 }
 
 function getTradeGrossAmount(order: TradeOrderRecord): number {
@@ -49,25 +49,18 @@ function getTradeCashDelta(order: TradeOrderRecord): number {
 
 export async function getCashLedgerSnapshot(options?: {
   excludeTradeId?: string;
-  scope?: "guarded" | "all";
 }): Promise<CashLedgerSnapshot> {
   const excludeTradeId = options?.excludeTradeId?.trim() ?? "";
-  const scope = options?.scope ?? "guarded";
   const [deposits, dividends, trades] = await Promise.all([
     getSavedDepositRecords(),
     getSavedDividendRecords(),
     getSavedTradeOrders(),
   ]);
 
-  const scopedTrades =
-    scope === "all"
-      ? trades
-      : trades.filter((trade) => trade.cashGuardApplied === true);
-
   const effectiveTrades =
     excludeTradeId.length > 0
-      ? scopedTrades.filter((trade) => trade.id !== excludeTradeId)
-      : scopedTrades;
+      ? trades.filter((trade) => trade.id !== excludeTradeId)
+      : trades;
 
   const totalDeposits = deposits.reduce(
     (sum, record) => sum + toNonNegativeFiniteNumber(record.amount),

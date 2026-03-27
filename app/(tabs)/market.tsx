@@ -11,10 +11,12 @@ import {
 } from "@/src/features/market/dps-market-status";
 import { useGuardedRouter } from "@/src/lib/navigation";
 import { APP_COLORS } from "@/src/theme/colors";
+import AppBackIconButton from "@/components/ui/app-back-icon-button";
 
 import React from "react";
 import {
   Animated,
+  AppState,
   Easing,
   RefreshControl,
   ScrollView,
@@ -22,6 +24,8 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
+import { useFocusEffect } from "@react-navigation/native";
+import { useLocalSearchParams } from "expo-router";
 import { useColorScheme } from "nativewind";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -139,6 +143,9 @@ function MetricCell({ label, value }: { label: string; value: string }) {
 
 export default function MarketTabScreen() {
   const router = useGuardedRouter();
+  const searchParams = useLocalSearchParams<{
+    originTab?: string | string[];
+  }>();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
@@ -157,14 +164,23 @@ export default function MarketTabScreen() {
     });
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [isBootstrapping, setIsBootstrapping] = React.useState(true);
+  const routeOriginTab = React.useMemo(() => {
+    const rawOriginTab = Array.isArray(searchParams.originTab)
+      ? searchParams.originTab[0]
+      : searchParams.originTab;
+    return typeof rawOriginTab === "string" ? rawOriginTab.trim().toLowerCase() : "";
+  }, [searchParams.originTab]);
+  const shouldShowBackToMore = routeOriginTab === "more";
 
-  const refreshMarket = React.useCallback(async () => {
-    const [cachedSnapshot, cachedDpsStatus] = await Promise.all([
-      getCachedMarketSnapshot(),
-      getCachedDpsMarketStatus(),
-    ]);
-    setIndices(cachedSnapshot);
-    setDpsMarketStatus(cachedDpsStatus);
+  const refreshMarket = React.useCallback(async (preferCachedFirst = true) => {
+    if (preferCachedFirst) {
+      const [cachedSnapshot, cachedDpsStatus] = await Promise.all([
+        getCachedMarketSnapshot(),
+        getCachedDpsMarketStatus(),
+      ]);
+      setIndices(cachedSnapshot);
+      setDpsMarketStatus(cachedDpsStatus);
+    }
 
     const [latestSnapshot, latestDpsStatus] = await Promise.all([
       getLatestMarketSnapshot(),
@@ -179,7 +195,7 @@ export default function MarketTabScreen() {
 
     async function bootstrap() {
       try {
-        await refreshMarket();
+        await refreshMarket(true);
       } finally {
         if (isMounted) {
           setIsBootstrapping(false);
@@ -189,7 +205,7 @@ export default function MarketTabScreen() {
 
     void bootstrap();
     const intervalId = setInterval(() => {
-      void refreshMarket();
+      void refreshMarket(true);
     }, MARKET_REFRESH_INTERVAL_MS);
 
     return () => {
@@ -198,10 +214,28 @@ export default function MarketTabScreen() {
     };
   }, [refreshMarket]);
 
+  useFocusEffect(
+    React.useCallback(() => {
+      void refreshMarket(true);
+    }, [refreshMarket])
+  );
+
+  React.useEffect(() => {
+    const appStateSubscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        void refreshMarket(true);
+      }
+    });
+
+    return () => {
+      appStateSubscription.remove();
+    };
+  }, [refreshMarket]);
+
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await refreshMarket();
+      await refreshMarket(false);
     } finally {
       setIsRefreshing(false);
     }
@@ -250,6 +284,9 @@ export default function MarketTabScreen() {
     },
     [router]
   );
+  const handleBackToMore = React.useCallback(() => {
+    router.replace("/(tabs)/more");
+  }, [router]);
   const isMarketOpen = dpsMarketStatus.uiStatus === "OPEN";
 
   React.useEffect(() => {
@@ -322,6 +359,12 @@ export default function MarketTabScreen() {
         }
       >
         <View className="gap-3">
+          {shouldShowBackToMore ? (
+            <View className="flex-row items-center">
+              <AppBackIconButton onPress={handleBackToMore} />
+            </View>
+          ) : null}
+
           <View className="rounded-2xl bg-brand-white px-4 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
             <Text className="text-3xl font-extrabold text-app-text dark:text-app-textDark">
               Market

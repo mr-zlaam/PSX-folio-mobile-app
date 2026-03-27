@@ -4,7 +4,6 @@ import {
   getInAppNotifications,
   InAppNotification,
   markAllInAppNotificationsRead,
-  markInAppNotificationRead,
   subscribeToInAppNotifications,
   syncPsxAnnouncementsToInAppNotifications,
 } from "@/src/features/notifications/in-app-notifications";
@@ -42,30 +41,6 @@ function formatTimestamp(value: string | null): string {
     day: "2-digit",
     hour: "2-digit",
     minute: "2-digit",
-  });
-}
-
-function getNotificationSortTime(notification: InAppNotification): number {
-  const occurredAt = notification.occurredAt ?? notification.createdAt;
-  const parsed = new Date(occurredAt).getTime();
-  if (Number.isNaN(parsed)) {
-    return 0;
-  }
-  return parsed;
-}
-
-function sortNotificationsByDateDesc(
-  notifications: InAppNotification[],
-): InAppNotification[] {
-  return [...notifications].sort((firstNotification, secondNotification) => {
-    const secondTime = getNotificationSortTime(secondNotification);
-    const firstTime = getNotificationSortTime(firstNotification);
-    if (secondTime === firstTime) {
-      return secondNotification.createdAt.localeCompare(
-        firstNotification.createdAt,
-      );
-    }
-    return secondTime - firstTime;
   });
 }
 
@@ -136,18 +111,12 @@ export default function NotificationsScreen() {
   );
 
   const unreadNotifications = React.useMemo(
-    () =>
-      sortNotificationsByDateDesc(
-        notifications.filter((notification) => !notification.readAt),
-      ),
+    () => notifications.filter((notification) => !notification.readAt),
     [notifications],
   );
 
   const readNotifications = React.useMemo(
-    () =>
-      sortNotificationsByDateDesc(
-        notifications.filter((notification) => Boolean(notification.readAt)),
-      ),
+    () => notifications.filter((notification) => Boolean(notification.readAt)),
     [notifications],
   );
 
@@ -183,38 +152,10 @@ export default function NotificationsScreen() {
 
   const handleOpenNotification = React.useCallback(
     async (notification: InAppNotification) => {
-      if (!notification.readAt) {
-        await markInAppNotificationRead(notification.id);
-      }
-
-      if (notification.pdfUrl) {
-        router.push({
-          pathname: "/pdf-viewer",
-          params: {
-            title: notification.symbol
-              ? `${notification.symbol} Announcement`
-              : "PSX Announcement",
-            url: notification.pdfUrl,
-          },
-        });
-        return;
-      }
-
-      if (notification.symbol) {
-        router.push({
-          pathname: "/stock-detail",
-          params: {
-            symbol: notification.symbol,
-            origin: "market",
-          },
-        });
-        return;
-      }
-
       router.push({
-        pathname: "/announcements",
+        pathname: "/notification-detail",
         params: {
-          source: notification.sourceKey,
+          id: notification.id,
         },
       });
     },
@@ -339,10 +280,16 @@ export default function NotificationsScreen() {
                       >
                         <View className="flex-row items-start justify-between gap-3">
                           <View className="flex-1">
-                            <Text className="text-base font-bold leading-6 text-app-text dark:text-app-textDark">
+                            <Text
+                              numberOfLines={2}
+                              className="text-base font-bold leading-6 text-app-text dark:text-app-textDark"
+                            >
                               {notification.title}
                             </Text>
-                            <Text className="mt-1 text-sm font-semibold leading-5 text-app-text dark:text-app-textDark">
+                            <Text
+                              numberOfLines={3}
+                              className="mt-1 text-sm font-semibold leading-5 text-app-text dark:text-app-textDark"
+                            >
                               {notification.message}
                             </Text>
                           </View>
@@ -350,7 +297,7 @@ export default function NotificationsScreen() {
                           <View className="h-2.5 w-2.5 rounded-full bg-brand-red" />
                         </View>
 
-                        <View className="mt-3 flex-row items-center justify-between">
+                        <View className="mt-3 gap-1">
                           <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                             {notification.sourceLabel}
                           </Text>
@@ -412,16 +359,22 @@ export default function NotificationsScreen() {
                       >
                         <View className="flex-row items-start justify-between gap-3">
                           <View className="flex-1">
-                            <Text className="text-base font-bold leading-6 text-zinc-700 dark:text-zinc-300">
+                            <Text
+                              numberOfLines={2}
+                              className="text-base font-bold leading-6 text-zinc-700 dark:text-zinc-300"
+                            >
                               {notification.title}
                             </Text>
-                            <Text className="mt-1 text-sm font-semibold leading-5 text-zinc-600 dark:text-zinc-400">
+                            <Text
+                              numberOfLines={3}
+                              className="mt-1 text-sm font-semibold leading-5 text-zinc-600 dark:text-zinc-400"
+                            >
                               {notification.message}
                             </Text>
                           </View>
                         </View>
 
-                        <View className="mt-3 flex-row items-center justify-between">
+                        <View className="mt-3 gap-1">
                           <Text className="text-[11px] font-semibold uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
                             {notification.sourceLabel}
                           </Text>

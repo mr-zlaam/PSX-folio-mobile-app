@@ -73,16 +73,22 @@ function getHoldingWithMinValue(
   );
 }
 
-function getWorstLossHolding(holdings: PortfolioHolding[]): PortfolioHolding | null {
-  const losingHoldings = holdings.filter(
-    (holding) => holding.pnl < 0 || holding.pnlPct < 0
-  );
+function getBestGainHoldingByImpact(holdings: PortfolioHolding[]): PortfolioHolding | null {
+  const gainingHoldings = holdings.filter((holding) => holding.pnl > 0);
+  if (gainingHoldings.length === 0) {
+    return null;
+  }
 
+  return getHoldingWithMaxValue(gainingHoldings, (holding) => holding.pnl);
+}
+
+function getWorstLossHoldingByImpact(holdings: PortfolioHolding[]): PortfolioHolding | null {
+  const losingHoldings = holdings.filter((holding) => holding.pnl < 0);
   if (losingHoldings.length === 0) {
     return null;
   }
 
-  return getHoldingWithMinValue(losingHoldings, (holding) => holding.pnlPct);
+  return getHoldingWithMinValue(losingHoldings, (holding) => holding.pnl);
 }
 
 export function buildHomeSnapshotFromHoldings(
@@ -155,13 +161,20 @@ export function buildHomeSnapshotFromHoldings(
   const returnPct = invested === 0 ? 0 : (profit / invested) * 100;
 
   const topStock = getHoldingWithMaxValue(holdings, (holding) => holding.marketValue);
-  const bestGain = getHoldingWithMaxValue(holdings, (holding) => holding.pnlPct);
-  const worstLoss = getWorstLossHolding(holdings);
+  const bestGain = getBestGainHoldingByImpact(holdings);
+  const worstLoss = getWorstLossHoldingByImpact(holdings);
 
   const topStockSharePct =
     topStock && value > 0 ? (topStock.marketValue / value) * 100 : 0;
-  const bestGainPct = bestGain?.pnlPct ?? 0;
-  const worstLossPct = worstLoss?.pnlPct ?? 0;
+  const portfolioBaseForImpact = holdingsValue > 0 ? holdingsValue : value;
+  const bestGainImpactPct =
+    bestGain && portfolioBaseForImpact > 0
+      ? (bestGain.pnl / portfolioBaseForImpact) * 100
+      : 0;
+  const worstLossImpactPct =
+    worstLoss && portfolioBaseForImpact > 0
+      ? (worstLoss.pnl / portfolioBaseForImpact) * 100
+      : 0;
 
   const insightDisplayValues: InsightDisplayValues = {
     "Top Stock": {
@@ -169,11 +182,11 @@ export function buildHomeSnapshotFromHoldings(
       price: formatPKRAmount(topStock?.marketValue ?? 0),
     },
     "Best Gain": {
-      percentage: formatSignedPercentage(bestGainPct),
+      percentage: formatSignedPercentage(bestGainImpactPct),
       price: formatSignedPkrAmount(bestGain?.pnl ?? 0),
     },
     "Worst Loss": {
-      percentage: worstLoss ? formatSignedPercentage(worstLossPct) : "Nil",
+      percentage: worstLoss ? formatSignedPercentage(worstLossImpactPct) : "Nil",
       price: worstLoss ? formatSignedPkrAmount(worstLoss.pnl) : "Nil",
     },
   };

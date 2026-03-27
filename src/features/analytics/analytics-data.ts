@@ -13,6 +13,7 @@ import {
   getLatestMarketSnapshot,
   MarketIndexSnapshot,
 } from "@/src/features/market/market-data";
+import { calculateBrokerFeeAmount } from "@/src/lib/broker-fee";
 
 export type AnalyticsTrendRange = "1M" | "3M" | "6M" | "1Y" | "ALL";
 
@@ -153,13 +154,13 @@ function normalizeSymbol(value: string): string {
 }
 
 function getBrokerFeeAmount(order: TradeOrderRecord): number {
-  const feePct = toNonNegativeNumber(order.brokerFeePct ?? 0);
-  if (feePct === 0) {
-    return 0;
-  }
-
-  const gross = toNonNegativeNumber(order.price) * toNonNegativeNumber(order.units);
-  return (gross * feePct) / 100;
+  return calculateBrokerFeeAmount({
+    price: order.price,
+    units: order.units,
+    brokerFeeType: order.brokerFeeType,
+    brokerFeeValue: order.brokerFeeValue,
+    brokerFeePct: order.brokerFeePct,
+  });
 }
 
 function getTradeCashDelta(order: TradeOrderRecord): number {
@@ -722,7 +723,7 @@ async function fetchSnapshotData(mode: "cache" | "latest"): Promise<AnalyticsSna
     getSavedDepositRecords(),
     getSavedDividendRecords(),
     getSavedBonusShareRecords(),
-    getCashLedgerSnapshot({ scope: "all" }),
+    getCashLedgerSnapshot(),
     mode === "latest" ? getLatestMarketSnapshot() : getCachedMarketSnapshot(),
   ]);
 

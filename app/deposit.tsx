@@ -9,7 +9,6 @@ import {
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
 import { useGuardedRouter } from "@/src/lib/navigation";
-import { useFocusEffect } from "@react-navigation/native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import DateTimePicker, {
@@ -24,7 +23,6 @@ import {
   saveDepositRecord,
   updateDepositRecord,
 } from "@/src/features/deposit/deposit-records";
-import { getCashGuardEnabledPreference } from "@/src/lib/app-preferences";
 import { APP_COLORS } from "@/src/theme/colors";
 
 type DateTimePickerMode = "date" | "time";
@@ -77,7 +75,6 @@ export default function DepositScreen() {
   const [isPickerVisible, setIsPickerVisible] = React.useState(false);
   const [isAwaitingTimeSelection, setIsAwaitingTimeSelection] =
     React.useState(false);
-  const [isCashGuardEnabled, setIsCashGuardEnabled] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [shouldGoBackAfterNotice, setShouldGoBackAfterNotice] =
     React.useState(false);
@@ -104,17 +101,6 @@ export default function DepositScreen() {
     "mt-3 rounded-xl border border-app-text/10 bg-brand-white/90 p-2 dark:border-app-highlightDark/20 dark:bg-brand-white/10";
 
   const parsedAmount = React.useMemo(() => parsePositiveNumber(amountInput), [amountInput]);
-
-  const loadCashGuardState = React.useCallback(async () => {
-    const guardEnabled = await getCashGuardEnabledPreference();
-    setIsCashGuardEnabled(guardEnabled);
-  }, []);
-
-  useFocusEffect(
-    React.useCallback(() => {
-      void loadCashGuardState();
-    }, [loadCashGuardState])
-  );
 
   React.useEffect(() => {
     let isMounted = true;
@@ -218,15 +204,6 @@ export default function DepositScreen() {
   }, [router, shouldGoBackAfterNotice]);
 
   const handleSaveDeposit = React.useCallback(async () => {
-    if (!isCashGuardEnabled) {
-      showNotice(
-        "Enable Cash Guard First",
-        "Deposits are disabled while Cash Guard is off.\nPlease enable Cash Guard from Settings > Trading Rules, then try again.",
-        "error"
-      );
-      return;
-    }
-
     if (parsedAmount <= 0) {
       showNotice("Invalid Amount", "Please enter amount greater than 0.", "error");
       return;
@@ -278,7 +255,6 @@ export default function DepositScreen() {
     noteInput,
     parsedAmount,
     showNotice,
-    isCashGuardEnabled,
     isEditingDeposit,
     normalizedEditDepositId,
   ]);
@@ -312,15 +288,6 @@ export default function DepositScreen() {
             <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
               Deposit Form
             </Text>
-
-            {!isCashGuardEnabled ? (
-              <View className="mt-3 rounded-xl bg-brand-red/10 px-3 py-2 dark:bg-brand-red/20">
-                <Text className="text-xs font-semibold text-brand-red">
-                  Deposits are currently disabled because Cash Guard is off.
-                  Enable Cash Guard in Settings to add deposits.
-                </Text>
-              </View>
-            ) : null}
 
             <View className="mt-4 gap-3">
               <View>

@@ -28,9 +28,11 @@ import {
   BottomSheetView,
 } from "@gorhom/bottom-sheet";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
 
 import React from "react";
 import {
+  AppState,
   RefreshControl,
   ScrollView,
   Text,
@@ -304,7 +306,7 @@ export default function WatchlistTabScreen() {
     []
   );
 
-  const hydrateWatchlist = React.useCallback(async () => {
+  const hydrateWatchlist = React.useCallback(async (preferCachedFirst = true) => {
     setIsLoadingRows(true);
     try {
       const [items, cachedSymbols] = await Promise.all([
@@ -319,7 +321,9 @@ export default function WatchlistTabScreen() {
         setAllSymbols(cachedSymbols);
       }
 
-      await loadWatchlistFromCache(items, buildSymbolsByCode(cachedSymbols));
+      if (preferCachedFirst) {
+        await loadWatchlistFromCache(items, buildSymbolsByCode(cachedSymbols));
+      }
 
       const latestSymbols = await getLatestSymbols();
       if (latestSymbols.length > 0) {
@@ -338,7 +342,7 @@ export default function WatchlistTabScreen() {
   const bootstrap = React.useCallback(async () => {
     setIsHydrating(true);
     try {
-      await hydrateWatchlist();
+      await hydrateWatchlist(true);
     } finally {
       setIsHydrating(false);
     }
@@ -350,7 +354,7 @@ export default function WatchlistTabScreen() {
 
   React.useEffect(() => {
     const intervalId = setInterval(() => {
-      void hydrateWatchlist();
+      void hydrateWatchlist(true);
     }, WATCHLIST_REFRESH_INTERVAL_MS);
 
     return () => {
@@ -358,10 +362,28 @@ export default function WatchlistTabScreen() {
     };
   }, [hydrateWatchlist]);
 
+  useFocusEffect(
+    React.useCallback(() => {
+      void hydrateWatchlist(true);
+    }, [hydrateWatchlist])
+  );
+
+  React.useEffect(() => {
+    const appStateSubscription = AppState.addEventListener("change", (nextState) => {
+      if (nextState === "active") {
+        void hydrateWatchlist(true);
+      }
+    });
+
+    return () => {
+      appStateSubscription.remove();
+    };
+  }, [hydrateWatchlist]);
+
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await hydrateWatchlist();
+      await hydrateWatchlist(false);
     } finally {
       setIsRefreshing(false);
     }
@@ -423,7 +445,7 @@ export default function WatchlistTabScreen() {
           `${normalizedSymbol} has been added successfully.`,
           "success"
         );
-        void hydrateWatchlist();
+        void hydrateWatchlist(false);
       } catch {
         showNotice("Add Failed", "Could not add symbol to watchlist.", "error");
       }
@@ -435,7 +457,7 @@ export default function WatchlistTabScreen() {
     async (symbol: string) => {
       try {
         await removeSymbolFromWatchlist(symbol);
-        await hydrateWatchlist();
+        await hydrateWatchlist(false);
       } catch {
         showNotice("Remove Failed", "Could not remove symbol.", "error");
       }

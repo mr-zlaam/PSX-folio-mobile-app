@@ -19,7 +19,6 @@ type MoreGridItem = {
     | "/transaction-history"
     | "/broker-settings"
     | "/dividend"
-    | "/deposit"
     | "/bonus-share"
     | "/analytics"
     | "/announcements"
@@ -91,12 +90,6 @@ const PORTFOLIO_ACTION_ITEMS: MoreGridItem[] = [
     route: "/broker-settings",
   },
   {
-    id: "deposit",
-    label: "Deposit",
-    icon: "cash-plus",
-    route: "/deposit",
-  },
-  {
     id: "dividend",
     label: "Dividend",
     icon: "cash-multiple",
@@ -147,6 +140,21 @@ const MORE_SECTIONS: MoreSection[] = [
   },
 ];
 
+function isManagedMoreTabRoute(
+  route: MoreGridItem["route"]
+): route is
+  | "/(tabs)/market"
+  | "/(tabs)/stocks"
+  | "/(tabs)/settings"
+  | "/(tabs)/transactions" {
+  return (
+    route === "/(tabs)/market" ||
+    route === "/(tabs)/stocks" ||
+    route === "/(tabs)/settings" ||
+    route === "/(tabs)/transactions"
+  );
+}
+
 export default function MoreTabScreen() {
   const insets = useSafeAreaInsets();
   const router = useGuardedRouter();
@@ -162,6 +170,16 @@ export default function MoreTabScreen() {
           pathname: "/(tabs)/transactions",
           params: {
             lockSymbol: "0",
+            originTab: "more",
+          },
+        });
+        return;
+      }
+
+      if (isManagedMoreTabRoute(item.route)) {
+        router.push({
+          pathname: item.route,
+          params: {
             originTab: "more",
           },
         });
