@@ -25,6 +25,7 @@ const STORAGE_KEYS = {
   taxComputationMode: "@psx-portfolio/tax-computation-mode",
   autoTaxDeductionEnabled: "@psx-portfolio/auto-tax-deduction-enabled",
   deductTaxFromCgtEnabled: "@psx-portfolio/deduct-tax-from-cgt-enabled",
+  sellScreenCgtDeductionEnabled: "@psx-portfolio/sell-screen-cgt-deduction-enabled",
   deductTaxFromDividendEnabled: "@psx-portfolio/deduct-tax-from-dividend-enabled",
   customCgtTaxRatePct: "@psx-portfolio/custom-cgt-tax-rate-pct",
   customDividendTaxRatePct: "@psx-portfolio/custom-dividend-tax-rate-pct",
@@ -389,6 +390,25 @@ export async function setDeductTaxFromCgtEnabledPreference(
   enabled: boolean
 ): Promise<void> {
   await setStoredItem(STORAGE_KEYS.deductTaxFromCgtEnabled, String(enabled));
+}
+
+export async function getSellScreenCgtDeductionEnabledPreference(): Promise<boolean> {
+  const storedValue = await getStoredItem(
+    STORAGE_KEYS.sellScreenCgtDeductionEnabled
+  );
+  if (storedValue === null) {
+    return true;
+  }
+  return storedValue === "true";
+}
+
+export async function setSellScreenCgtDeductionEnabledPreference(
+  enabled: boolean
+): Promise<void> {
+  await setStoredItem(
+    STORAGE_KEYS.sellScreenCgtDeductionEnabled,
+    String(enabled)
+  );
 }
 
 export async function getDeductTaxFromDividendEnabledPreference(): Promise<boolean> {

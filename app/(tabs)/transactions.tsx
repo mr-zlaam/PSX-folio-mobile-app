@@ -4,6 +4,7 @@ import {
   Platform,
   RefreshControl,
   ScrollView,
+  Switch,
   Text,
   TextInput,
   TouchableOpacity,
@@ -44,8 +45,10 @@ import {
   getDeductTaxFromCgtEnabledPreference,
   getEffectiveCgtTaxRatePreference,
   getBrokerSettings,
+  getSellScreenCgtDeductionEnabledPreference,
   getTaxComputationModePreference,
   getTaxpayerProfilePreference,
+  setSellScreenCgtDeductionEnabledPreference,
   TaxComputationMode,
   TaxpayerProfile,
 } from "@/src/lib/app-preferences";
@@ -77,7 +80,7 @@ type TradeNoticeState = {
   tone: AppFeedbackModalTone;
 };
 
-const DEFAULT_CGT_TAX_RATE_PCT = 15;
+const DEFAULT_CGT_TAX_RATE_PCT = 30;
 
 function getTaxpayerProfileLabel(profile: TaxpayerProfile): string {
   return profile === "filer" ? "Filer" : "Non-Filer";
@@ -220,6 +223,12 @@ export default function TransactionsTabScreen() {
   const inputPlaceholderTextColor = isDarkMode
     ? APP_COLORS.text.placeholderDark
     : APP_COLORS.text.placeholderLight;
+  const switchTrackOnColor = isDarkMode
+    ? "rgba(255, 255, 255, 0.82)"
+    : APP_COLORS.app.highlight;
+  const switchTrackOffColor = isDarkMode
+    ? "rgba(255, 255, 255, 0.28)"
+    : "rgba(20, 10, 38, 0.22)";
   const [tradeSide, setTradeSide] = React.useState<TradeSide>("buy");
   const [brokerMode, setBrokerMode] = React.useState<BrokerMode>("saved");
 
@@ -257,6 +266,8 @@ export default function TransactionsTabScreen() {
   const [autoTaxDeductionEnabled, setAutoTaxDeductionEnabled] =
     React.useState(true);
   const [deductTaxFromCgtEnabled, setDeductTaxFromCgtEnabled] =
+    React.useState(true);
+  const [sellScreenCgtDeductionEnabled, setSellScreenCgtDeductionEnabled] =
     React.useState(true);
   const [hasEditedPrice, setHasEditedPrice] = React.useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = React.useState(false);
@@ -359,19 +370,34 @@ export default function TransactionsTabScreen() {
       savedEffectiveCgtTaxRatePct,
       isAutoTaxDeductionEnabled,
       isDeductTaxFromCgtEnabled,
+      isSellScreenCgtDeductionEnabled,
     ] = await Promise.all([
       getTaxpayerProfilePreference(),
       getTaxComputationModePreference(),
       getEffectiveCgtTaxRatePreference(),
       getAutoTaxDeductionEnabledPreference(),
       getDeductTaxFromCgtEnabledPreference(),
+      getSellScreenCgtDeductionEnabledPreference(),
     ]);
     setTaxpayerProfile(savedTaxpayerProfile);
     setTaxComputationMode(savedTaxComputationMode);
     setEffectiveCgtTaxRatePct(savedEffectiveCgtTaxRatePct);
     setAutoTaxDeductionEnabled(isAutoTaxDeductionEnabled);
     setDeductTaxFromCgtEnabled(isDeductTaxFromCgtEnabled);
+    setSellScreenCgtDeductionEnabled(isSellScreenCgtDeductionEnabled);
   }, []);
+
+  const handleSellScreenCgtDeductionToggle = React.useCallback(
+    async (nextValue: boolean) => {
+      setSellScreenCgtDeductionEnabled(nextValue);
+      try {
+        await setSellScreenCgtDeductionEnabledPreference(nextValue);
+      } catch {
+        // Keep current UI selection even if persistence fails.
+      }
+    },
+    []
+  );
 
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
@@ -683,12 +709,15 @@ export default function TransactionsTabScreen() {
 
       sellGrossProfit = (parsedPrice - positionSnapshot.averageBuyPrice) * parsedUnits;
       sellNetProfit = sellGrossProfit;
+      const taxableGain = Math.max(0, sellGrossProfit);
 
       const isCgtTaxDeductionEnabled =
-        autoTaxDeductionEnabled && deductTaxFromCgtEnabled;
-      if (isCgtTaxDeductionEnabled && sellGrossProfit > 0) {
+        autoTaxDeductionEnabled &&
+        deductTaxFromCgtEnabled &&
+        sellScreenCgtDeductionEnabled;
+      if (isCgtTaxDeductionEnabled && taxableGain > 0) {
         sellCgtRatePct = effectiveCgtTaxRatePct;
-        sellCgtTaxAmount = (sellGrossProfit * sellCgtRatePct) / 100;
+        sellCgtTaxAmount = (taxableGain * sellCgtRatePct) / 100;
         sellNetProfit = sellGrossProfit - sellCgtTaxAmount;
         isCgtApplied = true;
       }
@@ -727,7 +756,11 @@ export default function TransactionsTabScreen() {
           `Estimated Gross P/L: ${formatPKRAmount(sellGrossProfit)}.`,
         ];
 
-        if (autoTaxDeductionEnabled && deductTaxFromCgtEnabled) {
+        if (
+          autoTaxDeductionEnabled &&
+          deductTaxFromCgtEnabled &&
+          sellScreenCgtDeductionEnabled
+        ) {
           if (isCgtApplied) {
             const cgtLabel =
               taxComputationMode === "custom"
@@ -744,8 +777,10 @@ export default function TransactionsTabScreen() {
           }
         } else if (!autoTaxDeductionEnabled) {
           messageLines.push("CGT deduction is off because Auto Tax Deduction is disabled in Tax Settings.");
-        } else {
+        } else if (!deductTaxFromCgtEnabled) {
           messageLines.push("CGT deduction toggle is disabled in Tax Settings.");
+        } else {
+          messageLines.push("CGT deduction is off for this sell from the trade-screen toggle.");
         }
 
         messageLines.push("Saved locally on this device.");
@@ -823,6 +858,7 @@ export default function TransactionsTabScreen() {
     taxpayerProfile,
     autoTaxDeductionEnabled,
     deductTaxFromCgtEnabled,
+    sellScreenCgtDeductionEnabled,
     effectiveCgtTaxRatePct,
     taxComputationMode,
     tradeDateTime,
@@ -1217,8 +1253,33 @@ export default function TransactionsTabScreen() {
                       ? "Auto tax deduction is disabled in Tax Settings."
                       : !deductTaxFromCgtEnabled
                         ? "CGT deduction toggle is disabled in Tax Settings."
-                        : "CGT will be deducted only when this sell is in profit."}
+                        : !sellScreenCgtDeductionEnabled
+                          ? "CGT deduction is off for this sell from the toggle below."
+                          : "CGT will be deducted only when this sell is in profit."}
                   </Text>
+
+                  <View className="mt-3 flex-row items-center justify-between rounded-xl bg-brand-white/70 px-3 py-2 dark:bg-brand-white/10">
+                    <View className="mr-3 flex-1">
+                      <Text className="text-xs font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                        Deduct CGT for Sell
+                      </Text>
+                      <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
+                        This preference is saved until you change it.
+                      </Text>
+                    </View>
+                    <Switch
+                      value={sellScreenCgtDeductionEnabled}
+                      onValueChange={(nextValue) => {
+                        void handleSellScreenCgtDeductionToggle(nextValue);
+                      }}
+                      thumbColor={APP_COLORS.brand.white}
+                      ios_backgroundColor={switchTrackOffColor}
+                      trackColor={{
+                        true: switchTrackOnColor,
+                        false: switchTrackOffColor,
+                      }}
+                    />
+                  </View>
                 </View>
               ) : null}
             </View>
