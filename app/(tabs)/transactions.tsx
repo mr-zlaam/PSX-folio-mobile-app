@@ -54,6 +54,7 @@ import {
 } from "@/src/lib/app-preferences";
 import {
   BrokerFeeType,
+  calculateBrokerFeeAmount,
   formatBrokerFeeValueLabel,
 } from "@/src/lib/broker-fee";
 import { APP_COLORS } from "@/src/theme/colors";
@@ -126,6 +127,10 @@ function getTradeSideActionText(side: TradeSide): "bought" | "sold" {
 
 function getBrokerFeeTypeLabel(type: BrokerFeeType): string {
   return type === "fixed" ? "Fixed PKR" : "Percent";
+}
+
+function parseNumericInput(value: string): number {
+  return Number(value.trim().replace(/,/g, ""));
 }
 
 function ToggleChip({
@@ -275,6 +280,10 @@ export default function TransactionsTabScreen() {
   const [tradeNotice, setTradeNotice] = React.useState<TradeNoticeState | null>(null);
   const [shouldGoBackAfterNotice, setShouldGoBackAfterNotice] =
     React.useState(false);
+  const [sellPositionSnapshot, setSellPositionSnapshot] = React.useState<{
+    units: number;
+    averageBuyPrice: number;
+  } | null>(null);
 
   const normalizedRouteSymbol = React.useMemo(() => {
     const rawSymbol = Array.isArray(searchParams.symbol)
@@ -548,6 +557,170 @@ export default function TransactionsTabScreen() {
     }
   }, [hasEditedPrice, symbolQuote.lastPrice]);
 
+  React.useEffect(() => {
+    let isMounted = true;
+    const normalizedSymbol = selectedSymbol.trim().toUpperCase();
+
+    if (tradeSide !== "sell" || normalizedSymbol.length === 0) {
+      setSellPositionSnapshot(null);
+      return () => {
+        isMounted = false;
+      };
+    }
+
+    async function hydrateSellPosition() {
+      const [savedOrders, bonusShareRecords] = await Promise.all([
+        getSavedTradeOrders(),
+        getSavedBonusShareRecords(),
+      ]);
+      const effectiveOrders = isEditingTrade
+        ? savedOrders.filter((order) => order.id !== normalizedEditTradeId)
+        : savedOrders;
+      const positionSnapshot = getPositionSnapshotForSymbol(
+        effectiveOrders,
+        bonusShareRecords,
+        normalizedSymbol
+      );
+
+      if (isMounted) {
+        setSellPositionSnapshot(positionSnapshot);
+      }
+    }
+
+    void hydrateSellPosition();
+    return () => {
+      isMounted = false;
+    };
+  }, [isEditingTrade, normalizedEditTradeId, selectedSymbol, tradeSide]);
+
+  const parsedPrice = React.useMemo(
+    () => parseNumericInput(priceInput),
+    [priceInput]
+  );
+  const parsedUnits = React.useMemo(
+    () => parseNumericInput(unitsInput),
+    [unitsInput]
+  );
+  const hasValidPrice = Number.isFinite(parsedPrice) && parsedPrice > 0;
+  const hasValidUnits =
+    Number.isFinite(parsedUnits) && parsedUnits > 0 && Number.isInteger(parsedUnits);
+  const hasTradeInputs = hasValidPrice && hasValidUnits;
+
+  const effectiveBrokerFeeType = React.useMemo<BrokerFeeType>(() => {
+    if (brokerMode === "saved") {
+      return savedBrokerSettings?.transactionFeeType ?? "percentage";
+    }
+
+    return customBrokerFeeType;
+  }, [brokerMode, customBrokerFeeType, savedBrokerSettings?.transactionFeeType]);
+
+  const effectiveBrokerFeeValue = React.useMemo(() => {
+    if (brokerMode === "saved") {
+      const savedFeeValue = savedBrokerSettings?.transactionFeeValue;
+      return Number.isFinite(savedFeeValue) && typeof savedFeeValue === "number"
+        ? Math.max(0, savedFeeValue)
+        : 0;
+    }
+
+    const parsedCustomFee = parseNumericInput(customBrokerFeeValueInput);
+    return Number.isFinite(parsedCustomFee) && parsedCustomFee >= 0
+      ? parsedCustomFee
+      : 0;
+  }, [brokerMode, customBrokerFeeValueInput, savedBrokerSettings?.transactionFeeValue]);
+
+  const estimatedGrossTradeAmount = React.useMemo(() => {
+    if (!hasTradeInputs) {
+      return 0;
+    }
+
+    return parsedPrice * parsedUnits;
+  }, [hasTradeInputs, parsedPrice, parsedUnits]);
+
+  const estimatedBrokerFeeAmount = React.useMemo(() => {
+    if (!hasTradeInputs) {
+      return 0;
+    }
+
+    return calculateBrokerFeeAmount({
+      price: parsedPrice,
+      units: parsedUnits,
+      brokerFeeType: effectiveBrokerFeeType,
+      brokerFeeValue: effectiveBrokerFeeValue,
+    });
+  }, [
+    effectiveBrokerFeeType,
+    effectiveBrokerFeeValue,
+    hasTradeInputs,
+    parsedPrice,
+    parsedUnits,
+  ]);
+
+  const estimatedTradeFinalAmount = React.useMemo(() => {
+    if (!hasTradeInputs) {
+      return 0;
+    }
+
+    return tradeSide === "buy"
+      ? estimatedGrossTradeAmount + estimatedBrokerFeeAmount
+      : estimatedGrossTradeAmount - estimatedBrokerFeeAmount;
+  }, [
+    estimatedBrokerFeeAmount,
+    estimatedGrossTradeAmount,
+    hasTradeInputs,
+    tradeSide,
+  ]);
+
+  const isCgtDeductionEnabledForPreview =
+    autoTaxDeductionEnabled &&
+    deductTaxFromCgtEnabled &&
+    sellScreenCgtDeductionEnabled;
+
+  const estimatedSellGrossProfit = React.useMemo(() => {
+    if (!hasTradeInputs || tradeSide !== "sell" || !sellPositionSnapshot) {
+      return 0;
+    }
+
+    return (parsedPrice - sellPositionSnapshot.averageBuyPrice) * parsedUnits;
+  }, [hasTradeInputs, parsedPrice, parsedUnits, sellPositionSnapshot, tradeSide]);
+
+  const estimatedSellCgtTaxAmount = React.useMemo(() => {
+    if (
+      !hasTradeInputs ||
+      tradeSide !== "sell" ||
+      !isCgtDeductionEnabledForPreview ||
+      !sellPositionSnapshot
+    ) {
+      return 0;
+    }
+
+    const taxableGain = Math.max(0, estimatedSellGrossProfit);
+    if (taxableGain <= 0) {
+      return 0;
+    }
+
+    return (taxableGain * effectiveCgtTaxRatePct) / 100;
+  }, [
+    estimatedSellGrossProfit,
+    effectiveCgtTaxRatePct,
+    hasTradeInputs,
+    isCgtDeductionEnabledForPreview,
+    sellPositionSnapshot,
+    tradeSide,
+  ]);
+
+  const estimatedSellNetReceivable = React.useMemo(() => {
+    if (!hasTradeInputs || tradeSide !== "sell") {
+      return 0;
+    }
+
+    return estimatedTradeFinalAmount - estimatedSellCgtTaxAmount;
+  }, [
+    estimatedSellCgtTaxAmount,
+    estimatedTradeFinalAmount,
+    hasTradeInputs,
+    tradeSide,
+  ]);
+
   const handleSelectSymbol = React.useCallback((symbol: string) => {
     setSelectedSymbol(symbol);
     setSymbolSearchQuery(symbol);
@@ -615,13 +788,13 @@ export default function TransactionsTabScreen() {
       return;
     }
 
-    const parsedPrice = Number(priceInput.trim().replace(/,/g, ""));
+    const parsedPrice = parseNumericInput(priceInput);
     if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
       showTradeNotice("Invalid Price", "Enter a valid price greater than 0.", "error");
       return;
     }
 
-    const parsedUnits = Number(unitsInput.trim().replace(/,/g, ""));
+    const parsedUnits = parseNumericInput(unitsInput);
     if (!Number.isFinite(parsedUnits) || parsedUnits <= 0) {
       showTradeNotice("Invalid Units", "Enter units greater than 0.", "error");
       return;
@@ -651,9 +824,7 @@ export default function TransactionsTabScreen() {
     }
 
     if (brokerMode === "custom") {
-      const parsedBrokerFeeValue = Number(
-        customBrokerFeeValueInput.trim().replace(/,/g, "")
-      );
+      const parsedBrokerFeeValue = parseNumericInput(customBrokerFeeValueInput);
       if (!Number.isFinite(parsedBrokerFeeValue) || parsedBrokerFeeValue < 0) {
         showTradeNotice(
           "Invalid Broker Fee",
@@ -1282,6 +1453,86 @@ export default function TransactionsTabScreen() {
                   </View>
                 </View>
               ) : null}
+
+              <View className="rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5">
+                <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                  Final Amount Preview
+                </Text>
+
+                {hasTradeInputs ? (
+                  <View className="mt-2 gap-1">
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                        Gross
+                      </Text>
+                      <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                        {formatPKRAmount(estimatedGrossTradeAmount)}
+                      </Text>
+                    </View>
+
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                        Broker Fee
+                      </Text>
+                      <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                        {formatPKRAmount(estimatedBrokerFeeAmount)}
+                      </Text>
+                    </View>
+
+                    <View className="mt-1 h-px bg-app-highlight/20 dark:bg-app-highlightDark/25" />
+
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                        {tradeSide === "buy" ? "Final Payable" : "Final Receivable"}
+                      </Text>
+                      <Text className="text-base font-extrabold text-app-text dark:text-app-textDark">
+                        {formatPKRAmount(
+                          tradeSide === "buy"
+                            ? estimatedTradeFinalAmount
+                            : estimatedSellNetReceivable
+                        )}
+                      </Text>
+                    </View>
+
+                    {tradeSide === "sell" ? (
+                      <>
+                        <View className="flex-row items-center justify-between">
+                          <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                            Est. CGT
+                          </Text>
+                          <Text className="text-sm font-bold text-brand-red">
+                            {formatPKRAmount(-estimatedSellCgtTaxAmount)}
+                          </Text>
+                        </View>
+
+                        <View className="flex-row items-center justify-between">
+                          <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                            Est. Net P/L
+                          </Text>
+                          <Text
+                            className={[
+                              "text-sm font-bold",
+                              getChangeTextClassName(
+                                estimatedSellGrossProfit - estimatedSellCgtTaxAmount
+                              ),
+                            ]
+                              .filter(Boolean)
+                              .join(" ")}
+                          >
+                            {formatPKRAmount(
+                              estimatedSellGrossProfit - estimatedSellCgtTaxAmount
+                            )}
+                          </Text>
+                        </View>
+                      </>
+                    ) : null}
+                  </View>
+                ) : (
+                  <Text className="mt-2 text-xs font-semibold text-app-text dark:text-app-textDark">
+                    Enter valid price and units to see final buy/sell amount.
+                  </Text>
+                )}
+              </View>
             </View>
 
             <View className="mt-5">
