@@ -214,7 +214,7 @@ export default function MoreTabScreen() {
             <View className="gap-4">
               {MORE_SECTIONS.map((section) => (
                 <View key={section.id}>
-                  <Text className="text-[11px] font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                  <Text className="text-[10.5px] font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark/90">
                     {section.title}
                   </Text>
 
@@ -231,11 +231,12 @@ export default function MoreTabScreen() {
                           <View className="rounded-xl bg-app-highlight/10 p-2 dark:bg-brand-white/10">
                             <MaterialCommunityIcons
                               name={item.icon}
-                              size={22}
+                              size={18}
                               color={iconColor}
+                              style={{ opacity: 0.86 }}
                             />
                           </View>
-                          <Text className="mt-2 text-center text-xs font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                          <Text className="mt-2 text-center text-[11px] font-medium uppercase tracking-wide text-app-text/90 dark:text-app-textDark/85">
                             {item.label}
                           </Text>
                         </View>

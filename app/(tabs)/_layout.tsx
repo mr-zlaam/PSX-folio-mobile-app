@@ -7,7 +7,7 @@ import { Text } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 type TabIconName =
-  | "view-dashboard-outline"
+  | "home-outline"
   | "chart-box-outline"
   | "briefcase-outline"
   | "eye-outline"
@@ -24,7 +24,7 @@ const MORE_MANAGED_ROUTES = new Set([
 
 function getTabIconName(routeName: string): TabIconName {
   if (routeName === "home") {
-    return "view-dashboard-outline";
+    return "home-outline";
   }
 
   if (routeName === "portfolio") {
@@ -124,8 +124,8 @@ export default function TabsLayout() {
           return (
             <Text
               style={{
-                fontWeight: "600",
-                fontSize: 12,
+                fontWeight: "500",
+                fontSize: 11,
                 marginBottom: 6,
                 color: shouldHighlight ? activeTintColor : inactiveTintColor,
               }}
@@ -141,9 +141,9 @@ export default function TabsLayout() {
           return (
             <MaterialCommunityIcons
               name={getTabIconName(route.name)}
-              size={22}
+              size={18}
               color={shouldHighlight ? activeTintColor : color}
-              style={{ opacity: shouldHighlight ? 1 : 0.85 }}
+              style={{ opacity: shouldHighlight ? 0.95 : 0.72 }}
             />
           );
         },
