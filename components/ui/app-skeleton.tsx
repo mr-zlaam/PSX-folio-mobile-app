@@ -126,7 +126,11 @@ export function AppChartSkeleton({
   height = 170,
   className,
 }: AppChartSkeletonProps) {
-  const miniBarHeights = [28, 42, 24, 54, 34, 46, 22, 38];
+  const { colorScheme } = useColorScheme();
+  const isDarkMode = colorScheme === "dark";
+  const gridLineColor = isDarkMode
+    ? "rgba(255,255,255,0.11)"
+    : "rgba(20,10,38,0.1)";
 
   return (
     <View
@@ -144,24 +148,95 @@ export function AppChartSkeleton({
       </View>
 
       <View className="mt-3 flex-1 rounded-xl bg-app-highlight/5 p-3 dark:bg-brand-white/5">
-        <View className="flex-1 justify-end">
-          <View className="flex-row items-end justify-between gap-1">
-            {miniBarHeights.map((barHeight, index) => (
-              <AppSkeletonBlock
-                key={`chart-skeleton-bar-${index}`}
-                width={16}
-                height={barHeight}
-                borderRadius={6}
-              />
-            ))}
-          </View>
+        <View className="absolute inset-x-3 top-3 bottom-9 justify-between">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <View
+              key={`chart-grid-line-${index}`}
+              style={{
+                height: 1,
+                backgroundColor: gridLineColor,
+              }}
+            />
+          ))}
         </View>
 
-        <View className="mt-3 flex-row items-center justify-between">
-          <AppSkeletonBlock width={54} height={8} borderRadius={5} />
-          <AppSkeletonBlock width={54} height={8} borderRadius={5} />
-          <AppSkeletonBlock width={54} height={8} borderRadius={5} />
-          <AppSkeletonBlock width={54} height={8} borderRadius={5} />
+        <View className="absolute inset-x-3 top-3 bottom-9">
+          <AppSkeletonBlock
+            style={{
+              position: "absolute",
+              left: "2%",
+              top: "58%",
+              width: "18%",
+              height: 5,
+              transform: [{ rotate: "-18deg" }],
+            }}
+            borderRadius={6}
+          />
+          <AppSkeletonBlock
+            style={{
+              position: "absolute",
+              left: "18%",
+              top: "46%",
+              width: "16%",
+              height: 5,
+              transform: [{ rotate: "14deg" }],
+            }}
+            borderRadius={6}
+          />
+          <AppSkeletonBlock
+            style={{
+              position: "absolute",
+              left: "33%",
+              top: "52%",
+              width: "14%",
+              height: 5,
+              transform: [{ rotate: "-12deg" }],
+            }}
+            borderRadius={6}
+          />
+          <AppSkeletonBlock
+            style={{
+              position: "absolute",
+              left: "46%",
+              top: "34%",
+              width: "18%",
+              height: 5,
+              transform: [{ rotate: "20deg" }],
+            }}
+            borderRadius={6}
+          />
+          <AppSkeletonBlock
+            style={{
+              position: "absolute",
+              left: "62%",
+              top: "44%",
+              width: "14%",
+              height: 5,
+              transform: [{ rotate: "-14deg" }],
+            }}
+            borderRadius={6}
+          />
+          <AppSkeletonBlock
+            style={{
+              position: "absolute",
+              left: "74%",
+              top: "28%",
+              width: "20%",
+              height: 5,
+              transform: [{ rotate: "17deg" }],
+            }}
+            borderRadius={6}
+          />
+        </View>
+
+        <View className="mt-auto">
+          <View className="h-[1px] bg-app-highlight/15 dark:bg-brand-white/15" />
+          <View className="mt-2 flex-row items-center justify-between">
+            <AppSkeletonBlock width={46} height={8} borderRadius={5} />
+            <AppSkeletonBlock width={46} height={8} borderRadius={5} />
+            <AppSkeletonBlock width={46} height={8} borderRadius={5} />
+            <AppSkeletonBlock width={46} height={8} borderRadius={5} />
+          </View>
         </View>
       </View>
     </View>

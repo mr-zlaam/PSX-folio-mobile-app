@@ -386,7 +386,7 @@ function StockRowSkeleton() {
   );
 }
 
-function StockFilterChip({
+function StockFilterRowOption({
   label,
   selected,
   onPress,
@@ -395,31 +395,47 @@ function StockFilterChip({
   selected: boolean;
   onPress: () => void;
 }) {
+  const { colorScheme } = useColorScheme();
+  const isDarkMode = colorScheme === "dark";
+
   return (
     <TouchableOpacity
       activeOpacity={0.88}
       onPress={onPress}
       className={[
-        "rounded-xl border px-3 py-2",
+        "flex-row items-center justify-between rounded-xl border px-3 py-3",
         selected
-          ? "border-app-highlight bg-app-highlight dark:border-app-highlightDark dark:bg-app-highlightDark"
-          : "border-app-highlight/20 bg-app-highlight/5 dark:border-app-highlightDark/30 dark:bg-brand-white/5",
+          ? "border-app-highlight/20 bg-app-highlight/8 dark:border-app-highlightDark/14 dark:bg-brand-white/8"
+          : "border-app-highlight/12 bg-brand-white dark:border-app-highlightDark/12 dark:bg-brand-white/5",
       ]
         .filter(Boolean)
         .join(" ")}
     >
       <Text
         className={[
-          "text-[11px] font-bold uppercase tracking-wide",
+          "text-sm font-semibold",
           selected
-            ? "text-brand-white dark:text-brand-purple"
-            : "text-app-highlight dark:text-app-highlightDark",
+            ? "text-app-highlight dark:text-app-highlightDark"
+            : "text-app-text dark:text-app-textDark",
         ]
           .filter(Boolean)
           .join(" ")}
       >
         {label}
       </Text>
+      <MaterialCommunityIcons
+        name={selected ? "check-circle" : "checkbox-blank-circle-outline"}
+        size={18}
+        color={
+          selected
+            ? isDarkMode
+              ? APP_COLORS.brand.white
+              : APP_COLORS.brand.purple
+            : isDarkMode
+              ? "rgba(255, 255, 255, 0.55)"
+              : "rgba(40, 40, 43, 0.55)"
+        }
+      />
     </TouchableOpacity>
   );
 }
@@ -699,10 +715,6 @@ export default function StocksTabScreen() {
 
   const openFilterSheet = React.useCallback(() => {
     filterSheetRef.current?.present();
-  }, []);
-
-  const closeFilterSheet = React.useCallback(() => {
-    filterSheetRef.current?.dismiss();
   }, []);
 
   const filterSheetBackdrop = React.useCallback(
@@ -1188,30 +1200,17 @@ export default function StocksTabScreen() {
             paddingBottom: insets.bottom + 16,
           }}
         >
-          <View className="flex-row items-center justify-between">
-            <Text className="text-lg font-extrabold text-app-text dark:text-app-textDark">
-              Sort & Filter
-            </Text>
-            <TouchableOpacity
-              activeOpacity={0.88}
-              onPress={closeFilterSheet}
-              className="h-9 w-9 items-center justify-center rounded-xl border border-app-highlight/25 bg-app-highlight/8 dark:border-app-highlightDark/25 dark:bg-brand-white/10"
-            >
-              <MaterialCommunityIcons
-                name="close"
-                size={20}
-                color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
-              />
-            </TouchableOpacity>
-          </View>
+          <Text className="text-lg font-extrabold text-app-text dark:text-app-textDark">
+            Sort & Filter
+          </Text>
 
-          <View className="mt-4 rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+          <View className="mt-4 rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/12 dark:bg-brand-white/10">
             <Text className="text-[11px] font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
-              Filter By Compliance
+              Filter By Compliance (select one)
             </Text>
-            <View className="mt-2 flex-row flex-wrap gap-2">
+            <View className="mt-2 gap-2">
               {STOCK_SHARIAH_FILTER_OPTIONS.map((option) => (
-                <StockFilterChip
+                <StockFilterRowOption
                   key={option.value}
                   label={option.label}
                   selected={shariahFilter === option.value}
@@ -1221,11 +1220,11 @@ export default function StocksTabScreen() {
             </View>
 
             <Text className="mt-4 text-[11px] font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
-              Sort By
+              Sort By (select one)
             </Text>
-            <View className="mt-2 flex-row flex-wrap gap-2">
+            <View className="mt-2 gap-2">
               {STOCK_SORT_OPTIONS.map((option) => (
-                <StockFilterChip
+                <StockFilterRowOption
                   key={option.value}
                   label={option.label}
                   selected={sortMode === option.value}
@@ -1237,30 +1236,6 @@ export default function StocksTabScreen() {
             <Text className="mt-3 text-[10px] font-semibold text-app-text dark:text-app-textDark">
               Weight source: KSE100 (primary), ALLSHR (fallback).
             </Text>
-          </View>
-
-          <View className="mt-4 flex-row gap-3">
-            <TouchableOpacity
-              activeOpacity={0.88}
-              onPress={() => {
-                setShariahFilter("all");
-                setSortMode("az");
-              }}
-              className="flex-1 rounded-2xl border border-app-highlight/25 bg-app-highlight/8 px-4 py-3 dark:border-app-highlightDark/25 dark:bg-brand-white/10"
-            >
-              <Text className="text-center text-sm font-bold text-app-highlight dark:text-app-highlightDark">
-                Reset
-              </Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              activeOpacity={0.88}
-              onPress={closeFilterSheet}
-              className="flex-1 rounded-2xl bg-app-highlight px-4 py-3 dark:bg-app-highlightDark"
-            >
-              <Text className="text-center text-sm font-bold text-brand-white dark:text-brand-purple">
-                Done
-              </Text>
-            </TouchableOpacity>
           </View>
         </BottomSheetView>
       </BottomSheetModal>

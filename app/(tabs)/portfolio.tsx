@@ -3,8 +3,6 @@ import { useGuardedRouter } from "@/src/lib/navigation";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import {
   AppState,
-  Modal,
-  Pressable,
   RefreshControl,
   ScrollView,
   Text,
@@ -17,6 +15,11 @@ import * as DocumentPicker from "expo-document-picker";
 import * as Sharing from "expo-sharing";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
+import {
+  BottomSheetBackdrop,
+  BottomSheetModal,
+  BottomSheetView,
+} from "@gorhom/bottom-sheet";
 import AppFeedbackModal, {
   AppFeedbackModalTone,
 } from "@/components/ui/app-feedback-modal";
@@ -150,7 +153,7 @@ function buildSectorAggregates(holdings: PortfolioHolding[]): SectorAggregate[] 
     .sort((firstSector, secondSector) => secondSector.value - firstSector.value);
 }
 
-function ModeSegmentButton({
+function FilterRowOption({
   label,
   selected,
   onPress,
@@ -159,24 +162,27 @@ function ModeSegmentButton({
   selected: boolean;
   onPress: () => void;
 }) {
+  const { colorScheme } = useColorScheme();
+  const isDarkMode = colorScheme === "dark";
+
   return (
     <TouchableOpacity
       activeOpacity={0.88}
       onPress={onPress}
       className={[
-        "flex-1 rounded-xl px-3 py-2",
+        "flex-row items-center justify-between rounded-xl border px-3 py-3",
         selected
-          ? "bg-app-highlight dark:bg-app-highlightDark"
-          : "bg-app-highlight/5 dark:border dark:border-app-highlightDark/30 dark:bg-brand-white/5",
+          ? "border-app-highlight/20 bg-app-highlight/8 dark:border-app-highlightDark/14 dark:bg-brand-white/8"
+          : "border-app-highlight/12 bg-brand-white dark:border-app-highlightDark/12 dark:bg-brand-white/5",
       ]
         .filter(Boolean)
         .join(" ")}
     >
       <Text
         className={[
-          "text-[11px] font-semibold",
+          "text-sm font-semibold",
           selected
-            ? "text-brand-white dark:text-brand-purple"
+            ? "text-app-highlight dark:text-app-highlightDark"
             : "text-app-text dark:text-app-textDark",
         ]
           .filter(Boolean)
@@ -184,6 +190,19 @@ function ModeSegmentButton({
       >
         {label}
       </Text>
+      <MaterialCommunityIcons
+        name={selected ? "check-circle" : "checkbox-blank-circle-outline"}
+        size={18}
+        color={
+          selected
+            ? isDarkMode
+              ? APP_COLORS.brand.white
+              : APP_COLORS.brand.purple
+            : isDarkMode
+              ? "rgba(255, 255, 255, 0.55)"
+              : "rgba(40, 40, 43, 0.55)"
+        }
+      />
     </TouchableOpacity>
   );
 }
@@ -369,7 +388,6 @@ export default function PortfolioTabScreen() {
   const [holdings, setHoldings] = React.useState<PortfolioHolding[]>([]);
   const [isInitialLoading, setIsInitialLoading] = React.useState(true);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
-  const [isFilterPanelVisible, setIsFilterPanelVisible] = React.useState(false);
   const [isBackupBusy, setIsBackupBusy] = React.useState(false);
   const [groupingMode, setGroupingMode] = React.useState<PortfolioGroupingMode>("sectors");
   const [displayMode, setDisplayMode] = React.useState<PortfolioDisplayMode>("percentage");
@@ -378,6 +396,8 @@ export default function PortfolioTabScreen() {
   );
   const [hasHydratedViewPreferences, setHasHydratedViewPreferences] =
     React.useState(false);
+  const filterSheetRef = React.useRef<BottomSheetModal>(null);
+  const filterSheetSnapPoints = React.useMemo(() => ["44%"], []);
   const sectorAggregates = React.useMemo(() => buildSectorAggregates(holdings), [holdings]);
   const totalInvested = React.useMemo(
     () => holdings.reduce((sum, holding) => sum + holding.invested, 0),
@@ -546,6 +566,22 @@ export default function PortfolioTabScreen() {
     setBackupNotice(null);
   }, []);
 
+  const openFilterSheet = React.useCallback(() => {
+    filterSheetRef.current?.present();
+  }, []);
+
+  const filterSheetBackdrop = React.useCallback(
+    (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        pressBehavior="close"
+      />
+    ),
+    []
+  );
+
   const handleExportBackup = React.useCallback(async () => {
     if (isBackupBusy) {
       return;
@@ -708,7 +744,7 @@ export default function PortfolioTabScreen() {
 
               <TouchableOpacity
                 activeOpacity={0.88}
-                onPress={() => setIsFilterPanelVisible(true)}
+                onPress={openFilterSheet}
                 className="h-[40px] w-[40px] items-center justify-center rounded-xl bg-app-highlight/10 dark:bg-brand-white/10"
               >
                 <MaterialCommunityIcons
@@ -782,95 +818,68 @@ export default function PortfolioTabScreen() {
         onClose={handleCloseBackupNotice}
       />
 
-      <Modal
-        visible={isFilterPanelVisible}
-        transparent
-        animationType="slide"
-        onRequestClose={() => setIsFilterPanelVisible(false)}
+      <BottomSheetModal
+        ref={filterSheetRef}
+        snapPoints={filterSheetSnapPoints}
+        enablePanDownToClose
+        backdropComponent={filterSheetBackdrop}
+        backgroundStyle={{
+          backgroundColor: isDarkMode
+            ? APP_COLORS.brand.purple
+            : APP_COLORS.brand.white,
+        }}
+        handleIndicatorStyle={{
+          backgroundColor: isDarkMode
+            ? APP_COLORS.brand.white
+            : APP_COLORS.brand.purple,
+        }}
       >
-        <View className="flex-1 justify-end">
-          <Pressable
-            className="flex-1 bg-black/45"
-            onPress={() => setIsFilterPanelVisible(false)}
-          />
-          <View className="rounded-t-3xl border-t border-app-highlight/20 bg-app-bg px-5 pt-4 dark:border-app-highlightDark/20 dark:bg-app-bgDark">
-            <View className="flex-row items-center justify-between">
-              <Text className="text-lg font-extrabold text-app-text dark:text-app-textDark">
-                Portfolio Filters
-              </Text>
-              <TouchableOpacity
-                activeOpacity={0.88}
-                onPress={() => setIsFilterPanelVisible(false)}
-                className="h-9 w-9 items-center justify-center rounded-xl border border-app-highlight/25 bg-app-highlight/8 dark:border-app-highlightDark/25 dark:bg-brand-white/10"
-              >
-                <MaterialCommunityIcons
-                  name="close"
-                  size={20}
-                  color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
-                />
-              </TouchableOpacity>
+        <BottomSheetView
+          style={{
+            paddingHorizontal: 16,
+            paddingTop: 8,
+            paddingBottom: insets.bottom + 16,
+          }}
+        >
+          <Text className="text-lg font-extrabold text-app-text dark:text-app-textDark">
+            Portfolio Filters
+          </Text>
+
+          <View className="mt-4 rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/12 dark:bg-brand-white/10">
+            <Text className="text-[11px] font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
+              Group By (select one)
+            </Text>
+            <View className="mt-2 gap-2">
+              <FilterRowOption
+                label="Sectors"
+                selected={groupingMode === "sectors"}
+                onPress={() => setGroupingMode("sectors")}
+              />
+              <FilterRowOption
+                label="Companies"
+                selected={groupingMode === "companies"}
+                onPress={() => setGroupingMode("companies")}
+              />
             </View>
 
-            <View className="mt-4 rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
-              <Text className="text-[11px] font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                Group By
-              </Text>
-              <View className="mt-2 flex-row gap-2">
-                <ModeSegmentButton
-                  label="Sectors"
-                  selected={groupingMode === "sectors"}
-                  onPress={() => setGroupingMode("sectors")}
-                />
-                <ModeSegmentButton
-                  label="Companies"
-                  selected={groupingMode === "companies"}
-                  onPress={() => setGroupingMode("companies")}
-                />
-              </View>
-
-              <Text className="mt-4 text-[11px] font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                Value Mode
-              </Text>
-              <View className="mt-2 flex-row gap-2">
-                <ModeSegmentButton
-                  label="Percentage"
-                  selected={displayMode === "percentage"}
-                  onPress={() => setDisplayMode("percentage")}
-                />
-                <ModeSegmentButton
-                  label="Price"
-                  selected={displayMode === "price"}
-                  onPress={() => setDisplayMode("price")}
-                />
-              </View>
-            </View>
-
-            <View className="mt-4 flex-row gap-3" style={{ paddingBottom: insets.bottom + 12 }}>
-              <TouchableOpacity
-                activeOpacity={0.88}
-                onPress={() => {
-                  setGroupingMode("sectors");
-                  setDisplayMode("percentage");
-                }}
-                className="flex-1 rounded-2xl border border-app-highlight/25 bg-app-highlight/8 px-4 py-3 dark:border-app-highlightDark/25 dark:bg-brand-white/10"
-              >
-                <Text className="text-center text-sm font-bold text-app-highlight dark:text-app-highlightDark">
-                  Reset
-                </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
-                activeOpacity={0.88}
-                onPress={() => setIsFilterPanelVisible(false)}
-                className="flex-1 rounded-2xl bg-app-highlight px-4 py-3 dark:bg-app-highlightDark"
-              >
-                <Text className="text-center text-sm font-bold text-brand-white dark:text-brand-purple">
-                  Done
-                </Text>
-              </TouchableOpacity>
+            <Text className="mt-4 text-[11px] font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
+              Value Mode (select one)
+            </Text>
+            <View className="mt-2 gap-2">
+              <FilterRowOption
+                label="Percentage"
+                selected={displayMode === "percentage"}
+                onPress={() => setDisplayMode("percentage")}
+              />
+              <FilterRowOption
+                label="Price"
+                selected={displayMode === "price"}
+                onPress={() => setDisplayMode("price")}
+              />
             </View>
           </View>
-        </View>
-      </Modal>
+        </BottomSheetView>
+      </BottomSheetModal>
     </SafeAreaView>
   );
 }

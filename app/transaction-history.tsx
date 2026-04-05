@@ -793,7 +793,7 @@ export default function TransactionHistoryScreen() {
             <TouchableOpacity
               activeOpacity={0.88}
               onPress={handleOpenDividend}
-              className="rounded-xl bg-brand-white/90 px-4 py-3 shadow-sm shadow-app-highlight/20 dark:bg-brand-white/10 dark:shadow-none dark:border dark:border-app-highlightDark/25"
+              className="rounded-xl bg-brand-white/90 px-4 py-3 shadow-sm shadow-app-highlight/20 dark:bg-brand-white/10 dark:shadow-none dark:border dark:border-app-highlightDark/12"
             >
               <Text className="text-base font-bold text-app-text dark:text-app-textDark">
                 Add Dividend
@@ -806,7 +806,7 @@ export default function TransactionHistoryScreen() {
             <TouchableOpacity
               activeOpacity={0.88}
               onPress={handleOpenBonusShare}
-              className="rounded-xl bg-brand-white/90 px-4 py-3 shadow-sm shadow-app-highlight/20 dark:bg-brand-white/10 dark:shadow-none dark:border dark:border-app-highlightDark/25"
+              className="rounded-xl bg-brand-white/90 px-4 py-3 shadow-sm shadow-app-highlight/20 dark:bg-brand-white/10 dark:shadow-none dark:border dark:border-app-highlightDark/12"
             >
               <Text className="text-base font-bold text-app-text dark:text-app-textDark">
                 Add Bonus Share

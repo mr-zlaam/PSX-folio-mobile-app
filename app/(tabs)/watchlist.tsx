@@ -848,7 +848,7 @@ export default function WatchlistTabScreen() {
             onChangeText={setSearchQuery}
             placeholder="Search symbol or company"
             placeholderTextColor={inputPlaceholderTextColor}
-            className="mt-3 rounded-xl border border-app-highlight/15 bg-app-highlight/5 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/25 dark:bg-brand-white/5 dark:text-app-textDark"
+            className="mt-3 rounded-xl border border-app-highlight/12 bg-app-highlight/5 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/12 dark:bg-brand-white/5 dark:text-app-textDark"
           />
 
           {searchQuery.trim().length === 0 ? (
@@ -878,8 +878,8 @@ export default function WatchlistTabScreen() {
                       className={[
                         "rounded-xl border px-3 py-2",
                         alreadyAdded
-                          ? "border-app-highlight/12 bg-app-highlight/10 dark:border-app-highlightDark/25 dark:bg-brand-white/10"
-                          : "border-app-highlight/12 bg-brand-white/90 dark:border-app-highlightDark/25 dark:bg-brand-white/5",
+                          ? "border-app-highlight/10 bg-app-highlight/8 dark:border-app-highlightDark/12 dark:bg-brand-white/8"
+                          : "border-app-highlight/10 bg-brand-white/90 dark:border-app-highlightDark/12 dark:bg-brand-white/5",
                       ]
                         .filter(Boolean)
                         .join(" ")}
@@ -915,7 +915,7 @@ export default function WatchlistTabScreen() {
           <TouchableOpacity
             activeOpacity={0.9}
             onPress={closeAddSheet}
-            className="mt-3 rounded-xl bg-button-neutral px-4 py-3 dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/5"
+            className="mt-3 rounded-xl bg-button-neutral px-4 py-3 dark:border dark:border-app-highlightDark/12 dark:bg-brand-white/5"
           >
             <Text className="text-center text-sm font-bold text-app-highlight dark:text-app-highlightDark">
               Close

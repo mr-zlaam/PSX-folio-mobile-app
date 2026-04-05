@@ -41,6 +41,12 @@ import { APP_COLORS } from "@/src/theme/colors";
 import { useLocalSearchParams } from "expo-router";
 import { useGuardedRouter } from "@/src/lib/navigation";
 import { useColorScheme } from "nativewind";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import {
+  BottomSheetBackdrop,
+  BottomSheetModal,
+  BottomSheetView,
+} from "@gorhom/bottom-sheet";
 import React from "react";
 import {
   Linking,
@@ -65,15 +71,26 @@ const CHART_RANGE_OPTIONS: StockChartRange[] = [
 ];
 
 const COMPANY_DETAIL_ALLOWED_ORIGINS = new Set(["market", "watchlist", "stocks"]);
-const COMPANY_DETAIL_TAB_KEYS = [
+const COMPANY_DETAIL_TOP_TAB_KEYS = [
   "profile",
-  "equity",
-  "financials",
-  "ratios",
+  "fundamentals",
   "announcements",
 ] as const;
+const FUNDAMENTALS_TAB_KEYS = ["equity", "financials", "ratios"] as const;
+const ANNOUNCEMENT_FILTER_OPTIONS = [
+  { value: "all", label: "All" },
+  { value: "financialResults", label: "Financial Results" },
+  { value: "boardMeeting", label: "Board Meeting" },
+  { value: "dividend", label: "Dividend" },
+  { value: "materialInfo", label: "Material Info" },
+  { value: "corporateBriefing", label: "Corporate Briefing" },
+  { value: "disclosureOfInterest", label: "Disclosure of Interest" },
+  { value: "other", label: "Other" },
+] as const;
 
-type CompanyDetailTabKey = (typeof COMPANY_DETAIL_TAB_KEYS)[number];
+type CompanyDetailTopTabKey = (typeof COMPANY_DETAIL_TOP_TAB_KEYS)[number];
+type FundamentalsTabKey = (typeof FUNDAMENTALS_TAB_KEYS)[number];
+type AnnouncementFilterKey = (typeof ANNOUNCEMENT_FILTER_OPTIONS)[number]["value"];
 
 function getValueToneClassName(value: number): string {
   if (value > 0) {
@@ -294,11 +311,19 @@ function StatRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function getCompanyDetailTabLabel(tabKey: CompanyDetailTabKey): string {
+function getCompanyDetailTopTabLabel(tabKey: CompanyDetailTopTabKey): string {
   if (tabKey === "profile") {
     return "Profile";
   }
 
+  if (tabKey === "fundamentals") {
+    return "Fundamentals";
+  }
+
+  return "Notices";
+}
+
+function getFundamentalsTabLabel(tabKey: FundamentalsTabKey): string {
   if (tabKey === "equity") {
     return "Equity";
   }
@@ -307,19 +332,15 @@ function getCompanyDetailTabLabel(tabKey: CompanyDetailTabKey): string {
     return "Financials";
   }
 
-  if (tabKey === "ratios") {
-    return "Ratios";
-  }
-
-  return "Announcements";
+  return "Ratios";
 }
 
-function CompanyDetailTabChip({
+function CompanyDetailTopTabButton({
   tabKey,
   selected,
   onPress,
 }: {
-  tabKey: CompanyDetailTabKey;
+  tabKey: CompanyDetailTopTabKey;
   selected: boolean;
   onPress: () => void;
 }) {
@@ -327,29 +348,92 @@ function CompanyDetailTabChip({
     <TouchableOpacity
       activeOpacity={0.88}
       onPress={onPress}
-      className={[
-        "rounded-xl border px-3 py-2",
-        selected
-          ? "border-app-highlight bg-app-highlight dark:border-app-highlightDark dark:bg-app-highlightDark"
-          : "border-app-highlight bg-button-neutral dark:border-app-highlightDark dark:bg-transparent",
-      ]
-        .filter(Boolean)
-        .join(" ")}
+      className="flex-1 items-center px-2 pb-2 pt-1"
     >
       <Text
+        numberOfLines={1}
+        ellipsizeMode="tail"
         className={[
-          "text-xs font-bold uppercase tracking-wide",
+          "text-[12px] font-semibold",
           selected
-            ? "text-brand-white dark:text-brand-purple"
-            : "text-app-highlight dark:text-app-highlightDark",
+            ? "text-app-highlight dark:text-app-highlightDark"
+            : "text-app-text/60 dark:text-app-textDark/60",
         ]
           .filter(Boolean)
           .join(" ")}
       >
-        {getCompanyDetailTabLabel(tabKey)}
+        {getCompanyDetailTopTabLabel(tabKey)}
       </Text>
+      <View
+        className={[
+          "mt-2 h-[3px] w-full rounded-full",
+          selected
+            ? "bg-app-highlight dark:bg-app-highlightDark"
+            : "bg-transparent",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      />
     </TouchableOpacity>
   );
+}
+
+function getAnnouncementFilterLabel(filterKey: AnnouncementFilterKey): string {
+  const matchedFilter = ANNOUNCEMENT_FILTER_OPTIONS.find(
+    (filterOption) => filterOption.value === filterKey
+  );
+  return matchedFilter?.label ?? "All";
+}
+
+function classifyAnnouncementCategory(
+  announcement: CompanyDetailAnnouncement
+): AnnouncementFilterKey {
+  const normalizedText = `${announcement.category} ${announcement.title} ${announcement.document}`
+    .toLowerCase()
+    .trim();
+
+  if (
+    normalizedText.includes("disclosure of interest") ||
+    normalizedText.includes("disclosure")
+  ) {
+    return "disclosureOfInterest";
+  }
+
+  if (
+    normalizedText.includes("corporate briefing") ||
+    normalizedText.includes("cbs")
+  ) {
+    return "corporateBriefing";
+  }
+
+  if (
+    normalizedText.includes("material information") ||
+    normalizedText.includes("material info")
+  ) {
+    return "materialInfo";
+  }
+
+  if (normalizedText.includes("dividend")) {
+    return "dividend";
+  }
+
+  if (
+    normalizedText.includes("board meeting") ||
+    normalizedText.includes("agm") ||
+    normalizedText.includes("eogm")
+  ) {
+    return "boardMeeting";
+  }
+
+  if (
+    normalizedText.includes("financial result") ||
+    normalizedText.includes("financials") ||
+    normalizedText.includes("result")
+  ) {
+    return "financialResults";
+  }
+
+  return "other";
 }
 
 function CompanyMetricRows({
@@ -548,7 +632,7 @@ export default function StockDetailScreen() {
   const { isShariahCompliantSymbol } = useShariahSymbols();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
-  const { height: windowHeight } = useWindowDimensions();
+  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const isDarkMode = colorScheme === "dark";
   const searchParams = useLocalSearchParams<{
     symbol?: string | string[];
@@ -584,10 +668,23 @@ export default function StockDetailScreen() {
   const [companyDetail, setCompanyDetail] =
     React.useState<CompanyDetailSnapshot | null>(null);
   const [isCompanyDetailLoading, setIsCompanyDetailLoading] = React.useState(false);
-  const [selectedCompanyTab, setSelectedCompanyTab] =
-    React.useState<CompanyDetailTabKey>("profile");
+  const [selectedCompanyTopTab, setSelectedCompanyTopTab] =
+    React.useState<CompanyDetailTopTabKey>("profile");
+  const [selectedFundamentalsTab, setSelectedFundamentalsTab] =
+    React.useState<FundamentalsTabKey>("equity");
+  const [selectedAnnouncementFilter, setSelectedAnnouncementFilter] =
+    React.useState<AnnouncementFilterKey>("all");
   const chartRequestIdRef = React.useRef(0);
   const companyDetailRequestIdRef = React.useRef(0);
+  const companyDetailPagerRef = React.useRef<ScrollView>(null);
+  const fundamentalsFilterSheetRef = React.useRef<BottomSheetModal>(null);
+  const fundamentalsFilterSheetSnapPoints = React.useMemo(() => ["40%"], []);
+  const announcementFilterSheetRef = React.useRef<BottomSheetModal>(null);
+  const announcementFilterSheetSnapPoints = React.useMemo(() => ["56%"], []);
+  const companyDetailPageWidth = React.useMemo(
+    () => Math.max(windowWidth - 72, 260),
+    [windowWidth]
+  );
 
   const hydrateSymbolMeta = React.useCallback(async () => {
     if (normalizedSymbol.length === 0) {
@@ -777,8 +874,23 @@ export default function StockDetailScreen() {
   }, [chartRange, refreshChart]);
 
   React.useEffect(() => {
-    setSelectedCompanyTab("profile");
+    setSelectedCompanyTopTab("profile");
+    setSelectedFundamentalsTab("equity");
+    setSelectedAnnouncementFilter("all");
   }, [normalizedOrigin, normalizedSymbol]);
+
+  React.useEffect(() => {
+    const selectedIndex = COMPANY_DETAIL_TOP_TAB_KEYS.indexOf(selectedCompanyTopTab);
+    if (selectedIndex < 0) {
+      return;
+    }
+
+    companyDetailPagerRef.current?.scrollTo({
+      x: selectedIndex * companyDetailPageWidth,
+      y: 0,
+      animated: true,
+    });
+  }, [companyDetailPageWidth, selectedCompanyTopTab]);
 
   React.useEffect(() => {
     if (!shouldLoadCompanyDetail || normalizedSymbol.length === 0) {
@@ -850,6 +962,45 @@ export default function StockDetailScreen() {
     [normalizedSymbol, router]
   );
 
+  const handleOpenFundamentalsFilterSheet = React.useCallback(() => {
+    fundamentalsFilterSheetRef.current?.present();
+  }, []);
+
+  const handleOpenAnnouncementFilterSheet = React.useCallback(() => {
+    announcementFilterSheetRef.current?.present();
+  }, []);
+
+  const announcementFilterSheetBackdrop = React.useCallback(
+    (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        pressBehavior="close"
+      />
+    ),
+    []
+  );
+
+  const handleCompanyDetailPagerMomentumEnd = React.useCallback(
+    (event: {
+      nativeEvent: {
+        contentOffset: {
+          x: number;
+        };
+      };
+    }) => {
+      const nextIndex = Math.round(
+        event.nativeEvent.contentOffset.x / companyDetailPageWidth
+      );
+      const nextTabKey = COMPANY_DETAIL_TOP_TAB_KEYS[nextIndex];
+      if (nextTabKey) {
+        setSelectedCompanyTopTab(nextTabKey);
+      }
+    },
+    [companyDetailPageWidth]
+  );
+
   const chartToneValue = React.useMemo(() => {
     if (chartSeries.points.length < 2) {
       return 0;
@@ -887,7 +1038,20 @@ export default function StockDetailScreen() {
   const companyName =
     companyDetail?.companyName ?? symbolMeta?.name ?? "Unknown Company";
   const sectorName = companyDetail?.sector ?? symbolMeta?.sectorName ?? "UNKNOWN";
-  const companyAnnouncementItems = companyDetail?.announcements.slice(0, 15) ?? [];
+  const companyAnnouncementItems = React.useMemo(
+    () => companyDetail?.announcements ?? [],
+    [companyDetail?.announcements]
+  );
+  const filteredCompanyAnnouncementItems = React.useMemo(() => {
+    if (selectedAnnouncementFilter === "all") {
+      return companyAnnouncementItems;
+    }
+
+    return companyAnnouncementItems.filter(
+      (announcementItem) =>
+        classifyAnnouncementCategory(announcementItem) === selectedAnnouncementFilter
+    );
+  }, [companyAnnouncementItems, selectedAnnouncementFilter]);
   const companyDetailsSourceLabel = companyDetail
     ? companyDetail.source === "cache"
       ? "Cached"
@@ -1060,15 +1224,17 @@ export default function StockDetailScreen() {
                     </Text>
                   </View>
 
-                  <View className="mt-3 flex-row flex-wrap gap-2">
-                    {COMPANY_DETAIL_TAB_KEYS.map((tabKey) => (
-                      <CompanyDetailTabChip
-                        key={tabKey}
-                        tabKey={tabKey}
-                        selected={selectedCompanyTab === tabKey}
-                        onPress={() => setSelectedCompanyTab(tabKey)}
-                      />
-                    ))}
+                  <View className="mt-3 border-b border-app-highlight/15 dark:border-app-highlightDark/20">
+                    <View className="flex-row items-center">
+                      {COMPANY_DETAIL_TOP_TAB_KEYS.map((tabKey) => (
+                        <CompanyDetailTopTabButton
+                          key={tabKey}
+                          tabKey={tabKey}
+                          selected={selectedCompanyTopTab === tabKey}
+                          onPress={() => setSelectedCompanyTopTab(tabKey)}
+                        />
+                      ))}
+                    </View>
                   </View>
 
                   <View className="mt-4 gap-3">
@@ -1088,146 +1254,227 @@ export default function StockDetailScreen() {
                           </Text>
                         ) : null}
 
-                        {selectedCompanyTab === "profile" ? (
-                          <View className="gap-3">
-                            {companyDetail.businessDescription ? (
+                        <ScrollView
+                          ref={companyDetailPagerRef}
+                          horizontal
+                          pagingEnabled
+                          bounces={false}
+                          nestedScrollEnabled
+                          showsHorizontalScrollIndicator={false}
+                          onMomentumScrollEnd={handleCompanyDetailPagerMomentumEnd}
+                          scrollEventThrottle={16}
+                        >
+                          <View style={{ width: companyDetailPageWidth }} className="pr-1">
+                            <View className="gap-3">
+                              {companyDetail.businessDescription ? (
+                                <View className="rounded-2xl bg-brand-white/70 p-3 dark:bg-brand-white/5">
+                                  <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                                    Business Description
+                                  </Text>
+                                  <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
+                                    {companyDetail.businessDescription}
+                                  </Text>
+                                </View>
+                              ) : null}
+
                               <View className="rounded-2xl bg-brand-white/70 p-3 dark:bg-brand-white/5">
                                 <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                                  Business Description
+                                  Profile Facts
                                 </Text>
-                                <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
-                                  {companyDetail.businessDescription}
-                                </Text>
+                                <View className="mt-2">
+                                  <CompanyMetricRows
+                                    metrics={companyDetail.profileMetrics}
+                                    emptyText="No profile facts available."
+                                    onOpenUrl={handleOpenExternalUrl}
+                                  />
+                                </View>
                               </View>
-                            ) : null}
 
-                            <View className="rounded-2xl bg-brand-white/70 p-3 dark:bg-brand-white/5">
-                              <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                                Profile Facts
-                              </Text>
-                              <View className="mt-2">
-                                <CompanyMetricRows
-                                  metrics={companyDetail.profileMetrics}
-                                  emptyText="No profile facts available."
-                                  onOpenUrl={handleOpenExternalUrl}
-                                />
+                              <View className="rounded-2xl bg-brand-white/70 p-3 dark:bg-brand-white/5">
+                                <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                                  Key People
+                                </Text>
+                                {companyDetail.keyPeople.length === 0 ? (
+                                  <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
+                                    No key people data available.
+                                  </Text>
+                                ) : (
+                                  <View className="mt-2 gap-2">
+                                    {companyDetail.keyPeople.map((person, personIndex) => (
+                                      <View
+                                        key={`${person.name}-${person.role}-${personIndex}`}
+                                        className="flex-row items-start justify-between gap-3 rounded-xl bg-brand-white/70 px-3 py-2 dark:bg-brand-white/5"
+                                      >
+                                        <Text className="flex-1 text-sm font-semibold text-app-text dark:text-app-textDark">
+                                          {person.name}
+                                        </Text>
+                                        <Text className="w-32 text-right text-sm font-bold text-app-text dark:text-app-textDark">
+                                          {person.role}
+                                        </Text>
+                                      </View>
+                                    ))}
+                                  </View>
+                                )}
                               </View>
                             </View>
+                          </View>
 
-                            <View className="rounded-2xl bg-brand-white/70 p-3 dark:bg-brand-white/5">
-                              <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                                Key People
-                              </Text>
-                              {companyDetail.keyPeople.length === 0 ? (
-                                <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
-                                  No key people data available.
+                          <View style={{ width: companyDetailPageWidth }} className="px-1">
+                            <View className="gap-3">
+                              <View className="flex-row items-center justify-between rounded-xl bg-brand-white/70 px-3 py-2 dark:bg-brand-white/5">
+                                <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                                  {getFundamentalsTabLabel(selectedFundamentalsTab)}
+                                </Text>
+                                <TouchableOpacity
+                                  activeOpacity={0.86}
+                                  onPress={handleOpenFundamentalsFilterSheet}
+                                  className="h-8 w-8 items-center justify-center rounded-lg bg-app-highlight/8 dark:bg-brand-white/10"
+                                >
+                                  <MaterialCommunityIcons
+                                    name="filter-variant"
+                                    size={16}
+                                    color={
+                                      isDarkMode
+                                        ? APP_COLORS.brand.white
+                                        : APP_COLORS.brand.purple
+                                    }
+                                  />
+                                </TouchableOpacity>
+                              </View>
+
+                              {selectedFundamentalsTab === "equity" ? (
+                                <View className="rounded-2xl bg-brand-white/70 p-3 dark:bg-brand-white/5">
+                                  <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                                    Equity Snapshot
+                                  </Text>
+                                  <View className="mt-2">
+                                    <CompanyMetricRows
+                                      metrics={companyDetail.equityMetrics}
+                                      emptyText="No equity metrics available."
+                                      onOpenUrl={handleOpenExternalUrl}
+                                      showCalculatedPercentage
+                                    />
+                                  </View>
+                                </View>
+                              ) : null}
+
+                              {selectedFundamentalsTab === "financials" ? (
+                                <View className="gap-3">
+                                  <CompanyMatrixTableCard
+                                    table={companyDetail.annualFinancials}
+                                    emptyText="No annual financial table available."
+                                  />
+                                  <CompanyMatrixTableCard
+                                    table={companyDetail.quarterlyFinancials}
+                                    emptyText="No quarterly financial table available."
+                                  />
+                                </View>
+                              ) : null}
+
+                              {selectedFundamentalsTab === "ratios" ? (
+                                <CompanyMatrixTableCard
+                                  table={companyDetail.ratioTable}
+                                  emptyText="No ratio table available."
+                                />
+                              ) : null}
+                            </View>
+                          </View>
+
+                          <View style={{ width: companyDetailPageWidth }} className="pl-1">
+                            <View className="gap-3">
+                              <View className="items-end">
+                                <TouchableOpacity
+                                  activeOpacity={0.86}
+                                  onPress={handleOpenAnnouncementFilterSheet}
+                                  className="rounded-xl border border-app-highlight/15 bg-app-highlight/5 px-3 py-2 dark:border-app-highlightDark/12 dark:bg-brand-white/8"
+                                >
+                                  <View className="flex-row items-center gap-2">
+                                    <MaterialCommunityIcons
+                                      name="filter-variant"
+                                      size={16}
+                                      color={
+                                        isDarkMode
+                                          ? APP_COLORS.brand.white
+                                          : APP_COLORS.brand.purple
+                                      }
+                                    />
+                                    <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                                      {getAnnouncementFilterLabel(
+                                        selectedAnnouncementFilter
+                                      ).toUpperCase()}
+                                    </Text>
+                                  </View>
+                                </TouchableOpacity>
+                              </View>
+
+                              {companyAnnouncementItems.length === 0 ? (
+                                <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+                                  No announcements available.
+                                </Text>
+                              ) : filteredCompanyAnnouncementItems.length === 0 ? (
+                                <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+                                  No announcements in this category.
                                 </Text>
                               ) : (
-                                <View className="mt-2 gap-2">
-                                  {companyDetail.keyPeople.map((person, personIndex) => (
-                                    <View
-                                      key={`${person.name}-${person.role}-${personIndex}`}
-                                      className="flex-row items-start justify-between gap-3 rounded-xl bg-brand-white/70 px-3 py-2 dark:bg-brand-white/5"
-                                    >
-                                      <Text className="flex-1 text-sm font-semibold text-app-text dark:text-app-textDark">
-                                        {person.name}
-                                      </Text>
-                                      <Text className="w-32 text-right text-sm font-bold text-app-text dark:text-app-textDark">
-                                        {person.role}
-                                      </Text>
-                                    </View>
-                                  ))}
+                                <View className="gap-2">
+                                  {filteredCompanyAnnouncementItems.map(
+                                    (
+                                      announcement: CompanyDetailAnnouncement,
+                                      announcementIndex
+                                    ) => {
+                                      const hasPdfUrl =
+                                        Boolean(announcement.pdfUrl) &&
+                                        announcement.pdfUrl!.trim().length > 0;
+
+                                      return (
+                                        <TouchableOpacity
+                                          key={`${announcement.category}-${announcement.date}-${announcementIndex}`}
+                                          activeOpacity={hasPdfUrl ? 0.86 : 1}
+                                          disabled={!hasPdfUrl}
+                                          onPress={() => {
+                                            if (hasPdfUrl && announcement.pdfUrl) {
+                                              handleOpenPdfInApp(
+                                                announcement.pdfUrl,
+                                                announcement.title
+                                              );
+                                            }
+                                          }}
+                                          className={[
+                                            "rounded-2xl bg-brand-white/70 p-3 dark:bg-brand-white/5",
+                                            !hasPdfUrl ? "opacity-80" : "",
+                                          ]
+                                            .filter(Boolean)
+                                            .join(" ")}
+                                        >
+                                          <View className="flex-row items-center justify-between gap-3">
+                                            <Text className="flex-1 text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                                              {announcement.category}
+                                            </Text>
+                                            <Text className="text-xs font-semibold text-app-text dark:text-app-textDark">
+                                              {announcement.date}
+                                            </Text>
+                                          </View>
+                                          <Text
+                                            numberOfLines={2}
+                                            className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark"
+                                          >
+                                            {announcement.title}
+                                          </Text>
+                                          <Text
+                                            numberOfLines={2}
+                                            className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark"
+                                          >
+                                            {announcement.document}
+                                          </Text>
+                                        </TouchableOpacity>
+                                      );
+                                    }
+                                  )}
                                 </View>
                               )}
                             </View>
                           </View>
-                        ) : null}
-
-                        {selectedCompanyTab === "equity" ? (
-                          <View className="rounded-2xl bg-brand-white/70 p-3 dark:bg-brand-white/5">
-                            <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                              Equity Snapshot
-                            </Text>
-                            <View className="mt-2">
-                              <CompanyMetricRows
-                                metrics={companyDetail.equityMetrics}
-                                emptyText="No equity metrics available."
-                                onOpenUrl={handleOpenExternalUrl}
-                                showCalculatedPercentage
-                              />
-                            </View>
-                          </View>
-                        ) : null}
-
-                        {selectedCompanyTab === "financials" ? (
-                          <View className="gap-3">
-                            <CompanyMatrixTableCard
-                              table={companyDetail.annualFinancials}
-                              emptyText="No annual financial table available."
-                            />
-                            <CompanyMatrixTableCard
-                              table={companyDetail.quarterlyFinancials}
-                              emptyText="No quarterly financial table available."
-                            />
-                          </View>
-                        ) : null}
-
-                        {selectedCompanyTab === "ratios" ? (
-                          <CompanyMatrixTableCard
-                            table={companyDetail.ratioTable}
-                            emptyText="No ratio table available."
-                          />
-                        ) : null}
-
-                        {selectedCompanyTab === "announcements" ? (
-                          companyAnnouncementItems.length === 0 ? (
-                            <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
-                              No announcements available.
-                            </Text>
-                          ) : (
-                            <View className="gap-2">
-                              {companyAnnouncementItems.map(
-                                (announcement: CompanyDetailAnnouncement, announcementIndex) => (
-                                  <View
-                                    key={`${announcement.category}-${announcement.date}-${announcementIndex}`}
-                                    className="rounded-2xl bg-brand-white/70 p-3 dark:bg-brand-white/5"
-                                  >
-                                    <View className="flex-row items-center justify-between gap-3">
-                                      <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                                        {announcement.category}
-                                      </Text>
-                                      <Text className="text-xs font-semibold text-app-text dark:text-app-textDark">
-                                        {announcement.date}
-                                      </Text>
-                                    </View>
-                                    <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
-                                      {announcement.title}
-                                    </Text>
-                                    <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
-                                      {announcement.document}
-                                    </Text>
-                                    {announcement.pdfUrl ? (
-                                      <TouchableOpacity
-                                        activeOpacity={0.86}
-                                        onPress={() => {
-                                          handleOpenPdfInApp(
-                                            announcement.pdfUrl ?? "",
-                                            announcement.title
-                                          );
-                                        }}
-                                        className="mt-2 self-start rounded-xl bg-app-highlight px-3 py-2 dark:bg-app-highlightDark"
-                                      >
-                                        <Text className="text-xs font-bold uppercase tracking-wide text-brand-white dark:text-brand-purple">
-                                          View PDF
-                                        </Text>
-                                      </TouchableOpacity>
-                                    ) : null}
-                                  </View>
-                                )
-                              )}
-                            </View>
-                          )
-                        ) : null}
+                        </ScrollView>
                       </>
                     )}
                   </View>
@@ -1238,6 +1485,146 @@ export default function StockDetailScreen() {
           )}
         </View>
       </ScrollView>
+
+      <BottomSheetModal
+        ref={fundamentalsFilterSheetRef}
+        snapPoints={fundamentalsFilterSheetSnapPoints}
+        enablePanDownToClose
+        backdropComponent={announcementFilterSheetBackdrop}
+        backgroundStyle={{
+          backgroundColor: isDarkMode
+            ? APP_COLORS.brand.purple
+            : APP_COLORS.brand.white,
+        }}
+        handleIndicatorStyle={{
+          backgroundColor: isDarkMode
+            ? APP_COLORS.brand.white
+            : APP_COLORS.brand.purple,
+        }}
+      >
+        <BottomSheetView
+          style={{
+            paddingHorizontal: 16,
+            paddingTop: 8,
+            paddingBottom: insets.bottom + 16,
+          }}
+        >
+          <Text className="text-lg font-extrabold text-app-text dark:text-app-textDark">
+            Fundamentals
+          </Text>
+
+          <View className="mt-4 rounded-2xl bg-brand-white p-2 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/12 dark:bg-brand-white/10">
+            {FUNDAMENTALS_TAB_KEYS.map((tabKey, tabIndex) => {
+              const selected = selectedFundamentalsTab === tabKey;
+
+              return (
+                <TouchableOpacity
+                  key={tabKey}
+                  activeOpacity={0.86}
+                  onPress={() => {
+                    setSelectedFundamentalsTab(tabKey);
+                    fundamentalsFilterSheetRef.current?.dismiss();
+                  }}
+                  className={[
+                    "flex-row items-center justify-between rounded-xl px-3 py-3",
+                    selected ? "bg-app-highlight/8 dark:bg-brand-white/10" : "",
+                    tabIndex < FUNDAMENTALS_TAB_KEYS.length - 1
+                      ? "border-b border-app-highlight/8 dark:border-app-highlightDark/12"
+                      : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                >
+                  <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+                    {getFundamentalsTabLabel(tabKey)}
+                  </Text>
+                  {selected ? (
+                    <MaterialCommunityIcons
+                      name="check"
+                      size={20}
+                      color={
+                        isDarkMode
+                          ? APP_COLORS.brand.white
+                          : APP_COLORS.brand.purple
+                      }
+                    />
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </BottomSheetView>
+      </BottomSheetModal>
+
+      <BottomSheetModal
+        ref={announcementFilterSheetRef}
+        snapPoints={announcementFilterSheetSnapPoints}
+        enablePanDownToClose
+        backdropComponent={announcementFilterSheetBackdrop}
+        backgroundStyle={{
+          backgroundColor: isDarkMode
+            ? APP_COLORS.brand.purple
+            : APP_COLORS.brand.white,
+        }}
+        handleIndicatorStyle={{
+          backgroundColor: isDarkMode
+            ? APP_COLORS.brand.white
+            : APP_COLORS.brand.purple,
+        }}
+      >
+        <BottomSheetView
+          style={{
+            paddingHorizontal: 16,
+            paddingTop: 8,
+            paddingBottom: insets.bottom + 16,
+          }}
+        >
+          <Text className="text-lg font-extrabold text-app-text dark:text-app-textDark">
+            Filter by Category
+          </Text>
+
+          <View className="mt-4 rounded-2xl bg-brand-white p-2 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/12 dark:bg-brand-white/10">
+            {ANNOUNCEMENT_FILTER_OPTIONS.map((filterOption, filterIndex) => {
+              const selected = selectedAnnouncementFilter === filterOption.value;
+
+              return (
+                <TouchableOpacity
+                  key={filterOption.value}
+                  activeOpacity={0.86}
+                  onPress={() => {
+                    setSelectedAnnouncementFilter(filterOption.value);
+                    announcementFilterSheetRef.current?.dismiss();
+                  }}
+                  className={[
+                    "flex-row items-center justify-between rounded-xl px-3 py-3",
+                    selected ? "bg-app-highlight/8 dark:bg-brand-white/10" : "",
+                    filterIndex < ANNOUNCEMENT_FILTER_OPTIONS.length - 1
+                      ? "border-b border-app-highlight/8 dark:border-app-highlightDark/12"
+                      : "",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                >
+                  <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+                    {filterOption.label}
+                  </Text>
+                  {selected ? (
+                    <MaterialCommunityIcons
+                      name="check"
+                      size={20}
+                      color={
+                        isDarkMode
+                          ? APP_COLORS.brand.white
+                          : APP_COLORS.brand.purple
+                      }
+                    />
+                  ) : null}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </BottomSheetView>
+      </BottomSheetModal>
     </SafeAreaView>
   );
 }
