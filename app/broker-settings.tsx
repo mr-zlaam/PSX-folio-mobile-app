@@ -1,20 +1,24 @@
 import React from "react";
 import { useGuardedRouter } from "@/src/lib/navigation";
 import { ScrollView, Text, TextInput, TouchableOpacity, View } from "react-native";
-
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import AppButton from "@/components/ui/app-button";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
-import BrokerFeeCalculatorModal from "@/components/ui/broker-fee-calculator-modal";
 import AppFeedbackModal, {
   AppFeedbackModalTone,
 } from "@/components/ui/app-feedback-modal";
-import { BrokerFeeType } from "@/src/lib/broker-fee";
 import {
+  BrokerProfileMode,
   getBrokerSettings,
+  getDefaultBrokerSettings,
   setBrokerSettings,
 } from "@/src/lib/app-preferences";
+import {
+  DEFAULT_BROKER_COMMISSION_PCT,
+  DEFAULT_CDC_CHARGE_PER_SHARE,
+  DEFAULT_SST_RATE_PCT,
+} from "@/src/lib/broker-fee";
 import { APP_COLORS } from "@/src/theme/colors";
 
 type BrokerSettingsNotice = {
@@ -23,7 +27,7 @@ type BrokerSettingsNotice = {
   tone: AppFeedbackModalTone;
 };
 
-function FeeTypeChip({
+function ModeChip({
   label,
   selected,
   onPress,
@@ -61,6 +65,10 @@ function FeeTypeChip({
   );
 }
 
+function formatPkrValue(value: number): string {
+  return Number.isFinite(value) ? value.toFixed(3).replace(/0+$/, "").replace(/\.$/, "") : "0";
+}
+
 export default function BrokerSettingsScreen() {
   const router = useGuardedRouter();
   const insets = useSafeAreaInsets();
@@ -70,10 +78,10 @@ export default function BrokerSettingsScreen() {
     ? APP_COLORS.text.placeholderDark
     : APP_COLORS.text.placeholderLight;
 
-  const [transactionFeeType, setTransactionFeeType] =
-    React.useState<BrokerFeeType>("percentage");
-  const [transactionFeeInput, setTransactionFeeInput] = React.useState("");
-  const [isCalculatorVisible, setIsCalculatorVisible] = React.useState(false);
+  const [profileMode, setProfileMode] = React.useState<BrokerProfileMode>("default");
+  const [brokerCommissionInput, setBrokerCommissionInput] = React.useState(
+    String(DEFAULT_BROKER_COMMISSION_PCT)
+  );
   const [isSaving, setIsSaving] = React.useState(false);
   const [notice, setNotice] = React.useState<BrokerSettingsNotice | null>(null);
 
@@ -82,12 +90,13 @@ export default function BrokerSettingsScreen() {
 
     async function hydrateBrokerSettings() {
       const savedBrokerSettings = await getBrokerSettings();
-      if (!isMounted || !savedBrokerSettings) {
+      const effectiveSettings = savedBrokerSettings ?? getDefaultBrokerSettings();
+      if (!isMounted) {
         return;
       }
 
-      setTransactionFeeType(savedBrokerSettings.transactionFeeType);
-      setTransactionFeeInput(String(savedBrokerSettings.transactionFeeValue));
+      setProfileMode(effectiveSettings.profileMode);
+      setBrokerCommissionInput(String(effectiveSettings.transactionFeeValue));
     }
 
     void hydrateBrokerSettings();
@@ -108,29 +117,47 @@ export default function BrokerSettingsScreen() {
     []
   );
 
+  const effectiveBrokerCommissionPct = React.useMemo(() => {
+    if (profileMode === "default") {
+      return DEFAULT_BROKER_COMMISSION_PCT;
+    }
+
+    const parsedValue = Number(brokerCommissionInput.trim().replace(/,/g, ""));
+    if (!Number.isFinite(parsedValue) || parsedValue < 0) {
+      return 0;
+    }
+
+    return parsedValue;
+  }, [brokerCommissionInput, profileMode]);
+
   const handleSaveBrokerSettings = React.useCallback(async () => {
-    const parsedTransactionFee = Number(transactionFeeInput.trim().replace(/,/g, ""));
-    if (!Number.isFinite(parsedTransactionFee) || parsedTransactionFee < 0) {
-      showNotice(
-        "Invalid Transaction Fee",
-        transactionFeeType === "percentage"
-          ? "Enter a valid transaction fee percentage (0 or above)."
-          : "Enter a valid fixed broker fee in PKR (0 or above).",
-        "error"
+    let normalizedCommissionPct = DEFAULT_BROKER_COMMISSION_PCT;
+    if (profileMode === "custom") {
+      const parsedCommissionPct = Number(
+        brokerCommissionInput.trim().replace(/,/g, "")
       );
-      return;
+      if (!Number.isFinite(parsedCommissionPct) || parsedCommissionPct < 0) {
+        showNotice(
+          "Invalid Broker Charges",
+          "Enter a valid broker commission percentage (0 or above).",
+          "error"
+        );
+        return;
+      }
+      normalizedCommissionPct = parsedCommissionPct;
     }
 
     setIsSaving(true);
     try {
       await setBrokerSettings({
-        brokerName: "Default Broker",
-        transactionFeeType,
-        transactionFeeValue: parsedTransactionFee,
+        brokerName: profileMode === "custom" ? "Custom Broker" : "Default Broker",
+        profileMode,
+        transactionFeeType: "percentage",
+        transactionFeeValue: normalizedCommissionPct,
       });
       showNotice(
-        "Broker Saved",
-        "Broker settings were saved and will be used in trade form when Saved mode is selected.",
+        "Broker Settings Saved",
+        "Trade screen will now use this broker profile for commission, SST, and CDC deductions.",
         "success"
       );
     } catch {
@@ -142,7 +169,7 @@ export default function BrokerSettingsScreen() {
     } finally {
       setIsSaving(false);
     }
-  }, [showNotice, transactionFeeInput, transactionFeeType]);
+  }, [brokerCommissionInput, profileMode, showNotice]);
 
   return (
     <SafeAreaView
@@ -171,56 +198,86 @@ export default function BrokerSettingsScreen() {
 
           <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
             <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-              Default Broker
+              Broker Profile
             </Text>
             <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
-              These values are used automatically in trade form when Broker Mode is set to Saved.
+              Choose Default or set your own custom broker commission percentage.
             </Text>
 
             <View className="mt-4 gap-3">
               <View>
                 <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                  Fee Type
+                  Profile Mode
                 </Text>
                 <View className="mt-1 flex-row gap-2">
-                  <FeeTypeChip
-                    label="Percent"
-                    selected={transactionFeeType === "percentage"}
-                    onPress={() => setTransactionFeeType("percentage")}
+                  <ModeChip
+                    label="Default"
+                    selected={profileMode === "default"}
+                    onPress={() => setProfileMode("default")}
                   />
-                  <FeeTypeChip
-                    label="Fixed PKR"
-                    selected={transactionFeeType === "fixed"}
-                    onPress={() => setTransactionFeeType("fixed")}
+                  <ModeChip
+                    label="Custom"
+                    selected={profileMode === "custom"}
+                    onPress={() => setProfileMode("custom")}
                   />
                 </View>
               </View>
 
               <View>
                 <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                  {transactionFeeType === "percentage"
-                    ? "Transaction Fee %"
-                    : "Transaction Fee (PKR)"}
+                  Broker Commission %
                 </Text>
                 <TextInput
-                  value={transactionFeeInput}
-                  onChangeText={setTransactionFeeInput}
-                  placeholder={transactionFeeType === "percentage" ? "e.g. 0.15" : "e.g. 50"}
+                  value={
+                    profileMode === "default"
+                      ? String(DEFAULT_BROKER_COMMISSION_PCT)
+                      : brokerCommissionInput
+                  }
+                  onChangeText={setBrokerCommissionInput}
+                  editable={profileMode === "custom"}
+                  placeholder="e.g. 0.15"
                   placeholderTextColor={placeholderTextColor}
                   keyboardType="numeric"
-                  className="mt-1 rounded-xl border border-app-highlight/25 bg-app-highlight/5 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/35 dark:bg-brand-white/5 dark:text-app-textDark"
+                  className="mt-1 rounded-xl border border-app-highlight/25 bg-app-highlight/8 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/35 dark:bg-brand-white/5 dark:text-app-textDark"
                 />
+                {profileMode === "default" ? (
+                  <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
+                    Default mode locks commission at {DEFAULT_BROKER_COMMISSION_PCT}%.
+                  </Text>
+                ) : null}
               </View>
 
-              <TouchableOpacity
-                activeOpacity={0.88}
-                onPress={() => setIsCalculatorVisible(true)}
-                className="self-start rounded-xl bg-app-highlight/8 px-3 py-2 dark:bg-brand-white/10"
-              >
-                <Text className="text-xs font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                  Calculate Broker Fee
+              <View className="rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5">
+                <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                  Charge Rules
                 </Text>
-              </TouchableOpacity>
+                <View className="mt-2 gap-2">
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-xs font-semibold text-app-text dark:text-app-textDark">
+                      Broker Commission
+                    </Text>
+                    <Text className="text-xs font-bold text-app-text dark:text-app-textDark">
+                      {effectiveBrokerCommissionPct}%
+                    </Text>
+                  </View>
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-xs font-semibold text-app-text dark:text-app-textDark">
+                      SST on Commission
+                    </Text>
+                    <Text className="text-xs font-bold text-app-text dark:text-app-textDark">
+                      {DEFAULT_SST_RATE_PCT}%
+                    </Text>
+                  </View>
+                  <View className="flex-row items-center justify-between">
+                    <Text className="text-xs font-semibold text-app-text dark:text-app-textDark">
+                      CDC (Per Share)
+                    </Text>
+                    <Text className="text-xs font-bold text-app-text dark:text-app-textDark">
+                      PKR {formatPkrValue(DEFAULT_CDC_CHARGE_PER_SHARE)}
+                    </Text>
+                  </View>
+                </View>
+              </View>
             </View>
 
             <View className="mt-5">
@@ -242,20 +299,6 @@ export default function BrokerSettingsScreen() {
         tone={notice?.tone ?? "info"}
         actionLabel="Done"
         onClose={() => setNotice(null)}
-      />
-
-      <BrokerFeeCalculatorModal
-        visible={isCalculatorVisible}
-        title="Calculate Broker Fee"
-        subtitle="Use calculator and tap Add Fee."
-        defaultFeeType={transactionFeeType}
-        defaultFeeValueInput={transactionFeeInput}
-        onClose={() => setIsCalculatorVisible(false)}
-        onApply={(payload) => {
-          setTransactionFeeType(payload.feeType);
-          setTransactionFeeInput(String(payload.feeValue));
-          setIsCalculatorVisible(false);
-        }}
       />
     </SafeAreaView>
   );

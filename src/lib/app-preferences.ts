@@ -1,6 +1,10 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system/legacy";
-import { BrokerFeeType, normalizeBrokerFeeType } from "@/src/lib/broker-fee";
+import {
+  BrokerFeeType,
+  DEFAULT_BROKER_COMMISSION_PCT,
+  normalizeBrokerFeeType,
+} from "@/src/lib/broker-fee";
 
 export type AppTheme = "light" | "dark";
 export type HomeInsightDisplayModePreference = "percentage" | "price";
@@ -9,10 +13,12 @@ export type PortfolioDisplayModePreference = "percentage" | "price";
 export type TaxpayerProfile = "filer" | "nonFiler";
 export type TaxComputationMode = "default" | "custom";
 export type TaxRateByProfile = Record<TaxpayerProfile, number>;
+export type BrokerProfileMode = "default" | "custom";
 export type BrokerSettings = {
   brokerName: string;
   transactionFeeType: BrokerFeeType;
   transactionFeeValue: number;
+  profileMode: BrokerProfileMode;
 };
 
 const STORAGE_KEYS = {
@@ -26,6 +32,8 @@ const STORAGE_KEYS = {
   autoTaxDeductionEnabled: "@psx-portfolio/auto-tax-deduction-enabled",
   deductTaxFromCgtEnabled: "@psx-portfolio/deduct-tax-from-cgt-enabled",
   sellScreenCgtDeductionEnabled: "@psx-portfolio/sell-screen-cgt-deduction-enabled",
+  tradeScreenBrokerDeductionEnabled:
+    "@psx-portfolio/trade-screen-broker-deduction-enabled",
   deductTaxFromDividendEnabled: "@psx-portfolio/deduct-tax-from-dividend-enabled",
   customCgtTaxRatePct: "@psx-portfolio/custom-cgt-tax-rate-pct",
   customDividendTaxRatePct: "@psx-portfolio/custom-dividend-tax-rate-pct",
@@ -59,6 +67,13 @@ const TAX_COMPUTATION_MODE_VALUES: readonly TaxComputationMode[] = [
 const DEFAULT_TAX_RATE_BY_PROFILE: TaxRateByProfile = {
   filer: 15,
   nonFiler: 30,
+};
+
+const DEFAULT_BROKER_SETTINGS: BrokerSettings = {
+  brokerName: "Default Broker",
+  transactionFeeType: "percentage",
+  transactionFeeValue: DEFAULT_BROKER_COMMISSION_PCT,
+  profileMode: "default",
 };
 
 type PreferencesStore = Record<string, string>;
@@ -191,13 +206,6 @@ function parseBrokerSettings(rawValue: string | null): BrokerSettings | null {
     if (!parsedValue || typeof parsedValue !== "object" || Array.isArray(parsedValue)) {
       return null;
     }
-    if (
-      typeof parsedValue.brokerName !== "string" ||
-      parsedValue.brokerName.trim().length === 0
-    ) {
-      return null;
-    }
-
     const legacyFeePct =
       typeof parsedValue.transactionFeePct === "number" &&
       Number.isFinite(parsedValue.transactionFeePct) &&
@@ -210,20 +218,33 @@ function parseBrokerSettings(rawValue: string | null): BrokerSettings | null {
         ? parsedValue.transactionFeeType
         : null
     );
+    const normalizedProfileMode: BrokerProfileMode =
+      parsedValue.profileMode === "custom" ? "custom" : "default";
+    const normalizedBrokerName =
+      typeof parsedValue.brokerName === "string" &&
+      parsedValue.brokerName.trim().length > 0
+        ? parsedValue.brokerName.trim()
+        : normalizedProfileMode === "custom"
+          ? "Custom Broker"
+          : "Default Broker";
     const parsedFeeValue =
       typeof parsedValue.transactionFeeValue === "number" &&
       Number.isFinite(parsedValue.transactionFeeValue) &&
       parsedValue.transactionFeeValue >= 0
         ? parsedValue.transactionFeeValue
         : legacyFeePct;
-    if (parsedFeeValue === null) {
-      return null;
-    }
+    const normalizedFeeValue =
+      parsedFeeValue === null
+        ? DEFAULT_BROKER_COMMISSION_PCT
+        : normalizedFeeType === "fixed"
+          ? DEFAULT_BROKER_COMMISSION_PCT
+          : parsedFeeValue;
 
     return {
-      brokerName: parsedValue.brokerName.trim(),
-      transactionFeeType: normalizedFeeType,
-      transactionFeeValue: parsedFeeValue,
+      brokerName: normalizedBrokerName,
+      transactionFeeType: "percentage",
+      transactionFeeValue: normalizedFeeValue,
+      profileMode: normalizedProfileMode,
     };
   } catch {
     return null;
@@ -411,6 +432,25 @@ export async function setSellScreenCgtDeductionEnabledPreference(
   );
 }
 
+export async function getTradeScreenBrokerDeductionEnabledPreference(): Promise<boolean> {
+  const storedValue = await getStoredItem(
+    STORAGE_KEYS.tradeScreenBrokerDeductionEnabled
+  );
+  if (storedValue === null) {
+    return true;
+  }
+  return storedValue === "true";
+}
+
+export async function setTradeScreenBrokerDeductionEnabledPreference(
+  enabled: boolean
+): Promise<void> {
+  await setStoredItem(
+    STORAGE_KEYS.tradeScreenBrokerDeductionEnabled,
+    String(enabled)
+  );
+}
+
 export async function getDeductTaxFromDividendEnabledPreference(): Promise<boolean> {
   const storedValue = await getStoredItem(
     STORAGE_KEYS.deductTaxFromDividendEnabled
@@ -554,17 +594,24 @@ export async function getBrokerSettings(): Promise<BrokerSettings | null> {
   return parseBrokerSettings(storedValue);
 }
 
+export function getDefaultBrokerSettings(): BrokerSettings {
+  return { ...DEFAULT_BROKER_SETTINGS };
+}
+
 export async function setBrokerSettings(
   brokerSettings: BrokerSettings
 ): Promise<void> {
-  const normalizedBrokerName = brokerSettings.brokerName.trim();
-  const normalizedTransactionFeeType = normalizeBrokerFeeType(
-    brokerSettings.transactionFeeType
-  );
+  const normalizedProfileMode: BrokerProfileMode =
+    brokerSettings.profileMode === "custom" ? "custom" : "default";
+  const normalizedBrokerName =
+    normalizedProfileMode === "custom"
+      ? brokerSettings.brokerName.trim().length > 0
+        ? brokerSettings.brokerName.trim()
+        : "Custom Broker"
+      : "Default Broker";
   const normalizedTransactionFeeValue = brokerSettings.transactionFeeValue;
 
   if (
-    normalizedBrokerName.length === 0 ||
     !Number.isFinite(normalizedTransactionFeeValue) ||
     normalizedTransactionFeeValue < 0
   ) {
@@ -575,8 +622,9 @@ export async function setBrokerSettings(
     STORAGE_KEYS.brokerSettings,
     JSON.stringify({
       brokerName: normalizedBrokerName,
-      transactionFeeType: normalizedTransactionFeeType,
+      transactionFeeType: "percentage",
       transactionFeeValue: normalizedTransactionFeeValue,
+      profileMode: normalizedProfileMode,
     })
   );
 }

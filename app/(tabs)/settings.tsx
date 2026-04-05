@@ -134,15 +134,11 @@ function SettingSwitchRow({
 
 function formatBrokerSummary(brokerSettings: BrokerSettings | null): string {
   if (!brokerSettings) {
-    return "Not configured yet.";
+    return "Default Broker • 0.15% commission";
   }
 
-  const feeText =
-    brokerSettings.transactionFeeType === "fixed"
-      ? `PKR ${brokerSettings.transactionFeeValue} fee`
-      : `${brokerSettings.transactionFeeValue}% fee`;
-
-  return `${brokerSettings.brokerName} • ${feeText}`;
+  const modeText = brokerSettings.profileMode === "custom" ? "Custom" : "Default";
+  return `${modeText} • ${brokerSettings.transactionFeeValue}% commission`;
 }
 
 export default function SettingsTabScreen() {

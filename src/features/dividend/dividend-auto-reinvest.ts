@@ -125,7 +125,7 @@ export async function maybeAutoReinvestDividend(args: {
       tradedAt: args.dividendDate,
       brokerMode: "custom",
       brokerName: "Dividend Reinvest",
-      brokerFeeType: "fixed",
+      brokerFeeType: "percentage",
       brokerFeeValue: 0,
     });
 

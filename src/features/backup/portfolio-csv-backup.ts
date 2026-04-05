@@ -45,6 +45,7 @@ import {
   setTaxpayerProfilePreference,
   setThemePreference,
 } from "@/src/lib/app-preferences";
+import { DEFAULT_BROKER_COMMISSION_PCT } from "@/src/lib/broker-fee";
 
 type CsvEntity =
   | "meta"
@@ -666,13 +667,8 @@ async function applyPreferences(preferences: Record<string, string>): Promise<vo
   await setDividendAutoReinvestEnabledPreference(dividendAutoReinvestEnabled);
 
   const brokerName = (preferences.brokerName ?? "").trim();
-  const brokerFeeTypeRaw = (preferences.brokerFeeType ?? "").trim();
   const brokerFeeValue = parseFiniteNumber(preferences.brokerFeeValue ?? "");
   const brokerFeePct = parseFiniteNumber(preferences.brokerFeePct ?? "");
-  const brokerFeeType =
-    brokerFeeTypeRaw === "fixed" || brokerFeeTypeRaw === "percentage"
-      ? brokerFeeTypeRaw
-      : "percentage";
   const resolvedBrokerFeeValue =
     brokerFeeValue === null ? brokerFeePct : brokerFeeValue;
   if (
@@ -680,10 +676,15 @@ async function applyPreferences(preferences: Record<string, string>): Promise<vo
     resolvedBrokerFeeValue !== null &&
     resolvedBrokerFeeValue >= 0
   ) {
+    const profileMode = brokerName.toLowerCase().includes("default")
+      ? "default"
+      : "custom";
     await setBrokerSettings({
       brokerName,
-      transactionFeeType: brokerFeeType,
-      transactionFeeValue: resolvedBrokerFeeValue,
+      profileMode,
+      transactionFeeType: "percentage",
+      transactionFeeValue:
+        resolvedBrokerFeeValue > 0 ? resolvedBrokerFeeValue : DEFAULT_BROKER_COMMISSION_PCT,
     });
   } else {
     await clearBrokerSettings();

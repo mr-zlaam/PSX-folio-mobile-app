@@ -6,7 +6,20 @@ type BrokerFeeInput = {
   brokerFeeType?: BrokerFeeType | null;
   brokerFeeValue?: number | null;
   brokerFeePct?: number | null;
+  sstRatePct?: number | null;
+  cdcChargePerShare?: number | null;
 };
+
+export type BrokerDeductionBreakdown = {
+  brokerCommissionAmount: number;
+  sstAmount: number;
+  cdcAmount: number;
+  totalAmount: number;
+};
+
+export const DEFAULT_BROKER_COMMISSION_PCT = 0.15;
+export const DEFAULT_SST_RATE_PCT = 15;
+export const DEFAULT_CDC_CHARGE_PER_SHARE = 0.005;
 
 function toNonNegativeFiniteNumber(value: number | null | undefined): number {
   if (typeof value !== "number" || !Number.isFinite(value) || value < 0) {
@@ -34,23 +47,55 @@ export function resolveBrokerFeeValue(input: {
 }
 
 export function calculateBrokerFeeAmount(input: BrokerFeeInput): number {
+  return calculateBrokerDeductionBreakdown(input).totalAmount;
+}
+
+export function calculateBrokerDeductionBreakdown(
+  input: BrokerFeeInput
+): BrokerDeductionBreakdown {
   const grossAmount =
     toNonNegativeFiniteNumber(input.price) * toNonNegativeFiniteNumber(input.units);
+  const safeUnits = toNonNegativeFiniteNumber(input.units);
   const brokerFeeType = normalizeBrokerFeeType(input.brokerFeeType);
   const brokerFeeValue = resolveBrokerFeeValue({
     brokerFeeValue: input.brokerFeeValue,
     brokerFeePct: input.brokerFeePct,
   });
 
+  let brokerCommissionAmount = 0;
+
   if (brokerFeeType === "fixed") {
-    return brokerFeeValue;
+    brokerCommissionAmount = brokerFeeValue;
+  } else if (brokerFeeValue !== 0 && grossAmount !== 0) {
+    brokerCommissionAmount = (grossAmount * brokerFeeValue) / 100;
   }
 
-  if (brokerFeeValue === 0 || grossAmount === 0) {
-    return 0;
+  if (brokerCommissionAmount <= 0 || safeUnits <= 0) {
+    return {
+      brokerCommissionAmount: 0,
+      sstAmount: 0,
+      cdcAmount: 0,
+      totalAmount: 0,
+    };
   }
 
-  return (grossAmount * brokerFeeValue) / 100;
+  const safeSstRatePct = toNonNegativeFiniteNumber(
+    input.sstRatePct ?? DEFAULT_SST_RATE_PCT
+  );
+  const safeCdcChargePerShare = toNonNegativeFiniteNumber(
+    input.cdcChargePerShare ?? DEFAULT_CDC_CHARGE_PER_SHARE
+  );
+
+  const sstAmount = (brokerCommissionAmount * safeSstRatePct) / 100;
+  const cdcAmount = safeUnits * safeCdcChargePerShare;
+  const totalAmount = brokerCommissionAmount + sstAmount + cdcAmount;
+
+  return {
+    brokerCommissionAmount,
+    sstAmount,
+    cdcAmount,
+    totalAmount,
+  };
 }
 
 export function formatBrokerFeeValueLabel(input: {

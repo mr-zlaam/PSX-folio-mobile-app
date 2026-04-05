@@ -20,7 +20,6 @@ import DateTimePicker, {
 } from "@react-native-community/datetimepicker";
 import AppButton from "@/components/ui/app-button";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
-import BrokerFeeCalculatorModal from "@/components/ui/broker-fee-calculator-modal";
 import AppFeedbackModal, {
   AppFeedbackModalTone,
 } from "@/components/ui/app-feedback-modal";
@@ -42,20 +41,25 @@ import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
 import {
   getAutoTaxDeductionEnabledPreference,
   BrokerSettings,
+  getDefaultBrokerSettings,
   getDeductTaxFromCgtEnabledPreference,
   getEffectiveCgtTaxRatePreference,
   getBrokerSettings,
   getSellScreenCgtDeductionEnabledPreference,
+  getTradeScreenBrokerDeductionEnabledPreference,
   getTaxComputationModePreference,
   getTaxpayerProfilePreference,
+  setTradeScreenBrokerDeductionEnabledPreference,
   setSellScreenCgtDeductionEnabledPreference,
   TaxComputationMode,
   TaxpayerProfile,
 } from "@/src/lib/app-preferences";
 import {
-  BrokerFeeType,
+  calculateBrokerDeductionBreakdown,
   calculateBrokerFeeAmount,
-  formatBrokerFeeValueLabel,
+  DEFAULT_BROKER_COMMISSION_PCT,
+  DEFAULT_CDC_CHARGE_PER_SHARE,
+  DEFAULT_SST_RATE_PCT,
 } from "@/src/lib/broker-fee";
 import { APP_COLORS } from "@/src/theme/colors";
 import {
@@ -73,7 +77,6 @@ import { getPositionSnapshotForSymbol } from "@/src/features/portfolio/position-
 const TRADE_QUOTE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 type TradeSide = "buy" | "sell";
-type BrokerMode = "saved" | "custom";
 type TradeNoticeState = {
   title: string;
   message: string;
@@ -125,10 +128,6 @@ function getChangeTextClassName(change: number): string {
 
 function getTradeSideActionText(side: TradeSide): "bought" | "sold" {
   return side === "buy" ? "bought" : "sold";
-}
-
-function getBrokerFeeTypeLabel(type: BrokerFeeType): string {
-  return type === "fixed" ? "Fixed PKR" : "Percent";
 }
 
 function parseNumericInput(value: string): number {
@@ -237,7 +236,8 @@ export default function TransactionsTabScreen() {
     ? "rgba(255, 255, 255, 0.28)"
     : "rgba(20, 10, 38, 0.22)";
   const [tradeSide, setTradeSide] = React.useState<TradeSide>("buy");
-  const [brokerMode, setBrokerMode] = React.useState<BrokerMode>("saved");
+  const [isBrokerDeductionEnabled, setIsBrokerDeductionEnabled] =
+    React.useState(true);
 
   const [symbols, setSymbols] = React.useState<PsxSymbol[]>([]);
   const [symbolSearchQuery, setSymbolSearchQuery] = React.useState("");
@@ -250,12 +250,6 @@ export default function TransactionsTabScreen() {
   const [unitsInput, setUnitsInput] = React.useState("");
   const [tradeDateTime, setTradeDateTime] = React.useState(new Date());
   const [isTradeDateTimePickerVisible, setIsTradeDateTimePickerVisible] =
-    React.useState(false);
-  const [customBrokerFeeType, setCustomBrokerFeeType] =
-    React.useState<BrokerFeeType>("percentage");
-  const [customBrokerFeeValueInput, setCustomBrokerFeeValueInput] =
-    React.useState("");
-  const [isBrokerFeeCalculatorVisible, setIsBrokerFeeCalculatorVisible] =
     React.useState(false);
   const [savedBrokerSettings, setSavedBrokerSettings] =
     React.useState<BrokerSettings | null>(null);
@@ -378,6 +372,7 @@ export default function TransactionsTabScreen() {
       isAutoTaxDeductionEnabled,
       isDeductTaxFromCgtEnabled,
       isSellScreenCgtDeductionEnabled,
+      isTradeScreenBrokerDeductionEnabled,
     ] = await Promise.all([
       getTaxpayerProfilePreference(),
       getTaxComputationModePreference(),
@@ -385,6 +380,7 @@ export default function TransactionsTabScreen() {
       getAutoTaxDeductionEnabledPreference(),
       getDeductTaxFromCgtEnabledPreference(),
       getSellScreenCgtDeductionEnabledPreference(),
+      getTradeScreenBrokerDeductionEnabledPreference(),
     ]);
     setTaxpayerProfile(savedTaxpayerProfile);
     setTaxComputationMode(savedTaxComputationMode);
@@ -392,6 +388,7 @@ export default function TransactionsTabScreen() {
     setAutoTaxDeductionEnabled(isAutoTaxDeductionEnabled);
     setDeductTaxFromCgtEnabled(isDeductTaxFromCgtEnabled);
     setSellScreenCgtDeductionEnabled(isSellScreenCgtDeductionEnabled);
+    setIsBrokerDeductionEnabled(isTradeScreenBrokerDeductionEnabled);
   }, []);
 
   const handleSellScreenCgtDeductionToggle = React.useCallback(
@@ -406,16 +403,35 @@ export default function TransactionsTabScreen() {
     []
   );
 
+  const handleBrokerDeductionToggle = React.useCallback(
+    async (nextValue: boolean) => {
+      setIsBrokerDeductionEnabled(nextValue);
+      try {
+        await setTradeScreenBrokerDeductionEnabledPreference(nextValue);
+      } catch {
+        // Keep current UI selection even if persistence fails.
+      }
+    },
+    []
+  );
+
+  const loadSavedBrokerSettings = React.useCallback(async () => {
+    const brokerSettings = await getBrokerSettings();
+    setSavedBrokerSettings(brokerSettings ?? getDefaultBrokerSettings());
+  }, []);
+
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
       await refreshSymbols();
       await refreshQuoteForSymbol(selectedSymbol);
       await loadTaxpayerProfile();
+      await loadSavedBrokerSettings();
     } finally {
       setIsRefreshing(false);
     }
   }, [
+    loadSavedBrokerSettings,
     loadTaxpayerProfile,
     refreshQuoteForSymbol,
     refreshSymbols,
@@ -442,11 +458,6 @@ export default function TransactionsTabScreen() {
   React.useEffect(() => {
     void refreshSymbols();
   }, [refreshSymbols]);
-
-  const loadSavedBrokerSettings = React.useCallback(async () => {
-    const brokerSettings = await getBrokerSettings();
-    setSavedBrokerSettings(brokerSettings);
-  }, []);
 
   useFocusEffect(
     React.useCallback(() => {
@@ -488,15 +499,6 @@ export default function TransactionsTabScreen() {
       const parsedTradeDate = new Date(existingTrade.tradedAt);
       setTradeDateTime(
         Number.isNaN(parsedTradeDate.getTime()) ? new Date() : parsedTradeDate
-      );
-
-      setBrokerMode(existingTrade.brokerMode);
-      setCustomBrokerFeeType(existingTrade.brokerFeeType);
-      setCustomBrokerFeeValueInput(
-        typeof existingTrade.brokerFeeValue === "number" &&
-          Number.isFinite(existingTrade.brokerFeeValue)
-          ? String(existingTrade.brokerFeeValue)
-          : ""
       );
     }
 
@@ -604,27 +606,14 @@ export default function TransactionsTabScreen() {
     Number.isFinite(parsedUnits) && parsedUnits > 0 && Number.isInteger(parsedUnits);
   const hasTradeInputs = hasValidPrice && hasValidUnits;
 
-  const effectiveBrokerFeeType = React.useMemo<BrokerFeeType>(() => {
-    if (brokerMode === "saved") {
-      return savedBrokerSettings?.transactionFeeType ?? "percentage";
+  const effectiveBrokerCommissionPct = React.useMemo(() => {
+    const savedCommission = savedBrokerSettings?.transactionFeeValue;
+    if (typeof savedCommission !== "number" || !Number.isFinite(savedCommission)) {
+      return DEFAULT_BROKER_COMMISSION_PCT;
     }
 
-    return customBrokerFeeType;
-  }, [brokerMode, customBrokerFeeType, savedBrokerSettings?.transactionFeeType]);
-
-  const effectiveBrokerFeeValue = React.useMemo(() => {
-    if (brokerMode === "saved") {
-      const savedFeeValue = savedBrokerSettings?.transactionFeeValue;
-      return Number.isFinite(savedFeeValue) && typeof savedFeeValue === "number"
-        ? Math.max(0, savedFeeValue)
-        : 0;
-    }
-
-    const parsedCustomFee = parseNumericInput(customBrokerFeeValueInput);
-    return Number.isFinite(parsedCustomFee) && parsedCustomFee >= 0
-      ? parsedCustomFee
-      : 0;
-  }, [brokerMode, customBrokerFeeValueInput, savedBrokerSettings?.transactionFeeValue]);
+    return Math.max(0, savedCommission);
+  }, [savedBrokerSettings?.transactionFeeValue]);
 
   const estimatedGrossTradeAmount = React.useMemo(() => {
     if (!hasTradeInputs) {
@@ -642,16 +631,27 @@ export default function TransactionsTabScreen() {
     return calculateBrokerFeeAmount({
       price: parsedPrice,
       units: parsedUnits,
-      brokerFeeType: effectiveBrokerFeeType,
-      brokerFeeValue: effectiveBrokerFeeValue,
+      brokerFeeType: "percentage",
+      brokerFeeValue: isBrokerDeductionEnabled ? effectiveBrokerCommissionPct : 0,
     });
   }, [
-    effectiveBrokerFeeType,
-    effectiveBrokerFeeValue,
+    effectiveBrokerCommissionPct,
     hasTradeInputs,
+    isBrokerDeductionEnabled,
     parsedPrice,
     parsedUnits,
   ]);
+
+  const estimatedBrokerDeductionBreakdown = React.useMemo(
+    () =>
+      calculateBrokerDeductionBreakdown({
+        price: parsedPrice,
+        units: parsedUnits,
+        brokerFeeType: "percentage",
+        brokerFeeValue: isBrokerDeductionEnabled ? effectiveBrokerCommissionPct : 0,
+      }),
+    [effectiveBrokerCommissionPct, isBrokerDeductionEnabled, parsedPrice, parsedUnits]
+  );
 
   const estimatedTradeFinalAmount = React.useMemo(() => {
     if (!hasTradeInputs) {
@@ -803,40 +803,12 @@ export default function TransactionsTabScreen() {
       return;
     }
 
-    let brokerName: string | null = null;
-    let brokerFeeType: BrokerFeeType = "percentage";
-    let brokerFeeValue: number | null = null;
-
-    if (brokerMode === "saved") {
-      if (!savedBrokerSettings) {
-        showTradeNotice(
-          "Saved Broker Missing",
-          "Please configure Broker Settings first, or switch to Custom mode.",
-          "error"
-        );
-        return;
-      }
-
-      brokerFeeType = savedBrokerSettings.transactionFeeType;
-      brokerFeeValue = savedBrokerSettings.transactionFeeValue;
-    }
-
-    if (brokerMode === "custom") {
-      const parsedBrokerFeeValue = parseNumericInput(customBrokerFeeValueInput);
-      if (!Number.isFinite(parsedBrokerFeeValue) || parsedBrokerFeeValue < 0) {
-        showTradeNotice(
-          "Invalid Broker Fee",
-          customBrokerFeeType === "percentage"
-            ? "Enter broker fee percentage (0 or above)."
-            : "Enter fixed broker fee in PKR (0 or above).",
-          "error"
-        );
-        return;
-      }
-
-      brokerFeeType = customBrokerFeeType;
-      brokerFeeValue = parsedBrokerFeeValue;
-    }
+    const effectiveBrokerSettings = savedBrokerSettings ?? getDefaultBrokerSettings();
+    const brokerModeForTrade =
+      effectiveBrokerSettings.profileMode === "custom" ? "custom" : "saved";
+    const brokerCommissionPctForTrade = isBrokerDeductionEnabled
+      ? Math.max(0, effectiveBrokerSettings.transactionFeeValue)
+      : 0;
 
     let sellGrossProfit = 0;
     let sellNetProfit = 0;
@@ -902,10 +874,10 @@ export default function TransactionsTabScreen() {
             price: parsedPrice,
             units: parsedUnits,
             tradedAt: normalizeTradeDateForStorage(tradeDateTime),
-            brokerMode,
-            brokerName,
-            brokerFeeType,
-            brokerFeeValue,
+            brokerMode: brokerModeForTrade,
+            brokerName: effectiveBrokerSettings.brokerName,
+            brokerFeeType: "percentage",
+            brokerFeeValue: brokerCommissionPctForTrade,
           })
         : await saveTradeOrder({
             side: tradeSide,
@@ -913,10 +885,10 @@ export default function TransactionsTabScreen() {
             price: parsedPrice,
             units: parsedUnits,
             tradedAt: normalizeTradeDateForStorage(tradeDateTime),
-            brokerMode,
-            brokerName,
-            brokerFeeType,
-            brokerFeeValue,
+            brokerMode: brokerModeForTrade,
+            brokerName: effectiveBrokerSettings.brokerName,
+            brokerFeeType: "percentage",
+            brokerFeeValue: brokerCommissionPctForTrade,
           });
 
       if (tradeSide === "sell") {
@@ -951,8 +923,6 @@ export default function TransactionsTabScreen() {
         } else {
           messageLines.push("CGT deduction is off for this sell from the trade-screen toggle.");
         }
-
-        messageLines.push("Saved locally on this device.");
         showTradeNotice(
           isEditingTrade ? "Trade Updated" : "Sold Successfully",
           messageLines.join("\n"),
@@ -964,8 +934,6 @@ export default function TransactionsTabScreen() {
         }
 
         setUnitsInput("");
-        setCustomBrokerFeeType("percentage");
-        setCustomBrokerFeeValueInput("");
         setTradeDateTime(new Date());
         setHasEditedPrice(false);
         if (symbolQuote.lastPrice > 0) {
@@ -989,8 +957,6 @@ export default function TransactionsTabScreen() {
       }
 
       setUnitsInput("");
-      setCustomBrokerFeeType("percentage");
-      setCustomBrokerFeeValueInput("");
       setTradeDateTime(new Date());
       setHasEditedPrice(false);
       if (symbolQuote.lastPrice > 0) {
@@ -1017,12 +983,10 @@ export default function TransactionsTabScreen() {
       setIsSubmittingOrder(false);
     }
   }, [
-    brokerMode,
-    customBrokerFeeType,
-    customBrokerFeeValueInput,
     priceInput,
     selectedSymbol,
     savedBrokerSettings,
+    isBrokerDeductionEnabled,
     symbolQuote.lastPrice,
     taxpayerProfile,
     autoTaxDeductionEnabled,
@@ -1243,136 +1207,61 @@ export default function TransactionsTabScreen() {
                 />
               </View>
 
-              <View className="flex-row gap-3">
-                <View className="flex-1">
-                  <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                    Broker Mode
-                  </Text>
-                  <View className="mt-1 flex-row gap-2">
-                    <ToggleChip
-                      label="Saved"
-                      selected={brokerMode === "saved"}
-                      onPress={() => setBrokerMode("saved")}
-                    />
-                    <ToggleChip
-                      label="Custom"
-                      selected={brokerMode === "custom"}
-                      onPress={() => setBrokerMode("custom")}
-                    />
-                  </View>
-                </View>
-
-                <View className="flex-1">
-                  <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                    Trade Date
-                  </Text>
-                  <TouchableOpacity
-                    activeOpacity={0.88}
-                    onPress={handleStartTradeDateSelection}
-                    className="mt-1 rounded-xl border border-app-highlight/25 bg-app-highlight/8 px-3 py-2 dark:border-app-highlightDark/35 dark:bg-brand-white/5"
-                  >
-                    <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
-                      {formatDateInput(tradeDateTime)}
-                    </Text>
-                  </TouchableOpacity>
-                </View>
-              </View>
-
-              {brokerMode === "custom" ? (
-                <View>
-                  <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                    Fee Type
-                  </Text>
-                  <View className="mt-1 flex-row gap-2">
-                    <ToggleChip
-                      label="Percent"
-                      selected={customBrokerFeeType === "percentage"}
-                      onPress={() => setCustomBrokerFeeType("percentage")}
-                    />
-                    <ToggleChip
-                      label="Fixed PKR"
-                      selected={customBrokerFeeType === "fixed"}
-                      onPress={() => setCustomBrokerFeeType("fixed")}
-                    />
-                  </View>
-                </View>
-              ) : (
-                <FieldInput
-                  label="Fee Type"
-                  value={
-                    savedBrokerSettings
-                      ? getBrokerFeeTypeLabel(savedBrokerSettings.transactionFeeType)
-                      : "Not configured"
-                  }
-                  placeholderTextColor={inputPlaceholderTextColor}
-                  editable={false}
-                />
-              )}
-
-              <View className="flex-row gap-3">
-                {brokerMode === "custom" ? (
-                  <>
-                    <FieldInput
-                      label={
-                        customBrokerFeeType === "percentage"
-                          ? "Broker Fee %"
-                          : "Broker Fee (PKR)"
-                      }
-                      value={customBrokerFeeValueInput}
-                      onChangeText={setCustomBrokerFeeValueInput}
-                      placeholderTextColor={inputPlaceholderTextColor}
-                      keyboardType="numeric"
-                      placeholder={
-                        customBrokerFeeType === "percentage" ? "e.g. 0.15" : "e.g. 50"
-                      }
-                    />
-                    <View className="flex-1">
-                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                        Tools
-                      </Text>
-                      <TouchableOpacity
-                        activeOpacity={0.88}
-                        onPress={() => setIsBrokerFeeCalculatorVisible(true)}
-                        className="mt-1 rounded-xl border border-app-highlight/25 bg-app-highlight/8 px-3 py-2 dark:border-app-highlightDark/35 dark:bg-brand-white/5"
-                      >
-                        <Text className="text-sm font-semibold text-app-highlight dark:text-app-highlightDark">
-                          Calculate Broker Fee
-                        </Text>
-                      </TouchableOpacity>
-                    </View>
-                  </>
-                ) : (
-                  <FieldInput
-                    label={
-                      savedBrokerSettings?.transactionFeeType === "fixed"
-                        ? "Broker Fee (PKR)"
-                        : "Broker Fee %"
-                    }
-                    value={
-                      savedBrokerSettings
-                        ? formatBrokerFeeValueLabel({
-                            brokerFeeType: savedBrokerSettings.transactionFeeType,
-                            brokerFeeValue: savedBrokerSettings.transactionFeeValue,
-                          })
-                        : "Not configured"
-                    }
-                    placeholderTextColor={inputPlaceholderTextColor}
-                    editable={false}
-                  />
-                )}
-              </View>
-
-              {brokerMode === "saved" && !savedBrokerSettings ? (
+              <View>
+                <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                  Trade Date
+                </Text>
                 <TouchableOpacity
                   activeOpacity={0.88}
-                  onPress={() => router.push("/broker-settings")}
-                  className="self-start rounded-xl bg-brand-white/70 px-3 py-2 dark:bg-brand-white/5"
+                  onPress={handleStartTradeDateSelection}
+                  className="mt-1 rounded-xl border border-app-highlight/25 bg-app-highlight/8 px-3 py-2 dark:border-app-highlightDark/35 dark:bg-brand-white/5"
                 >
-                  <Text className="text-xs font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                    Configure Broker Settings
+                  <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+                    {formatDateInput(tradeDateTime)}
                   </Text>
                 </TouchableOpacity>
-              ) : null}
+              </View>
+
+              <View className="rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5">
+                <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                  Broker Charges
+                </Text>
+
+                <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
+                  Mode:{" "}
+                  {savedBrokerSettings?.profileMode === "custom"
+                    ? "Custom"
+                    : "Default"}
+                </Text>
+                <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
+                  Commission: {effectiveBrokerCommissionPct}% • SST:{" "}
+                  {DEFAULT_SST_RATE_PCT}% of commission • CDC: PKR{" "}
+                  {DEFAULT_CDC_CHARGE_PER_SHARE.toFixed(3)} / share
+                </Text>
+
+                <View className="mt-3 flex-row items-center justify-between rounded-xl bg-brand-white/70 px-3 py-2 dark:bg-brand-white/10">
+                  <View className="mr-3 flex-1">
+                    <Text className="text-xs font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                      Deduct Broker Charges
+                    </Text>
+                    <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
+                      This toggle is saved until you change it.
+                    </Text>
+                  </View>
+                  <Switch
+                    value={isBrokerDeductionEnabled}
+                    onValueChange={(nextValue) => {
+                      void handleBrokerDeductionToggle(nextValue);
+                    }}
+                    thumbColor={APP_COLORS.brand.white}
+                    ios_backgroundColor={switchTrackOffColor}
+                    trackColor={{
+                      true: switchTrackOnColor,
+                      false: switchTrackOffColor,
+                    }}
+                  />
+                </View>
+              </View>
 
               {tradeSide === "sell" ? (
                 <View className="rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5">
@@ -1437,7 +1326,36 @@ export default function TransactionsTabScreen() {
 
                     <View className="flex-row items-center justify-between">
                       <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                        Broker Fee
+                        Broker Commission
+                      </Text>
+                      <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                        {formatPKRAmount(
+                          estimatedBrokerDeductionBreakdown.brokerCommissionAmount
+                        )}
+                      </Text>
+                    </View>
+
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                        SST
+                      </Text>
+                      <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                        {formatPKRAmount(estimatedBrokerDeductionBreakdown.sstAmount)}
+                      </Text>
+                    </View>
+
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                        CDC
+                      </Text>
+                      <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                        {formatPKRAmount(estimatedBrokerDeductionBreakdown.cdcAmount)}
+                      </Text>
+                    </View>
+
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                        Total Broker Deduction
                       </Text>
                       <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
                         {formatPKRAmount(estimatedBrokerFeeAmount)}
@@ -1543,34 +1461,6 @@ export default function TransactionsTabScreen() {
         tone={tradeNotice?.tone ?? "info"}
         actionLabel="Done"
         onClose={handleCloseTradeNotice}
-      />
-
-      <BrokerFeeCalculatorModal
-        visible={isBrokerFeeCalculatorVisible}
-        title="Calculate Broker Fee"
-        subtitle="Use calculator and tap Add Fee."
-        defaultFeeType={
-          brokerMode === "saved"
-            ? savedBrokerSettings?.transactionFeeType ?? "percentage"
-            : customBrokerFeeType
-        }
-        defaultFeeValueInput={
-          brokerMode === "saved"
-            ? savedBrokerSettings
-              ? String(savedBrokerSettings.transactionFeeValue)
-              : ""
-            : customBrokerFeeValueInput
-        }
-        onClose={() => setIsBrokerFeeCalculatorVisible(false)}
-        onApply={
-          brokerMode === "custom"
-            ? (payload) => {
-                setCustomBrokerFeeType(payload.feeType);
-                setCustomBrokerFeeValueInput(String(payload.feeValue));
-                setIsBrokerFeeCalculatorVisible(false);
-              }
-            : undefined
-        }
       />
     </SafeAreaView>
   );
