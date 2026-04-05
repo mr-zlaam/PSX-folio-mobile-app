@@ -124,8 +124,16 @@ function applySell(accumulator: PositionAccumulator, units: number): void {
 
 function buildPositionMap(
   tradeOrders: TradeOrderRecord[],
-  bonusShareRecords: BonusShareRecord[]
+  bonusShareRecords: BonusShareRecord[],
+  options?: {
+    beforeTimestamp?: number | null;
+  }
 ): Map<string, PositionAccumulator> {
+  const beforeTimestamp =
+    typeof options?.beforeTimestamp === "number" &&
+    Number.isFinite(options.beforeTimestamp)
+      ? options.beforeTimestamp
+      : null;
   const events = [
     ...tradeOrders
       .map((order) => toPositionEventFromTradeOrder(order))
@@ -139,6 +147,13 @@ function buildPositionMap(
   const bySymbol = new Map<string, PositionAccumulator>();
 
   for (const event of sortedEvents) {
+    if (beforeTimestamp !== null) {
+      const eventTimestamp = toEventTimestamp(event);
+      if (eventTimestamp >= beforeTimestamp) {
+        continue;
+      }
+    }
+
     const currentAccumulator = bySymbol.get(event.symbol) ?? {
       symbol: event.symbol,
       units: 0,
@@ -191,3 +206,38 @@ export function getAllPositionSnapshots(
   return Array.from(positionMap.values()).filter((position) => position.units > 0);
 }
 
+export function getPositionSnapshotForSymbolBeforeDate(
+  tradeOrders: TradeOrderRecord[],
+  bonusShareRecords: BonusShareRecord[],
+  symbol: string,
+  beforeDateIso: string
+): PositionAccumulator {
+  const normalizedSymbol = normalizeSymbol(symbol);
+  if (normalizedSymbol.length === 0) {
+    return {
+      symbol: "",
+      units: 0,
+      averageBuyPrice: 0,
+    };
+  }
+
+  const beforeTimestamp = new Date(beforeDateIso).getTime();
+  if (!Number.isFinite(beforeTimestamp)) {
+    return {
+      symbol: normalizedSymbol,
+      units: 0,
+      averageBuyPrice: 0,
+    };
+  }
+
+  const positionMap = buildPositionMap(tradeOrders, bonusShareRecords, {
+    beforeTimestamp,
+  });
+  return (
+    positionMap.get(normalizedSymbol) ?? {
+      symbol: normalizedSymbol,
+      units: 0,
+      averageBuyPrice: 0,
+    }
+  );
+}

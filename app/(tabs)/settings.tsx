@@ -41,9 +41,7 @@ import {
 import {
   AppTheme,
   BrokerSettings,
-  getDividendAutoReinvestEnabledPreference,
   getBrokerSettings,
-  setDividendAutoReinvestEnabledPreference,
   setThemePreference,
 } from "@/src/lib/app-preferences";
 
@@ -170,8 +168,6 @@ export default function SettingsTabScreen() {
   const [brokerSettings, setBrokerSettingsState] = React.useState<BrokerSettings | null>(
     null
   );
-  const [dividendAutoReinvestEnabled, setDividendAutoReinvestEnabled] =
-    React.useState(false);
   const [isResetModalVisible, setIsResetModalVisible] = React.useState(false);
   const [resetChallenge, setResetChallenge] = React.useState<ResetChallenge>(() =>
     buildResetChallenge()
@@ -186,16 +182,10 @@ export default function SettingsTabScreen() {
     setBrokerSettingsState(savedBrokerSettings);
   }, []);
 
-  const loadDividendAutoReinvestPreference = React.useCallback(async () => {
-    const isEnabled = await getDividendAutoReinvestEnabledPreference();
-    setDividendAutoReinvestEnabled(isEnabled);
-  }, []);
-
   useFocusEffect(
     React.useCallback(() => {
       void loadBrokerSettings();
-      void loadDividendAutoReinvestPreference();
-    }, [loadBrokerSettings, loadDividendAutoReinvestPreference])
+    }, [loadBrokerSettings])
   );
 
   const handlePullToRefresh = React.useCallback(async () => {
@@ -205,14 +195,12 @@ export default function SettingsTabScreen() {
         getLatestKse100Summary(),
         getLatestSymbols(),
         loadBrokerSettings(),
-        loadDividendAutoReinvestPreference(),
       ]);
     } finally {
       setIsRefreshing(false);
     }
   }, [
     loadBrokerSettings,
-    loadDividendAutoReinvestPreference,
   ]);
 
   const handleThemeChange = React.useCallback(
@@ -238,18 +226,6 @@ export default function SettingsTabScreen() {
       pendingThemeTaskRef.current?.cancel();
     };
   }, []);
-
-  const handleDividendAutoReinvestToggle = React.useCallback(
-    async (nextValue: boolean) => {
-      setDividendAutoReinvestEnabled(nextValue);
-      try {
-        await setDividendAutoReinvestEnabledPreference(nextValue);
-      } catch {
-        // Keep selected value in UI even if persistence fails.
-      }
-    },
-    []
-  );
 
   const handleOpenResetModal = React.useCallback(() => {
     setResetChallenge(buildResetChallenge());
@@ -398,22 +374,6 @@ export default function SettingsTabScreen() {
                 Open Broker Settings
               </Text>
             </TouchableOpacity>
-          </View>
-
-          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
-            <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-              Trading Rules
-            </Text>
-            <View className="mt-3 gap-3">
-              <SettingSwitchRow
-                label="Dividend Auto Reinvest"
-                description="Automatically buy same-stock units from dividend; any remainder stays as free cash."
-                value={dividendAutoReinvestEnabled}
-                onValueChange={(nextValue) => {
-                  void handleDividendAutoReinvestToggle(nextValue);
-                }}
-              />
-            </View>
           </View>
 
           <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">

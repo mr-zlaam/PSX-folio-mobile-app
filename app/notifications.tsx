@@ -48,6 +48,22 @@ function formatTimestamp(value: string | null): string {
   });
 }
 
+function getNotificationSortTimestamp(notification: InAppNotification): number {
+  const primaryTimestamp = new Date(
+    notification.occurredAt ?? notification.createdAt,
+  ).getTime();
+  if (Number.isFinite(primaryTimestamp)) {
+    return primaryTimestamp;
+  }
+
+  const createdAtTimestamp = new Date(notification.createdAt).getTime();
+  if (Number.isFinite(createdAtTimestamp)) {
+    return createdAtTimestamp;
+  }
+
+  return 0;
+}
+
 export default function NotificationsScreen() {
   const router = useGuardedRouter();
   const insets = useSafeAreaInsets();
@@ -121,7 +137,21 @@ export default function NotificationsScreen() {
   );
 
   const readNotifications = React.useMemo(
-    () => notifications.filter((notification) => Boolean(notification.readAt)),
+    () =>
+      notifications
+        .filter((notification) => Boolean(notification.readAt))
+        .sort((firstNotification, secondNotification) => {
+          const firstTimestamp = getNotificationSortTimestamp(firstNotification);
+          const secondTimestamp = getNotificationSortTimestamp(secondNotification);
+
+          if (firstTimestamp !== secondTimestamp) {
+            return secondTimestamp - firstTimestamp;
+          }
+
+          return secondNotification.createdAt.localeCompare(
+            firstNotification.createdAt,
+          );
+        }),
     [notifications],
   );
 

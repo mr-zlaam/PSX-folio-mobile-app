@@ -1,10 +1,14 @@
 import AppButton from "@/components/ui/app-button";
-import { useGuardedRouter } from "@/src/lib/navigation";
 import AppFeedbackModal, {
   AppFeedbackModalTone,
 } from "@/components/ui/app-feedback-modal";
 import ShariahChip from "@/components/ui/shariah-chip";
+import {
+  BonusShareRecord,
+  getSavedBonusShareRecords,
+} from "@/src/features/bonus-share/bonus-share-records";
 import { getTotalDepositAmount } from "@/src/features/deposit/deposit-records";
+import { syncAutoDividendsFromNotifications } from "@/src/features/dividend/auto-dividend-sync";
 import { getTotalDividendFinalAmount } from "@/src/features/dividend/dividend-records";
 import { InsightDisplayMode } from "@/src/features/home/home-data";
 import {
@@ -20,43 +24,40 @@ import {
 import { buildHomeViewModel } from "@/src/features/home/home-view-model";
 import { ValueTone } from "@/src/features/home/types";
 import {
+  DpsMarketStatusSnapshot,
+  getCachedDpsMarketStatus,
+  getLatestDpsMarketStatus,
+} from "@/src/features/market/dps-market-status";
+import {
   getCachedMarketIndexDetail,
   getLatestMarketIndexDetail,
 } from "@/src/features/market/market-data";
-import {
-  getCachedDpsMarketStatus,
-  getLatestDpsMarketStatus,
-  DpsMarketStatusSnapshot,
-} from "@/src/features/market/dps-market-status";
 import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
+import {
+  getUnreadInAppNotificationCount,
+  subscribeToInAppNotifications,
+  syncPsxAnnouncementsToInAppNotifications,
+} from "@/src/features/notifications/in-app-notifications";
 import {
   getPortfolioHoldingsWithCachedQuotes,
   getPortfolioHoldingsWithLatestQuotes,
   PortfolioHolding,
 } from "@/src/features/portfolio/portfolio-data";
-import {
-  BonusShareRecord,
-  getSavedBonusShareRecords,
-} from "@/src/features/bonus-share/bonus-share-records";
-import { calculateRealizedProfitLoss } from "@/src/features/portfolio/realized-pnl";
 import { getAllPositionSnapshots } from "@/src/features/portfolio/position-ledger";
+import { calculateRealizedProfitLoss } from "@/src/features/portfolio/realized-pnl";
 import { subscribeToTradeMutations } from "@/src/features/trade/trade-events";
 import {
   getSavedTradeOrders,
   TradeOrderRecord,
 } from "@/src/features/trade/trade-orders";
-import { calculateBrokerFeeAmount } from "@/src/lib/broker-fee";
 import {
   getAllTimeHighPortfolioWorthPreference,
   getHomeInsightDisplayModePreference,
   setAllTimeHighPortfolioWorthPreference,
   setHomeInsightDisplayModePreference,
 } from "@/src/lib/app-preferences";
-import {
-  getUnreadInAppNotificationCount,
-  subscribeToInAppNotifications,
-  syncPsxAnnouncementsToInAppNotifications,
-} from "@/src/features/notifications/in-app-notifications";
+import { calculateBrokerFeeAmount } from "@/src/lib/broker-fee";
+import { useGuardedRouter } from "@/src/lib/navigation";
 import { isInternetReachable } from "@/src/lib/network";
 import { APP_COLORS } from "@/src/theme/colors";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -239,8 +240,13 @@ function getCarryUnitsBySymbolBeforeToday(
     return eventTimestamp > 0 && eventTimestamp < startOfTodayTimestamp;
   });
 
-  const carrySnapshots = getAllPositionSnapshots(ordersBeforeToday, bonusesBeforeToday);
-  return new Map(carrySnapshots.map((snapshot) => [snapshot.symbol, snapshot.units]));
+  const carrySnapshots = getAllPositionSnapshots(
+    ordersBeforeToday,
+    bonusesBeforeToday,
+  );
+  return new Map(
+    carrySnapshots.map((snapshot) => [snapshot.symbol, snapshot.units]),
+  );
 }
 
 type HeaderActionButtonProps = {
@@ -343,12 +349,12 @@ export default function HomeScreen() {
   >(null);
   const openPulseAnim = React.useRef(new Animated.Value(0)).current;
   const homeRefreshRequestIdRef = React.useRef(0);
-  const portfolioWorthTooltipTimeoutRef = React.useRef<
-    ReturnType<typeof setTimeout> | null
-  >(null);
-  const metricTooltipTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(
-    null,
-  );
+  const portfolioWorthTooltipTimeoutRef = React.useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
+  const metricTooltipTimeoutRef = React.useRef<ReturnType<
+    typeof setTimeout
+  > | null>(null);
 
   const handleTradePress = React.useCallback(() => {
     router.push({
@@ -423,8 +429,12 @@ export default function HomeScreen() {
         return runningTotal + carryUnits * (currentPrice - previousClose);
       }, 0);
       const previousWorth = nextPortfolioWorth - todayChange;
-      const todayChangePct = previousWorth > 0 ? (todayChange / previousWorth) * 100 : 0;
-      const nextAllTimeHighWorth = Math.max(allTimeHighWorthBaseline, nextPortfolioWorth);
+      const todayChangePct =
+        previousWorth > 0 ? (todayChange / previousWorth) * 100 : 0;
+      const nextAllTimeHighWorth = Math.max(
+        allTimeHighWorthBaseline,
+        nextPortfolioWorth,
+      );
 
       setCurrentPortfolioWorth(nextPortfolioWorth);
       setInvestedAmount(nextHomeData.snapshot.summary.invested);
@@ -445,96 +455,128 @@ export default function HomeScreen() {
     [],
   );
 
-  const refreshHomeSnapshot = React.useCallback(async (preferCachedFirst = true) => {
-    const requestId = homeRefreshRequestIdRef.current + 1;
-    homeRefreshRequestIdRef.current = requestId;
+  const refreshHomeSnapshot = React.useCallback(
+    async (preferCachedFirst = true) => {
+      const requestId = homeRefreshRequestIdRef.current + 1;
+      homeRefreshRequestIdRef.current = requestId;
 
-    const [
-      totalDividendValue,
-      totalDepositValue,
-      storedAllTimeHighWorth,
-      savedTradeOrders,
-      savedBonusShareRecords,
-    ] = await Promise.all([
-      getTotalDividendFinalAmount(),
-      getTotalDepositAmount(),
-      getAllTimeHighPortfolioWorthPreference(),
-      getSavedTradeOrders(),
-      getSavedBonusShareRecords(),
-    ]);
-    if (requestId !== homeRefreshRequestIdRef.current) {
-      return;
-    }
-
-    setTotalDividendValue(totalDividendValue);
-    setRealizedProfitLoss(
-      calculateRealizedProfitLoss(savedTradeOrders, savedBonusShareRecords),
-    );
-    setTotalBrokerDeductionAmount(
-      savedTradeOrders.reduce((runningTotal, order) => {
-        const brokerDeduction = calculateBrokerFeeAmount({
-          price: order.price,
-          units: order.units,
-          brokerFeeType: order.brokerFeeType,
-          brokerFeeValue: order.brokerFeeValue,
-          brokerFeePct:
-            typeof order.brokerFeePct === "number" ? order.brokerFeePct : null,
-          cdcChargePerShare: order.brokerCdcChargePerShare,
-        });
-        return runningTotal + brokerDeduction;
-      }, 0),
-    );
-    const carryUnitsBySymbol = getCarryUnitsBySymbolBeforeToday(
-      savedTradeOrders,
-      savedBonusShareRecords,
-    );
-    let allTimeHighWorthBaseline = storedAllTimeHighWorth;
-    setAllTimeHighWorth(allTimeHighWorthBaseline);
-
-    if (preferCachedFirst) {
-      const [cachedHoldings, cachedMarketDetail, cachedDpsStatus] = await Promise.all([
-        getPortfolioHoldingsWithCachedQuotes(),
-        getCachedMarketIndexDetail("KSE100"),
-        getCachedDpsMarketStatus(),
+      const [
+        totalDividendValue,
+        totalDepositValue,
+        storedAllTimeHighWorth,
+        savedTradeOrders,
+        savedBonusShareRecords,
+      ] = await Promise.all([
+        getTotalDividendFinalAmount(),
+        getTotalDepositAmount(),
+        getAllTimeHighPortfolioWorthPreference(),
+        getSavedTradeOrders(),
+        getSavedBonusShareRecords(),
       ]);
       if (requestId !== homeRefreshRequestIdRef.current) {
         return;
       }
 
-      setMarketAsOf(cachedMarketDetail?.snapshot.asOf ?? null);
-      setDpsMarketStatus(cachedDpsStatus);
-      allTimeHighWorthBaseline = applyHomeSnapshot(
-        cachedHoldings,
+      setTotalDividendValue(totalDividendValue);
+      setRealizedProfitLoss(
+        calculateRealizedProfitLoss(savedTradeOrders, savedBonusShareRecords),
+      );
+      setTotalBrokerDeductionAmount(
+        savedTradeOrders.reduce((runningTotal, order) => {
+          const brokerDeduction = calculateBrokerFeeAmount({
+            price: order.price,
+            units: order.units,
+            brokerFeeType: order.brokerFeeType,
+            brokerFeeValue: order.brokerFeeValue,
+            brokerFeePct:
+              typeof order.brokerFeePct === "number"
+                ? order.brokerFeePct
+                : null,
+            cdcChargePerShare: order.brokerCdcChargePerShare,
+          });
+          return runningTotal + brokerDeduction;
+        }, 0),
+      );
+      const carryUnitsBySymbol = getCarryUnitsBySymbolBeforeToday(
+        savedTradeOrders,
+        savedBonusShareRecords,
+      );
+      let allTimeHighWorthBaseline = storedAllTimeHighWorth;
+      setAllTimeHighWorth(allTimeHighWorthBaseline);
+
+      if (preferCachedFirst) {
+        const [cachedHoldings, cachedMarketDetail, cachedDpsStatus] =
+          await Promise.all([
+            getPortfolioHoldingsWithCachedQuotes(),
+            getCachedMarketIndexDetail("KSE100"),
+            getCachedDpsMarketStatus(),
+          ]);
+        if (requestId !== homeRefreshRequestIdRef.current) {
+          return;
+        }
+
+        setMarketAsOf(cachedMarketDetail?.snapshot.asOf ?? null);
+        setDpsMarketStatus(cachedDpsStatus);
+        allTimeHighWorthBaseline = applyHomeSnapshot(
+          cachedHoldings,
+          totalDividendValue,
+          totalDepositValue,
+          allTimeHighWorthBaseline,
+          carryUnitsBySymbol,
+        );
+      }
+
+      const [latestHoldings, latestMarketDetail, latestDpsStatus] =
+        await Promise.all([
+          getPortfolioHoldingsWithLatestQuotes(),
+          getLatestMarketIndexDetail("KSE100"),
+          getLatestDpsMarketStatus(),
+        ]);
+      if (requestId !== homeRefreshRequestIdRef.current) {
+        return;
+      }
+
+      if (latestMarketDetail?.snapshot.asOf) {
+        setMarketAsOf(latestMarketDetail.snapshot.asOf);
+      }
+      setDpsMarketStatus(latestDpsStatus);
+      applyHomeSnapshot(
+        latestHoldings,
         totalDividendValue,
         totalDepositValue,
         allTimeHighWorthBaseline,
         carryUnitsBySymbol,
       );
-    }
 
-    const [latestHoldings, latestMarketDetail, latestDpsStatus] = await Promise.all([
-      getPortfolioHoldingsWithLatestQuotes(),
-      getLatestMarketIndexDetail("KSE100"),
-      getLatestDpsMarketStatus(),
-    ]);
-    if (requestId !== homeRefreshRequestIdRef.current) {
-      return;
-    }
+      void (async () => {
+        try {
+          await syncPsxAnnouncementsToInAppNotifications();
+          const createdDividendTransactions =
+            await syncAutoDividendsFromNotifications();
+          if (createdDividendTransactions <= 0) {
+            return;
+          }
 
-    if (latestMarketDetail?.snapshot.asOf) {
-      setMarketAsOf(latestMarketDetail.snapshot.asOf);
-    }
-    setDpsMarketStatus(latestDpsStatus);
-    applyHomeSnapshot(
-      latestHoldings,
-      totalDividendValue,
-      totalDepositValue,
-      allTimeHighWorthBaseline,
-      carryUnitsBySymbol,
-    );
+          const updatedDividendValue = await getTotalDividendFinalAmount();
+          if (requestId !== homeRefreshRequestIdRef.current) {
+            return;
+          }
 
-    void syncPsxAnnouncementsToInAppNotifications();
-  }, [applyHomeSnapshot]);
+          setTotalDividendValue(updatedDividendValue);
+          applyHomeSnapshot(
+            latestHoldings,
+            updatedDividendValue,
+            totalDepositValue,
+            allTimeHighWorthBaseline,
+            carryUnitsBySymbol,
+          );
+        } catch {
+          // Ignore background sync errors to keep the home screen responsive.
+        }
+      })();
+    },
+    [applyHomeSnapshot],
+  );
 
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
@@ -623,11 +665,14 @@ export default function HomeScreen() {
   );
 
   React.useEffect(() => {
-    const appStateSubscription = AppState.addEventListener("change", (nextState) => {
-      if (nextState === "active") {
-        void refreshHomeSnapshot(true);
-      }
-    });
+    const appStateSubscription = AppState.addEventListener(
+      "change",
+      (nextState) => {
+        if (nextState === "active") {
+          void refreshHomeSnapshot(true);
+        }
+      },
+    );
 
     return () => {
       appStateSubscription.remove();
@@ -644,7 +689,8 @@ export default function HomeScreen() {
   );
   const isPortfolioWorthCompact = Math.abs(currentPortfolioWorth) >= 100_000;
   const displayPortfolioWorth = React.useMemo(
-    () => formatCompactPKRAmount(currentPortfolioWorth, { compactFrom: 100_000 }),
+    () =>
+      formatCompactPKRAmount(currentPortfolioWorth, { compactFrom: 100_000 }),
     [currentPortfolioWorth],
   );
   const fullPortfolioWorth = React.useMemo(
@@ -654,7 +700,9 @@ export default function HomeScreen() {
   const totalProfitWithPercentageText = React.useMemo(() => {
     const returnText = formatSignedPercentage(totalReturnPct);
     const compactAmountText = isCompactPkrValue(totalProfitAmount)
-      ? formatSignedCompactPkrAmount(totalProfitAmount, { compactFrom: 100_000 })
+      ? formatSignedCompactPkrAmount(totalProfitAmount, {
+          compactFrom: 100_000,
+        })
       : formatSignedPkrAmount(totalProfitAmount);
     return `${compactAmountText} (${returnText})`;
   }, [totalProfitAmount, totalReturnPct]);
@@ -688,7 +736,9 @@ export default function HomeScreen() {
   const realizedProfitLossText = React.useMemo(
     () =>
       isCompactPkrValue(realizedProfitLoss)
-        ? formatSignedCompactPkrAmount(realizedProfitLoss, { compactFrom: 100_000 })
+        ? formatSignedCompactPkrAmount(realizedProfitLoss, {
+            compactFrom: 100_000,
+          })
         : formatSignedPkrAmount(realizedProfitLoss),
     [realizedProfitLoss],
   );
@@ -728,7 +778,9 @@ export default function HomeScreen() {
   }, [todayWorthChange]);
   const marketStatusLabel = dpsMarketStatus.stateText;
   const marketStatusTextClassName =
-    dpsMarketStatus.uiStatus === "OPEN" ? "text-success-green" : "text-brand-red";
+    dpsMarketStatus.uiStatus === "OPEN"
+      ? "text-success-green"
+      : "text-brand-red";
   const isMarketOpen = dpsMarketStatus.uiStatus === "OPEN";
   const statusDotColor = isMarketOpen
     ? APP_COLORS.success.green
@@ -859,7 +911,9 @@ export default function HomeScreen() {
               <MaterialCommunityIcons
                 name="bell-outline"
                 size={22}
-                color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
+                color={
+                  isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple
+                }
               />
 
               {unreadNotificationsCount > 0 ? (
@@ -959,7 +1013,9 @@ export default function HomeScreen() {
                       </View>
                     ) : null}
                     <TouchableOpacity
-                      activeOpacity={isCompactPkrValue(investedAmount) ? 0.82 : 1}
+                      activeOpacity={
+                        isCompactPkrValue(investedAmount) ? 0.82 : 1
+                      }
                       disabled={!isCompactPkrValue(investedAmount)}
                       onPress={() => showMetricTooltip("invested")}
                     >
@@ -983,14 +1039,18 @@ export default function HomeScreen() {
                       </View>
                     ) : null}
                     <TouchableOpacity
-                      activeOpacity={isCompactPkrValue(totalProfitAmount) ? 0.82 : 1}
+                      activeOpacity={
+                        isCompactPkrValue(totalProfitAmount) ? 0.82 : 1
+                      }
                       disabled={!isCompactPkrValue(totalProfitAmount)}
                       onPress={() => showMetricTooltip("totalPl")}
                     >
                       <Text
                         className={[
                           "text-sm font-bold",
-                          getToneClassName(profitSummaryItem?.tone ?? "neutral"),
+                          getToneClassName(
+                            profitSummaryItem?.tone ?? "neutral",
+                          ),
                         ]
                           .filter(Boolean)
                           .join(" ")}
@@ -1014,7 +1074,9 @@ export default function HomeScreen() {
                       </View>
                     ) : null}
                     <TouchableOpacity
-                      activeOpacity={isCompactPkrValue(todayWorthChange) ? 0.82 : 1}
+                      activeOpacity={
+                        isCompactPkrValue(todayWorthChange) ? 0.82 : 1
+                      }
                       disabled={!isCompactPkrValue(todayWorthChange)}
                       onPress={() => showMetricTooltip("todayPl")}
                     >
@@ -1045,7 +1107,9 @@ export default function HomeScreen() {
                       </View>
                     ) : null}
                     <TouchableOpacity
-                      activeOpacity={isCompactPkrValue(realizedProfitLoss) ? 0.82 : 1}
+                      activeOpacity={
+                        isCompactPkrValue(realizedProfitLoss) ? 0.82 : 1
+                      }
                       disabled={!isCompactPkrValue(realizedProfitLoss)}
                       onPress={() => showMetricTooltip("realizedPl")}
                     >
@@ -1073,7 +1137,15 @@ export default function HomeScreen() {
             <Text className="mt-1 text-sm font-semibold text-brand-red">
               Broker Deduction: {totalBrokerDeductionText}
             </Text>
-            <View className="mt-2 items-end">
+            <View className="mt-2 flex-row items-center justify-end gap-1">
+              <MaterialCommunityIcons
+                name="update"
+                style={{ transform: [{ rotate: "45deg" }] }}
+                size={10}
+                color={
+                  isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple
+                }
+              />
               <Text className="text-[9px] font-semibold text-text-light dark:text-text-dark">
                 Updated {formatUpdatedAt(marketAsOf)}
               </Text>
