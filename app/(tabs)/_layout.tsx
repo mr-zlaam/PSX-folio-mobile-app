@@ -115,6 +115,8 @@ export default function TabsLayout() {
             ? APP_COLORS.app.bgDark
             : APP_COLORS.app.bg,
         },
+        tabBarPressColor: "rgba(0, 0, 0, 0.42)",
+        tabBarPressOpacity: 0.92,
         tabBarLabel: ({ focused }) => {
           const forceMoreHighlight =
             route.name === "more" && MORE_MANAGED_ROUTES.has(currentTabRouteName);

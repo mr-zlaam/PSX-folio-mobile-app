@@ -1,3 +1,4 @@
+import "@/src/lib/patch-touchable-ripple";
 import React from "react";
 import { Stack } from "expo-router";
 import { BottomSheetModalProvider } from "@gorhom/bottom-sheet";

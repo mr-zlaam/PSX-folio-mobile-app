@@ -2,16 +2,16 @@ import React from "react";
 import {
   Animated,
   GestureResponderEvent,
+  Pressable,
+  PressableProps,
   Text,
-  TouchableOpacity,
-  TouchableOpacityProps,
   View,
 } from "react-native";
 
 type ButtonVariant = "primary" | "secondary" | "danger";
 type ButtonSize = "sm" | "md" | "lg";
 
-type AppButtonProps = Omit<TouchableOpacityProps, "onPress" | "style"> & {
+type AppButtonProps = Omit<PressableProps, "onPress" | "style" | "children"> & {
   label: string;
   variant?: ButtonVariant;
   size?: ButtonSize;
@@ -54,9 +54,6 @@ const textSizeClassMap: Record<ButtonSize, string> = {
   md: "text-base",
   lg: "text-lg",
 };
-
-const AnimatedTouchableOpacity =
-  Animated.createAnimatedComponent(TouchableOpacity);
 
 function AppButton({
   label,
@@ -104,17 +101,20 @@ function AppButton({
   );
 
   return (
-    <AnimatedTouchableOpacity
+    <Pressable
       accessibilityRole="button"
       accessibilityState={{ disabled: isDisabled, busy: loading }}
       disabled={isDisabled}
-      activeOpacity={0.9}
       onPress={onPress}
       onPressIn={handlePressIn}
       onPressOut={handlePressOut}
+      android_ripple={{
+        color: "rgba(0, 0, 0, 0.42)",
+        borderless: false,
+        foreground: true,
+      }}
       className={[
-        "items-center justify-center rounded-2xl border overflow-hidden",
-        "flex-row gap-2",
+        "rounded-2xl border overflow-hidden",
         fullWidth ? "w-full" : "self-start",
         sizeClassMap[size],
         variantClassMap[variant],
@@ -124,45 +124,57 @@ function AppButton({
       ]
         .filter(Boolean)
         .join(" ")}
-      style={{
-        transform: [{ scale: scaleAnim }],
-      }}
+      style={({ pressed }) =>
+        pressed
+          ? {
+              backgroundColor: "rgba(0, 0, 0, 0.08)",
+              opacity: 0.94,
+            }
+          : undefined
+      }
       {...rest}
     >
-      {loading ? (
-        <View className="items-center justify-center">
-          <Text
-            className={[
-              "font-semibold tracking-wide",
-              textSizeClassMap[size],
-              textVariantClassMap[variant],
-              textClassName ?? "",
-            ]
-              .filter(Boolean)
-              .join(" ")}
-          >
-            Please wait...
-          </Text>
-        </View>
-      ) : (
-        <>
-          {leftSlot ? <View className="items-center">{leftSlot}</View> : null}
-          <Text
-            className={[
-              "font-semibold tracking-wide",
-              textSizeClassMap[size],
-              textVariantClassMap[variant],
-              textClassName ?? "",
-            ]
-              .filter(Boolean)
-              .join(" ")}
-          >
-            {label}
-          </Text>
-          {rightSlot ? <View className="items-center">{rightSlot}</View> : null}
-        </>
-      )}
-    </AnimatedTouchableOpacity>
+      <Animated.View
+        className="h-full w-full flex-row items-center justify-center gap-2"
+        style={{
+          transform: [{ scale: scaleAnim }],
+        }}
+      >
+        {loading ? (
+          <View className="items-center justify-center">
+            <Text
+              className={[
+                "font-semibold tracking-wide",
+                textSizeClassMap[size],
+                textVariantClassMap[variant],
+                textClassName ?? "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            >
+              Please wait...
+            </Text>
+          </View>
+        ) : (
+          <>
+            {leftSlot ? <View className="items-center">{leftSlot}</View> : null}
+            <Text
+              className={[
+                "font-semibold tracking-wide",
+                textSizeClassMap[size],
+                textVariantClassMap[variant],
+                textClassName ?? "",
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            >
+              {label}
+            </Text>
+            {rightSlot ? <View className="items-center">{rightSlot}</View> : null}
+          </>
+        )}
+      </Animated.View>
+    </Pressable>
   );
 }
 
