@@ -314,6 +314,73 @@ function StatRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+function clamp(value: number, minValue: number, maxValue: number): number {
+  return Math.min(maxValue, Math.max(minValue, value));
+}
+
+function getRangeMarkerPositionPct(
+  lowValue: number,
+  highValue: number,
+  currentValue: number
+): number {
+  if (!Number.isFinite(lowValue) || !Number.isFinite(highValue) || highValue <= lowValue) {
+    return 50;
+  }
+
+  const ratio = (currentValue - lowValue) / (highValue - lowValue);
+  return clamp(ratio * 100, 0, 100);
+}
+
+function getValueToneBackgroundClassName(value: number): string {
+  if (value > 0) {
+    return "bg-success-green";
+  }
+
+  if (value < 0) {
+    return "bg-brand-red";
+  }
+
+  return "bg-app-highlight dark:bg-app-highlightDark";
+}
+
+function RangeBar({
+  lowValue,
+  highValue,
+  currentValue,
+  markerToneClassName,
+}: {
+  lowValue: number;
+  highValue: number;
+  currentValue: number;
+  markerToneClassName: string;
+}) {
+  const markerPositionPct = getRangeMarkerPositionPct(
+    lowValue,
+    highValue,
+    currentValue
+  );
+
+  return (
+    <View className="mt-2">
+      <View className="relative h-5 justify-center">
+        <View className="h-1 rounded-full bg-app-highlight/30 dark:bg-brand-white/30" />
+        <View
+          className={[
+            "absolute h-4 w-4 rounded-full border border-brand-white",
+            markerToneClassName,
+          ]
+            .filter(Boolean)
+            .join(" ")}
+          style={{
+            left: `${markerPositionPct}%`,
+            marginLeft: -8,
+          }}
+        />
+      </View>
+    </View>
+  );
+}
+
 function getCompanyDetailTopTabLabel(tabKey: CompanyDetailTopTabKey): string {
   if (tabKey === "profile") {
     return "Profile";
@@ -741,6 +808,9 @@ export default function StockDetailScreen() {
   const [chartSeries, setChartSeries] = React.useState<StockChartSeries>(() =>
     getStockChartSeriesFallback("1D")
   );
+  const [yearChartSeries, setYearChartSeries] = React.useState<StockChartSeries>(() =>
+    getStockChartSeriesFallback("1Y")
+  );
   const [isChartLoading, setIsChartLoading] = React.useState(true);
   const [selectedChartPoint, setSelectedChartPoint] =
     React.useState<StockChartPoint | null>(null);
@@ -754,6 +824,7 @@ export default function StockDetailScreen() {
   const [selectedAnnouncementFilter, setSelectedAnnouncementFilter] =
     React.useState<AnnouncementFilterKey>("all");
   const chartRequestIdRef = React.useRef(0);
+  const yearChartRequestIdRef = React.useRef(0);
   const companyDetailRequestIdRef = React.useRef(0);
   const companyDetailPagerRef = React.useRef<ScrollView>(null);
   const fundamentalsFilterSheetRef = React.useRef<BottomSheetModal>(null);
@@ -892,6 +963,47 @@ export default function StockDetailScreen() {
     [normalizedSymbol]
   );
 
+  const refreshYearChart = React.useCallback(
+    async (forceLive = false) => {
+      const requestId = yearChartRequestIdRef.current + 1;
+      yearChartRequestIdRef.current = requestId;
+
+      if (normalizedSymbol.length === 0) {
+        if (requestId === yearChartRequestIdRef.current) {
+          setYearChartSeries(getStockChartSeriesFallback("1Y"));
+        }
+        return;
+      }
+
+      const cachedSeries = await getCachedStockChartSeries(normalizedSymbol, "1Y");
+      const hasUsableCachedSeries = cachedSeries.points.length > 0;
+      if (requestId === yearChartRequestIdRef.current && hasUsableCachedSeries) {
+        setYearChartSeries(cachedSeries);
+      }
+
+      let shouldFetchLive = forceLive || !hasUsableCachedSeries;
+      if (!forceLive) {
+        try {
+          const cachedMarketStatus = await getCachedDpsMarketStatus();
+          shouldFetchLive =
+            cachedMarketStatus.uiStatus === "OPEN" || !hasUsableCachedSeries;
+        } catch {
+          shouldFetchLive = true;
+        }
+      }
+
+      if (!shouldFetchLive) {
+        return;
+      }
+
+      const latestSeries = await getLatestStockChartSeries(normalizedSymbol, "1Y");
+      if (requestId === yearChartRequestIdRef.current) {
+        setYearChartSeries(latestSeries);
+      }
+    },
+    [normalizedSymbol]
+  );
+
   const refreshCompanyDetail = React.useCallback(
     async (showLoader = false) => {
       const requestId = companyDetailRequestIdRef.current + 1;
@@ -953,6 +1065,17 @@ export default function StockDetailScreen() {
   }, [chartRange, refreshChart]);
 
   React.useEffect(() => {
+    void refreshYearChart();
+    const intervalId = setInterval(() => {
+      void refreshYearChart();
+    }, STOCK_DETAIL_REFRESH_INTERVAL_MS);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [refreshYearChart]);
+
+  React.useEffect(() => {
     setSelectedCompanyTopTab("profile");
     setSelectedFundamentalsTab("equity");
     setSelectedAnnouncementFilter("all");
@@ -988,6 +1111,7 @@ export default function StockDetailScreen() {
         hydrateSymbolMeta(),
         refreshQuote(false, true),
         refreshChart(chartRange, false, true),
+        refreshYearChart(true),
       ];
 
       if (shouldLoadCompanyDetail) {
@@ -1004,6 +1128,7 @@ export default function StockDetailScreen() {
     refreshChart,
     refreshCompanyDetail,
     refreshQuote,
+    refreshYearChart,
     shouldLoadCompanyDetail,
   ]);
 
@@ -1112,6 +1237,64 @@ export default function StockDetailScreen() {
   const displayPrice = quote.lastPrice > 0 ? quote.lastPrice : latestPriceFromChart;
   const displayChange = quote.change;
   const displayChangePct = quote.changePct;
+  const dayRange = React.useMemo(() => {
+    const possibleValues = [
+      quote.lowPrice,
+      quote.highPrice,
+      displayPrice,
+      latestPriceFromChart,
+    ].filter((value) => Number.isFinite(value) && value > 0);
+
+    if (possibleValues.length === 0) {
+      return null;
+    }
+
+    const lowCandidate = quote.lowPrice > 0 ? quote.lowPrice : Math.min(...possibleValues);
+    const highCandidate =
+      quote.highPrice > 0 ? quote.highPrice : Math.max(...possibleValues);
+    const lowValue = Math.min(lowCandidate, highCandidate);
+    const highValue = Math.max(lowCandidate, highCandidate);
+    const currentValue =
+      displayPrice > 0 ? displayPrice : latestPriceFromChart > 0 ? latestPriceFromChart : highValue;
+
+    return {
+      lowValue,
+      highValue,
+      currentValue,
+    };
+  }, [displayPrice, latestPriceFromChart, quote.highPrice, quote.lowPrice]);
+  const week52Range = React.useMemo(() => {
+    const pricePoints = yearChartSeries.points
+      .map((pointItem) => pointItem.price)
+      .filter((value) => Number.isFinite(value) && value > 0);
+
+    if (pricePoints.length === 0) {
+      if (!dayRange) {
+        return null;
+      }
+
+      return {
+        lowValue: dayRange.lowValue,
+        highValue: dayRange.highValue,
+        currentValue: dayRange.currentValue,
+      };
+    }
+
+    const lowValue = Math.min(...pricePoints);
+    const highValue = Math.max(...pricePoints);
+    const fallbackCurrentValue = pricePoints[pricePoints.length - 1] ?? highValue;
+    const currentValue = displayPrice > 0 ? displayPrice : fallbackCurrentValue;
+
+    return {
+      lowValue,
+      highValue,
+      currentValue,
+    };
+  }, [dayRange, displayPrice, yearChartSeries.points]);
+  const rangeMarkerToneClassName = React.useMemo(
+    () => getValueToneBackgroundClassName(displayChange),
+    [displayChange]
+  );
 
   const headerTitle = normalizedSymbol.length > 0 ? normalizedSymbol : "Stock Detail";
   const companyName =
@@ -1300,6 +1483,76 @@ export default function StockDetailScreen() {
                   />
                 </View>
               </View>
+
+              {dayRange ? (
+                <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
+                  <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                    Day&apos;s Range
+                  </Text>
+                  <View className="mt-3 flex-row items-center justify-between">
+                    <View>
+                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                        Day Low
+                      </Text>
+                      <Text className="mt-1 text-lg font-extrabold text-app-text dark:text-app-textDark">
+                        {formatPKRAmount(dayRange.lowValue)}
+                      </Text>
+                    </View>
+                    <View className="items-end">
+                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                        Day High
+                      </Text>
+                      <Text className="mt-1 text-lg font-extrabold text-app-text dark:text-app-textDark">
+                        {formatPKRAmount(dayRange.highValue)}
+                      </Text>
+                    </View>
+                  </View>
+                  <RangeBar
+                    lowValue={dayRange.lowValue}
+                    highValue={dayRange.highValue}
+                    currentValue={dayRange.currentValue}
+                    markerToneClassName={rangeMarkerToneClassName}
+                  />
+                  <Text className="mt-2 text-xs font-semibold text-app-text dark:text-app-textDark">
+                    Current: {formatPKRAmount(dayRange.currentValue)}
+                  </Text>
+                </View>
+              ) : null}
+
+              {week52Range ? (
+                <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
+                  <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                    52-Week Range
+                  </Text>
+                  <View className="mt-3 flex-row items-center justify-between">
+                    <View>
+                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                        52-Week Low
+                      </Text>
+                      <Text className="mt-1 text-lg font-extrabold text-app-text dark:text-app-textDark">
+                        {formatPKRAmount(week52Range.lowValue)}
+                      </Text>
+                    </View>
+                    <View className="items-end">
+                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                        52-Week High
+                      </Text>
+                      <Text className="mt-1 text-lg font-extrabold text-app-text dark:text-app-textDark">
+                        {formatPKRAmount(week52Range.highValue)}
+                      </Text>
+                    </View>
+                  </View>
+                  <RangeBar
+                    lowValue={week52Range.lowValue}
+                    highValue={week52Range.highValue}
+                    currentValue={week52Range.currentValue}
+                    markerToneClassName={rangeMarkerToneClassName}
+                  />
+                  <Text className="mt-2 text-xs font-semibold text-app-text dark:text-app-textDark">
+                    Current: {formatPKRAmount(week52Range.currentValue)}
+                  </Text>
+                </View>
+              ) : null}
 
               {shouldLoadCompanyDetail ? (
                 <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">

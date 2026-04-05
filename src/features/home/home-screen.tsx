@@ -1137,6 +1137,7 @@ export default function HomeScreen() {
             <Text className="mt-1 text-sm font-semibold text-brand-red">
               Broker Deduction: {totalBrokerDeductionText}
             </Text>
+
             <View className="mt-2 flex-row items-center justify-end gap-1">
               <MaterialCommunityIcons
                 name="update"
