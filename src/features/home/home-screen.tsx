@@ -34,10 +34,18 @@ import {
   getPortfolioHoldingsWithLatestQuotes,
   PortfolioHolding,
 } from "@/src/features/portfolio/portfolio-data";
-import { getSavedBonusShareRecords } from "@/src/features/bonus-share/bonus-share-records";
+import {
+  BonusShareRecord,
+  getSavedBonusShareRecords,
+} from "@/src/features/bonus-share/bonus-share-records";
 import { calculateRealizedProfitLoss } from "@/src/features/portfolio/realized-pnl";
+import { getAllPositionSnapshots } from "@/src/features/portfolio/position-ledger";
 import { subscribeToTradeMutations } from "@/src/features/trade/trade-events";
-import { getSavedTradeOrders } from "@/src/features/trade/trade-orders";
+import {
+  getSavedTradeOrders,
+  TradeOrderRecord,
+} from "@/src/features/trade/trade-orders";
+import { calculateBrokerFeeAmount } from "@/src/lib/broker-fee";
 import {
   getAllTimeHighPortfolioWorthPreference,
   getHomeInsightDisplayModePreference,
@@ -121,6 +129,14 @@ function formatSignedPkrAmount(value: number): string {
   return formatPKRAmount(0);
 }
 
+function getSafeNumber(value: unknown, fallback = 0): number {
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return value;
+  }
+
+  return fallback;
+}
+
 function isCompactPkrValue(
   value: number,
   options?: {
@@ -173,6 +189,58 @@ function formatUpdatedAt(value: string | null): string {
     hour: "2-digit",
     minute: "2-digit",
   });
+}
+
+const PAKISTAN_DAY_FORMATTER = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Karachi",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+function getPakistanDayKey(value: string | Date): string | null {
+  const parsedDate = value instanceof Date ? value : new Date(value);
+  if (Number.isNaN(parsedDate.getTime())) {
+    return null;
+  }
+
+  return PAKISTAN_DAY_FORMATTER.format(parsedDate);
+}
+
+function toEventTimestamp(primaryDate: string, fallbackDate: string): number {
+  const primaryTimestamp = new Date(primaryDate).getTime();
+  if (Number.isFinite(primaryTimestamp)) {
+    return primaryTimestamp;
+  }
+
+  const fallbackTimestamp = new Date(fallbackDate).getTime();
+  if (Number.isFinite(fallbackTimestamp)) {
+    return fallbackTimestamp;
+  }
+
+  return 0;
+}
+
+function getCarryUnitsBySymbolBeforeToday(
+  tradeOrders: TradeOrderRecord[],
+  bonusShareRecords: BonusShareRecord[],
+): Map<string, number> {
+  const startOfToday = new Date();
+  startOfToday.setHours(0, 0, 0, 0);
+  const startOfTodayTimestamp = startOfToday.getTime();
+
+  const ordersBeforeToday = tradeOrders.filter((order) => {
+    const eventTimestamp = toEventTimestamp(order.tradedAt, order.createdAt);
+    return eventTimestamp > 0 && eventTimestamp < startOfTodayTimestamp;
+  });
+
+  const bonusesBeforeToday = bonusShareRecords.filter((record) => {
+    const eventTimestamp = toEventTimestamp(record.awardedAt, record.createdAt);
+    return eventTimestamp > 0 && eventTimestamp < startOfTodayTimestamp;
+  });
+
+  const carrySnapshots = getAllPositionSnapshots(ordersBeforeToday, bonusesBeforeToday);
+  return new Map(carrySnapshots.map((snapshot) => [snapshot.symbol, snapshot.units]));
 }
 
 type HeaderActionButtonProps = {
@@ -246,6 +314,8 @@ export default function HomeScreen() {
   const [currentPortfolioWorth, setCurrentPortfolioWorth] = React.useState(0);
   const [todayWorthChange, setTodayWorthChange] = React.useState(0);
   const [todayWorthChangePct, setTodayWorthChangePct] = React.useState(0);
+  const [totalBrokerDeductionAmount, setTotalBrokerDeductionAmount] =
+    React.useState(0);
   const [allTimeHighWorth, setAllTimeHighWorth] = React.useState(0);
   const [marketAsOf, setMarketAsOf] = React.useState<string | null>(null);
   const [dpsMarketStatus, setDpsMarketStatus] =
@@ -319,14 +389,29 @@ export default function HomeScreen() {
       totalDividendValue: number,
       totalDepositValue: number,
       allTimeHighWorthBaseline: number,
+      carryUnitsBySymbol: Map<string, number>,
     ): number => {
       const nextHomeData = buildHomeSnapshotFromHoldings(holdings, {
         contributedCapitalAdjustment: totalDepositValue,
         returnCashAdjustment: totalDividendValue,
       });
       const nextPortfolioWorth = nextHomeData.snapshot.summary.value;
+      const todayPakistanDayKey = getPakistanDayKey(new Date());
       const todayChange = holdings.reduce((runningTotal, holding) => {
+        const quoteDayKey = getPakistanDayKey(holding.asOf ?? "");
+        if (
+          !todayPakistanDayKey ||
+          !quoteDayKey ||
+          quoteDayKey !== todayPakistanDayKey
+        ) {
+          return runningTotal;
+        }
+
         const units = Number.isFinite(holding.units) ? holding.units : 0;
+        const carryUnits = Math.min(
+          units,
+          getSafeNumber(carryUnitsBySymbol.get(holding.symbol), 0),
+        );
         const currentPrice = Number.isFinite(holding.currentPrice)
           ? holding.currentPrice
           : 0;
@@ -335,7 +420,7 @@ export default function HomeScreen() {
             ? holding.previousClose
             : currentPrice;
 
-        return runningTotal + units * (currentPrice - previousClose);
+        return runningTotal + carryUnits * (currentPrice - previousClose);
       }, 0);
       const previousWorth = nextPortfolioWorth - todayChange;
       const todayChangePct = previousWorth > 0 ? (todayChange / previousWorth) * 100 : 0;
@@ -385,6 +470,23 @@ export default function HomeScreen() {
     setRealizedProfitLoss(
       calculateRealizedProfitLoss(savedTradeOrders, savedBonusShareRecords),
     );
+    setTotalBrokerDeductionAmount(
+      savedTradeOrders.reduce((runningTotal, order) => {
+        const brokerDeduction = calculateBrokerFeeAmount({
+          price: order.price,
+          units: order.units,
+          brokerFeeType: order.brokerFeeType,
+          brokerFeeValue: order.brokerFeeValue,
+          brokerFeePct:
+            typeof order.brokerFeePct === "number" ? order.brokerFeePct : null,
+        });
+        return runningTotal + brokerDeduction;
+      }, 0),
+    );
+    const carryUnitsBySymbol = getCarryUnitsBySymbolBeforeToday(
+      savedTradeOrders,
+      savedBonusShareRecords,
+    );
     let allTimeHighWorthBaseline = storedAllTimeHighWorth;
     setAllTimeHighWorth(allTimeHighWorthBaseline);
 
@@ -405,6 +507,7 @@ export default function HomeScreen() {
         totalDividendValue,
         totalDepositValue,
         allTimeHighWorthBaseline,
+        carryUnitsBySymbol,
       );
     }
 
@@ -426,6 +529,7 @@ export default function HomeScreen() {
       totalDividendValue,
       totalDepositValue,
       allTimeHighWorthBaseline,
+      carryUnitsBySymbol,
     );
 
     void syncPsxAnnouncementsToInAppNotifications();
@@ -605,6 +709,10 @@ export default function HomeScreen() {
   const allTimeHighWorthText = React.useMemo(
     () => formatPKRAmount(allTimeHighWorth),
     [allTimeHighWorth],
+  );
+  const totalBrokerDeductionText = React.useMemo(
+    () => formatPKRAmount(totalBrokerDeductionAmount),
+    [totalBrokerDeductionAmount],
   );
   const todayWorthChangeTone = React.useMemo(() => {
     if (todayWorthChange > 0) {
@@ -834,7 +942,7 @@ export default function HomeScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
-            <View className="mt-3 rounded-3xl bg-app-highlight/8 px-3 py-3 dark:bg-brand-white/5">
+            <View className="mt-3 overflow-hidden rounded-3xl bg-app-highlight/8 px-3 py-3 dark:bg-brand-white/5">
               <View className="flex-row flex-wrap">
                 <View className="w-1/2 pb-3 pr-2">
                   <Text className="text-[10px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
@@ -960,6 +1068,9 @@ export default function HomeScreen() {
             </Text>
             <Text className="mt-1 text-sm font-semibold text-success-green">
               Dividend: {formatPKRAmount(totalDividendValue)}
+            </Text>
+            <Text className="mt-1 text-sm font-semibold text-brand-red">
+              Broker Deduction: {totalBrokerDeductionText}
             </Text>
             <View className="mt-2 items-end">
               <Text className="text-[9px] font-semibold text-text-light dark:text-text-dark">
