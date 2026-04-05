@@ -1,6 +1,10 @@
 import StockLineChart from "@/components/charts/stock-line-chart";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
-import { AppSkeletonTextGroup } from "@/components/ui/app-skeleton";
+import {
+  AppChartSkeleton,
+  AppSkeletonBlock,
+  AppSkeletonTextGroup,
+} from "@/components/ui/app-skeleton";
 import {
   AnalyticsAllocationItem,
   AnalyticsSnapshot,
@@ -24,6 +28,7 @@ import {
   ScrollView,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -262,9 +267,65 @@ function AllocationBar({
   );
 }
 
+function AnalyticsScreenSkeleton({ minHeight }: { minHeight: number }) {
+  return (
+    <View className="gap-4" style={{ minHeight }}>
+      <View className="rounded-3xl bg-brand-white px-4 py-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+        <AppSkeletonBlock width="34%" height={12} borderRadius={7} />
+        <AppSkeletonBlock className="mt-2" width="52%" height={32} borderRadius={10} />
+        <AppSkeletonBlock className="mt-2" width="46%" height={12} borderRadius={7} />
+
+        <View className="mt-4 flex-row gap-2">
+          <View className="flex-1 rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5">
+            <AppSkeletonBlock width="40%" height={10} borderRadius={6} />
+            <AppSkeletonBlock className="mt-2" width="72%" height={16} borderRadius={8} />
+          </View>
+          <View className="flex-1 rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5">
+            <AppSkeletonBlock width="42%" height={10} borderRadius={6} />
+            <AppSkeletonBlock className="mt-2" width="68%" height={16} borderRadius={8} />
+          </View>
+        </View>
+
+        <View className="mt-2 flex-row gap-2">
+          <View className="flex-1 rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5">
+            <AppSkeletonBlock width="34%" height={10} borderRadius={6} />
+            <AppSkeletonBlock className="mt-2" width="66%" height={16} borderRadius={8} />
+          </View>
+          <View className="flex-1 rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5">
+            <AppSkeletonBlock width="46%" height={10} borderRadius={6} />
+            <AppSkeletonBlock className="mt-2" width="70%" height={16} borderRadius={8} />
+          </View>
+        </View>
+      </View>
+
+      <View className="rounded-3xl bg-brand-white px-4 py-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+        <View className="flex-row items-center justify-between">
+          <AppSkeletonBlock width={120} height={12} borderRadius={7} />
+          <AppSkeletonBlock width={92} height={14} borderRadius={8} />
+        </View>
+        <View className="mt-3 flex-row gap-2">
+          <AppSkeletonBlock width={44} height={30} borderRadius={10} />
+          <AppSkeletonBlock width={44} height={30} borderRadius={10} />
+          <AppSkeletonBlock width={44} height={30} borderRadius={10} />
+          <AppSkeletonBlock width={44} height={30} borderRadius={10} />
+          <AppSkeletonBlock width={44} height={30} borderRadius={10} />
+        </View>
+        <View className="mt-4">
+          <AppChartSkeleton height={170} />
+        </View>
+      </View>
+
+      <View className="rounded-3xl bg-brand-white px-4 py-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+        <AppSkeletonTextGroup rows={4} rowHeight={12} />
+      </View>
+    </View>
+  );
+}
+
 export default function AnalyticsScreen() {
   const router = useGuardedRouter();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
 
@@ -388,6 +449,11 @@ export default function AnalyticsScreen() {
     return source.slice(0, 5);
   }, [allocationView, snapshot]);
 
+  const analyticsSkeletonMinHeight = React.useMemo(
+    () => Math.max(windowHeight - insets.bottom - 120, 700),
+    [insets.bottom, windowHeight]
+  );
+
   return (
     <SafeAreaView
       edges={["top", "left", "right"]}
@@ -423,9 +489,7 @@ export default function AnalyticsScreen() {
           </View>
 
           {isBootstrapping && !snapshot ? (
-            <View className="rounded-3xl bg-brand-white/95 p-6 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
-              <AppSkeletonTextGroup rows={5} rowHeight={14} />
-            </View>
+            <AnalyticsScreenSkeleton minHeight={analyticsSkeletonMinHeight} />
           ) : !snapshot ? (
             <View className="rounded-3xl bg-brand-white/95 p-5 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
               <Text className="text-lg font-bold text-app-text dark:text-app-textDark">
@@ -452,7 +516,7 @@ export default function AnalyticsScreen() {
                     .filter(Boolean)
                     .join(" ")}
                 >
-                  {`Today ${formatSignedPkr(snapshot.overview.dayChange)} (${formatSignedPercentage(
+                  {`Session ${formatSignedPkr(snapshot.overview.dayChange)} (${formatSignedPercentage(
                     snapshot.overview.dayChangePct
                   )})`}
                 </Text>
@@ -463,22 +527,28 @@ export default function AnalyticsScreen() {
                     value={formatPKRAmount(snapshot.overview.invested)}
                   />
                   <MetricTile
-                    label="Return"
-                    value={formatSignedPercentage(snapshot.overview.returnPct)}
-                    toneClassName={getToneTextClassName(snapshot.overview.returnPct)}
+                    label="Total P/L"
+                    value={formatSignedPkr(snapshot.overview.profit)}
+                    toneClassName={getToneTextClassName(snapshot.overview.profit)}
                   />
                 </View>
 
                 <View className="mt-2 flex-row gap-2">
                   <MetricTile
-                    label="Free Cash"
-                    value={formatPKRAmount(snapshot.overview.freeCash)}
+                    label="Return"
+                    value={formatSignedPercentage(snapshot.overview.returnPct)}
+                    toneClassName={getToneTextClassName(snapshot.overview.returnPct)}
                   />
                   <MetricTile
-                    label="Dividends"
-                    value={formatPKRAmount(snapshot.overview.totalDividends)}
+                    label="Realized P/L"
+                    value={formatSignedPkr(snapshot.overview.realizedProfit)}
+                    toneClassName={getToneTextClassName(snapshot.overview.realizedProfit)}
                   />
                 </View>
+
+                <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
+                  {`Dividends ${formatPKRAmount(snapshot.overview.totalDividends)}`}
+                </Text>
 
                 <Text className="mt-3 text-[11px] font-semibold text-text-placeholderLight dark:text-text-placeholderDark">
                   Updated {formatUpdatedAt(snapshot.asOf)}

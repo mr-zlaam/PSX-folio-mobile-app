@@ -6,14 +6,13 @@ import {
   getPortfolioHoldingsWithLatestQuotes,
   PortfolioHolding,
 } from "@/src/features/portfolio/portfolio-data";
-import { getCashLedgerSnapshot } from "@/src/features/trade/cash-ledger";
 import { getSavedTradeOrders, TradeOrderRecord } from "@/src/features/trade/trade-orders";
 import {
   getCachedMarketSnapshot,
   getLatestMarketSnapshot,
   MarketIndexSnapshot,
 } from "@/src/features/market/market-data";
-import { calculateBrokerFeeAmount } from "@/src/lib/broker-fee";
+import { calculateRealizedProfitLoss } from "@/src/features/portfolio/realized-pnl";
 
 export type AnalyticsTrendRange = "1M" | "3M" | "6M" | "1Y" | "ALL";
 
@@ -26,10 +25,10 @@ export type AnalyticsOverview = {
   currentWorth: number;
   invested: number;
   profit: number;
+  realizedProfit: number;
   returnPct: number;
   dayChange: number;
   dayChangePct: number;
-  freeCash: number;
   totalDividends: number;
 };
 
@@ -103,10 +102,6 @@ type TimelineEvent =
       units: number;
     };
 
-function getDayKeyFromTimestamp(timestamp: number): string {
-  return new Date(timestamp).toISOString().slice(0, 10);
-}
-
 function getUtcDayStartTimestamp(timestamp: number): number {
   const date = new Date(timestamp);
   return Date.UTC(
@@ -156,28 +151,12 @@ function normalizeSymbol(value: string): string {
   return value.trim().toUpperCase();
 }
 
-function getBrokerFeeAmount(order: TradeOrderRecord): number {
-  return calculateBrokerFeeAmount({
-    price: order.price,
-    units: order.units,
-    brokerFeeType: order.brokerFeeType,
-    brokerFeeValue: order.brokerFeeValue,
-    brokerFeePct: order.brokerFeePct,
-  });
-}
-
-function getTradeCashDelta(order: TradeOrderRecord): number {
-  const gross = toNonNegativeNumber(order.price) * toNonNegativeNumber(order.units);
-  const fee = getBrokerFeeAmount(order);
-
-  if (order.side === "buy") {
-    return -(gross + fee);
-  }
-
-  return gross - fee;
-}
-
-function buildOverview(holdings: PortfolioHolding[], freeCash: number, totalDividends: number): AnalyticsOverview {
+function buildOverview(args: {
+  holdings: PortfolioHolding[];
+  totalDividends: number;
+  realizedProfit: number;
+}): AnalyticsOverview {
+  const { holdings, totalDividends, realizedProfit } = args;
   const invested = holdings.reduce((sum, holding) => sum + toNonNegativeNumber(holding.invested), 0);
   const marketValue = holdings.reduce(
     (sum, holding) => sum + toNonNegativeNumber(holding.marketValue),
@@ -192,7 +171,7 @@ function buildOverview(holdings: PortfolioHolding[], freeCash: number, totalDivi
   );
   const previousDayValue = marketValue - dayChange;
   const dayChangePct = previousDayValue > 0 ? (dayChange / previousDayValue) * 100 : 0;
-  const currentWorth = marketValue + toFiniteNumber(freeCash);
+  const currentWorth = marketValue;
   const profit = currentWorth - invested;
   const returnPct = invested > 0 ? (profit / invested) * 100 : 0;
 
@@ -200,10 +179,10 @@ function buildOverview(holdings: PortfolioHolding[], freeCash: number, totalDivi
     currentWorth,
     invested,
     profit,
+    realizedProfit: toFiniteNumber(realizedProfit),
     returnPct,
     dayChange,
     dayChangePct,
-    freeCash: toFiniteNumber(freeCash),
     totalDividends: toNonNegativeNumber(totalDividends),
   };
 }
@@ -340,41 +319,6 @@ function buildTimelineEvents(
     .sort((firstEvent, secondEvent) => firstEvent.timestamp - secondEvent.timestamp);
 }
 
-function buildExternalFlowByDay(
-  deposits: { amount: number; depositedAt: string }[],
-  dividends: { finalAmount: number; dividendDate: string }[]
-): Map<string, number> {
-  const mapByDay = new Map<string, number>();
-
-  for (const record of deposits) {
-    const timestamp = toTimestamp(record.depositedAt);
-    if (timestamp <= 0) {
-      continue;
-    }
-
-    const dayKey = getDayKeyFromTimestamp(timestamp);
-    mapByDay.set(
-      dayKey,
-      (mapByDay.get(dayKey) ?? 0) + toNonNegativeNumber(record.amount)
-    );
-  }
-
-  for (const record of dividends) {
-    const timestamp = toTimestamp(record.dividendDate);
-    if (timestamp <= 0) {
-      continue;
-    }
-
-    const dayKey = getDayKeyFromTimestamp(timestamp);
-    mapByDay.set(
-      dayKey,
-      (mapByDay.get(dayKey) ?? 0) + toNonNegativeNumber(record.finalAmount)
-    );
-  }
-
-  return mapByDay;
-}
-
 function updatePositionForBuy(
   current: PositionAccumulator,
   units: number,
@@ -446,29 +390,6 @@ function compressDailyPoints(points: AnalyticsPoint[]): AnalyticsPoint[] {
   );
 }
 
-function ensureChartFriendlyPoints(points: AnalyticsPoint[]): AnalyticsPoint[] {
-  if (points.length >= 2) {
-    return points;
-  }
-
-  if (points.length === 1) {
-    const basePoint = points[0];
-    return [
-      {
-        timestamp: basePoint.timestamp - 24 * 60 * 60 * 1000,
-        value: basePoint.value,
-      },
-      basePoint,
-    ];
-  }
-
-  const now = Date.now();
-  return [
-    { timestamp: now - 24 * 60 * 60 * 1000, value: 0 },
-    { timestamp: now, value: 0 },
-  ];
-}
-
 function buildTrendPoints(
   holdings: PortfolioHolding[],
   trades: TradeOrderRecord[],
@@ -479,7 +400,6 @@ function buildTrendPoints(
 ): AnalyticsPoint[] {
   const timelineEvents = buildTimelineEvents(trades, deposits, dividends, bonuses);
   const positionsBySymbol = new Map<string, PositionAccumulator>();
-  let cashBalance = 0;
   const points: AnalyticsPoint[] = [];
 
   for (const event of timelineEvents) {
@@ -495,13 +415,7 @@ function buildTrendPoints(
       } else {
         positionsBySymbol.set(symbol, updatePositionForSell(current, event.order.units));
       }
-
-      cashBalance += getTradeCashDelta(event.order);
-    } else if (event.type === "deposit") {
-      cashBalance += event.amount;
-    } else if (event.type === "dividend") {
-      cashBalance += event.amount;
-    } else {
+    } else if (event.type === "bonus") {
       const symbol = normalizeSymbol(event.symbol);
       const current = positionsBySymbol.get(symbol) ?? { units: 0, averagePrice: 0 };
       positionsBySymbol.set(symbol, updatePositionForBonus(current, event.units));
@@ -509,7 +423,7 @@ function buildTrendPoints(
 
     points.push({
       timestamp: event.timestamp,
-      value: cashBalance + getBookValue(positionsBySymbol),
+      value: getBookValue(positionsBySymbol),
     });
   }
 
@@ -525,13 +439,13 @@ function buildTrendPoints(
   );
   points.push({
     timestamp: finalTimestamp,
-    value: cashBalance + currentMarketValue,
+    value: currentMarketValue,
   });
 
   const compressed = compressDailyPoints(
     points.sort((firstPoint, secondPoint) => firstPoint.timestamp - secondPoint.timestamp)
   );
-  return ensureChartFriendlyPoints(compressed);
+  return compressed;
 }
 
 function calculateStandardDeviation(values: number[]): number {
@@ -546,8 +460,7 @@ function calculateStandardDeviation(values: number[]): number {
 }
 
 function buildRiskMetrics(
-  points: AnalyticsPoint[],
-  externalFlowByDay: Map<string, number>
+  points: AnalyticsPoint[]
 ): AnalyticsRiskMetrics {
   if (points.length < 2) {
     return {
@@ -560,20 +473,7 @@ function buildRiskMetrics(
     };
   }
 
-  let cumulativeExternalFlow = 0;
-  let previousDayKey: string | null = null;
-  const performancePoints = points.map((point) => {
-    const dayKey = getDayKeyFromTimestamp(point.timestamp);
-    if (dayKey !== previousDayKey) {
-      cumulativeExternalFlow += externalFlowByDay.get(dayKey) ?? 0;
-      previousDayKey = dayKey;
-    }
-
-    return {
-      timestamp: point.timestamp,
-      value: point.value - cumulativeExternalFlow,
-    };
-  });
+  const performancePoints = points;
 
   let runningPeak = performancePoints[0].value;
   let maxDrawdown = 0;
@@ -696,11 +596,15 @@ function buildSnapshot(args: {
   deposits: { amount: number; depositedAt: string }[];
   dividends: { finalAmount: number; dividendDate: string }[];
   bonuses: { symbol: string; units: number; awardedAt: string }[];
-  freeCash: number;
   totalDividends: number;
+  realizedProfit: number;
   indices: MarketIndexSnapshot[];
 }): AnalyticsSnapshot {
-  const overview = buildOverview(args.holdings, args.freeCash, args.totalDividends);
+  const overview = buildOverview({
+    holdings: args.holdings,
+    totalDividends: args.totalDividends,
+    realizedProfit: args.realizedProfit,
+  });
   const benchmark = buildBenchmark(args.indices);
   const benchmarkAsOf = benchmark.kse100?.asOf ?? benchmark.kmi30?.asOf ?? null;
   const analysisAsOfTimestamp = getLatestAnalysisAsOfTimestamp(args.holdings, benchmark);
@@ -712,10 +616,7 @@ function buildSnapshot(args: {
     args.bonuses,
     analysisAsOfTimestamp
   );
-  const risk = buildRiskMetrics(
-    trend,
-    buildExternalFlowByDay(args.deposits, args.dividends)
-  );
+  const risk = buildRiskMetrics(trend);
   const performers = buildPerformers(args.holdings);
   const companyAllocation = buildCompanyAllocation(args.holdings);
   const sectorAllocation = buildSectorAllocation(args.holdings);
@@ -740,7 +641,6 @@ async function fetchSnapshotData(mode: "cache" | "latest"): Promise<AnalyticsSna
     deposits,
     dividends,
     bonuses,
-    cashLedger,
     indices,
   ] = await Promise.all([
     mode === "latest"
@@ -750,7 +650,6 @@ async function fetchSnapshotData(mode: "cache" | "latest"): Promise<AnalyticsSna
     getSavedDepositRecords(),
     getSavedDividendRecords(),
     getSavedBonusShareRecords(),
-    getCashLedgerSnapshot(),
     mode === "latest" ? getLatestMarketSnapshot() : getCachedMarketSnapshot(),
   ]);
 
@@ -758,6 +657,7 @@ async function fetchSnapshotData(mode: "cache" | "latest"): Promise<AnalyticsSna
     (sum, record) => sum + toNonNegativeNumber(record.finalAmount),
     0
   );
+  const realizedProfit = calculateRealizedProfitLoss(trades, bonuses);
 
   return buildSnapshot({
     holdings,
@@ -765,8 +665,8 @@ async function fetchSnapshotData(mode: "cache" | "latest"): Promise<AnalyticsSna
     deposits,
     dividends,
     bonuses,
-    freeCash: cashLedger.availableCash,
     totalDividends,
+    realizedProfit,
     indices,
   });
 }
@@ -798,15 +698,10 @@ export function getTrendPointsForRange(
 ): AnalyticsPoint[] {
   const startTimestamp = getAnalyticsRangeStartTimestamp(range);
   if (startTimestamp === null) {
-    return ensureChartFriendlyPoints(points);
+    return points;
   }
 
-  const rangedPoints = points.filter((point) => point.timestamp >= startTimestamp);
-  if (rangedPoints.length >= 2) {
-    return rangedPoints;
-  }
-
-  return ensureChartFriendlyPoints(points);
+  return points.filter((point) => point.timestamp >= startTimestamp);
 }
 
 export async function getCachedAnalyticsSnapshot(): Promise<AnalyticsSnapshot> {
