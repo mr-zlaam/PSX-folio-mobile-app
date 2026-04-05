@@ -267,7 +267,13 @@ export default function MarketIndexScreen() {
         }
 
         const cachedDetail = await getCachedMarketIndexDetail(normalizedCode);
-        if (cachedDetail) {
+        const hasUsableCachedDetail = Boolean(
+          cachedDetail &&
+            cachedDetail.snapshot.asOf !== null &&
+            Number.isFinite(cachedDetail.snapshot.latestPrice) &&
+            cachedDetail.snapshot.latestPrice > 0
+        );
+        if (hasUsableCachedDetail && cachedDetail) {
           setDetail(cachedDetail);
           if (showLoader) {
             setIsInitialLoading(false);
@@ -307,9 +313,10 @@ export default function MarketIndexScreen() {
         }
 
         const cachedSeries = await getCachedStockChartSeries(normalizedCode, range);
+        const hasUsableCachedSeries = cachedSeries.points.length > 0;
         if (requestId === chartRequestIdRef.current) {
           setChartSeries(cachedSeries);
-          if (showLoader && cachedSeries.points.length > 0) {
+          if (showLoader && hasUsableCachedSeries) {
             setIsChartLoading(false);
           }
         }
@@ -318,7 +325,8 @@ export default function MarketIndexScreen() {
         if (!forceLive) {
           try {
             const cachedDpsStatus = await getCachedDpsMarketStatus();
-            shouldUseCachedOnly = cachedDpsStatus.uiStatus !== "OPEN";
+            shouldUseCachedOnly =
+              cachedDpsStatus.uiStatus !== "OPEN" && hasUsableCachedSeries;
           } catch {
             shouldUseCachedOnly = false;
           }

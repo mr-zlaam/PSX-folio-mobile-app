@@ -59,12 +59,6 @@ const MARKET_ITEMS: MoreGridItem[] = [
     icon: "finance",
     route: "/(tabs)/stocks",
   },
-  {
-    id: "market",
-    label: "Market",
-    icon: "chart-box-outline",
-    route: "/(tabs)/market",
-  },
 ];
 
 const NEWS_ITEMS: MoreGridItem[] = [

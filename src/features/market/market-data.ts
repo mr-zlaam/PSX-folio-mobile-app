@@ -859,10 +859,16 @@ function buildMarketIndexDetail(
   };
 }
 
-async function shouldPreferCachedMarketData(
-  forceLive: boolean
-): Promise<boolean> {
+async function shouldPreferCachedMarketData(options: {
+  forceLive: boolean;
+  hasUsableCache: boolean;
+}): Promise<boolean> {
+  const { forceLive, hasUsableCache } = options;
   if (forceLive) {
+    return false;
+  }
+
+  if (!hasUsableCache) {
     return false;
   }
 
@@ -905,15 +911,18 @@ export async function getCachedMarketSnapshot(): Promise<MarketIndexSnapshot[]> 
 export async function getLatestMarketSnapshot(options?: {
   forceLive?: boolean;
 }): Promise<MarketIndexSnapshot[]> {
-  const shouldUseCache = await shouldPreferCachedMarketData(
-    options?.forceLive === true
+  const cachedItems = await getCachedMarketSnapshot();
+  const hasUsableCache = cachedItems.some(
+    (item) => item.asOf !== null && Number.isFinite(item.latestPrice) && item.latestPrice > 0
   );
-
+  const shouldUseCache = await shouldPreferCachedMarketData({
+    forceLive: options?.forceLive === true,
+    hasUsableCache,
+  });
   if (shouldUseCache) {
-    return getCachedMarketSnapshot();
+    return cachedItems;
   }
 
-  const cachedItems = await getCachedMarketSnapshot();
   const cachedByCode = new Map(cachedItems.map((item) => [item.code, item]));
 
   const latestItems = await Promise.all(
@@ -978,9 +987,16 @@ export async function getLatestMarketIndexDetail(
   }
 
   const cachedDetail = await getCachedMarketIndexDetail(definition.code);
-  const shouldUseCache = await shouldPreferCachedMarketData(
-    options?.forceLive === true
+  const hasUsableCache = Boolean(
+    cachedDetail &&
+      cachedDetail.snapshot.asOf !== null &&
+      Number.isFinite(cachedDetail.snapshot.latestPrice) &&
+      cachedDetail.snapshot.latestPrice > 0
   );
+  const shouldUseCache = await shouldPreferCachedMarketData({
+    forceLive: options?.forceLive === true,
+    hasUsableCache,
+  });
   if (shouldUseCache) {
     return cachedDetail;
   }
@@ -1057,9 +1073,11 @@ export async function getLatestMarketIndexConstituents(
   const cachedSnapshot =
     (await getCachedMarketIndexConstituents(definition.code)) ??
     getFallbackConstituentSnapshot(definition.code);
-  const shouldUseCache = await shouldPreferCachedMarketData(
-    options?.forceLive === true
-  );
+  const hasUsableCache = cachedSnapshot.items.length > 0;
+  const shouldUseCache = await shouldPreferCachedMarketData({
+    forceLive: options?.forceLive === true,
+    hasUsableCache,
+  });
   if (shouldUseCache) {
     return cachedSnapshot;
   }

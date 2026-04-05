@@ -1,10 +1,13 @@
 import AppButton from "@/components/ui/app-button";
-import { AppSkeletonTextGroup } from "@/components/ui/app-skeleton";
+import {
+  AppSkeletonBlock,
+} from "@/components/ui/app-skeleton";
 import { useGuardedRouter } from "@/src/lib/navigation";
 import AppFeedbackModal, {
   AppFeedbackModalTone,
 } from "@/components/ui/app-feedback-modal";
 import ShariahChip from "@/components/ui/shariah-chip";
+import { getCachedDpsMarketStatus } from "@/src/features/market/dps-market-status";
 import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
 import {
   getCachedSymbolQuote,
@@ -39,6 +42,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useColorScheme } from "nativewind";
@@ -164,10 +168,100 @@ function Metric({ label, value }: { label: string; value: string }) {
   );
 }
 
+function WatchlistCardSkeleton() {
+  return (
+    <View className="rounded-2xl bg-brand-white/95 px-3 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+      <View className="flex-row items-start justify-between gap-2">
+        <View className="flex-1 pr-2">
+          <View className="flex-row items-center gap-2">
+            <AppSkeletonBlock width={62} height={22} borderRadius={8} />
+            <AppSkeletonBlock width={28} height={16} borderRadius={8} />
+          </View>
+          <AppSkeletonBlock
+            className="mt-2"
+            width="78%"
+            height={12}
+            borderRadius={7}
+          />
+          <AppSkeletonBlock
+            className="mt-2"
+            width="52%"
+            height={10}
+            borderRadius={6}
+          />
+        </View>
+
+        <View className="items-end">
+          <AppSkeletonBlock width={34} height={24} borderRadius={8} />
+          <AppSkeletonBlock
+            className="mt-2"
+            width={96}
+            height={24}
+            borderRadius={9}
+          />
+          <AppSkeletonBlock
+            className="mt-2"
+            width={86}
+            height={12}
+            borderRadius={7}
+          />
+        </View>
+      </View>
+
+      <View className="mt-3 flex-row flex-wrap gap-y-2">
+        <View className="w-1/2 pr-2">
+          <AppSkeletonBlock width={36} height={10} borderRadius={6} />
+          <AppSkeletonBlock
+            className="mt-2"
+            width={68}
+            height={12}
+            borderRadius={7}
+          />
+        </View>
+        <View className="w-1/2 pl-2">
+          <AppSkeletonBlock width={30} height={10} borderRadius={6} />
+          <AppSkeletonBlock
+            className="mt-2"
+            width={64}
+            height={12}
+            borderRadius={7}
+          />
+        </View>
+        <View className="w-1/2 pr-2">
+          <AppSkeletonBlock width={42} height={10} borderRadius={6} />
+          <AppSkeletonBlock
+            className="mt-2"
+            width={72}
+            height={12}
+            borderRadius={7}
+          />
+        </View>
+        <View className="w-1/2 pl-2">
+          <AppSkeletonBlock width={34} height={10} borderRadius={6} />
+          <AppSkeletonBlock
+            className="mt-2"
+            width={70}
+            height={12}
+            borderRadius={7}
+          />
+        </View>
+      </View>
+
+      <AppSkeletonBlock
+        className="mt-3"
+        width="36%"
+        height={10}
+        borderRadius={6}
+      />
+    </View>
+  );
+}
+
 export default function WatchlistTabScreen() {
   const router = useGuardedRouter();
   const { isShariahCompliantSymbol } = useShariahSymbols();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
   const inputPlaceholderTextColor = isDarkMode
@@ -187,6 +281,14 @@ export default function WatchlistTabScreen() {
   const [hasLoadedWatchlistItems, setHasLoadedWatchlistItems] = React.useState(false);
   const [isLoadingRows, setIsLoadingRows] = React.useState(false);
   const [notice, setNotice] = React.useState<WatchlistNotice | null>(null);
+  const watchlistSkeletonCardCount = React.useMemo(
+    () =>
+      Math.max(
+        3,
+        Math.ceil(Math.max(windowHeight - insets.bottom - 260, 320) / 200)
+      ),
+    [insets.bottom, windowHeight]
+  );
 
   const filteredSymbols = React.useMemo(() => {
     const normalizedQuery = searchQuery.trim().toLowerCase();
@@ -252,7 +354,7 @@ export default function WatchlistTabScreen() {
     async (items: WatchlistItem[], symbolsByCode: Map<string, PsxSymbol>) => {
       if (items.length === 0) {
         setRows([]);
-        return;
+        return true;
       }
 
       const quotePairs = await Promise.all(
@@ -274,6 +376,10 @@ export default function WatchlistTabScreen() {
           };
         })
       );
+
+      return quotePairs.some(([, quote]) => {
+        return quote.asOf !== null || quote.lastPrice > 0 || quote.previousClose > 0;
+      });
     },
     []
   );
@@ -307,7 +413,10 @@ export default function WatchlistTabScreen() {
     []
   );
 
-  const hydrateWatchlist = React.useCallback(async (preferCachedFirst = true) => {
+  const hydrateWatchlist = React.useCallback(async (
+    preferCachedFirst = true,
+    forceLive = false
+  ) => {
     setIsLoadingRows(true);
     try {
       const [items, cachedSymbols] = await Promise.all([
@@ -322,18 +431,44 @@ export default function WatchlistTabScreen() {
         setAllSymbols(cachedSymbols);
       }
 
+      let hasUsableCachedRows = false;
       if (preferCachedFirst) {
-        await loadWatchlistFromCache(items, buildSymbolsByCode(cachedSymbols));
+        hasUsableCachedRows = await loadWatchlistFromCache(
+          items,
+          buildSymbolsByCode(cachedSymbols)
+        );
       }
 
-      const latestSymbols = await getLatestSymbols();
-      if (latestSymbols.length > 0) {
-        setAllSymbols(latestSymbols);
+      const hasUsableCachedSymbols = cachedSymbols.length > 0;
+      let isMarketOpen = true;
+      if (!forceLive) {
+        try {
+          const cachedMarketStatus = await getCachedDpsMarketStatus();
+          isMarketOpen = cachedMarketStatus.uiStatus === "OPEN";
+        } catch {
+          isMarketOpen = true;
+        }
       }
 
-      const symbolsByCode = buildSymbolsByCode(
-        latestSymbols.length > 0 ? latestSymbols : cachedSymbols
-      );
+      const shouldFetchLiveSymbols =
+        forceLive || isMarketOpen || !hasUsableCachedSymbols;
+      const shouldFetchLiveQuotes =
+        forceLive || isMarketOpen || !hasUsableCachedRows;
+
+      let symbolsForRows = cachedSymbols;
+      if (shouldFetchLiveSymbols) {
+        const latestSymbols = await getLatestSymbols();
+        if (latestSymbols.length > 0) {
+          setAllSymbols(latestSymbols);
+          symbolsForRows = latestSymbols;
+        }
+      }
+
+      if (!shouldFetchLiveQuotes) {
+        return;
+      }
+
+      const symbolsByCode = buildSymbolsByCode(symbolsForRows);
       await loadWatchlistLatest(items, symbolsByCode);
     } finally {
       setIsLoadingRows(false);
@@ -384,7 +519,7 @@ export default function WatchlistTabScreen() {
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await hydrateWatchlist(false);
+      await hydrateWatchlist(false, true);
     } finally {
       setIsRefreshing(false);
     }
@@ -479,12 +614,11 @@ export default function WatchlistTabScreen() {
       <ScrollView
         className="flex-1"
         contentContainerStyle={{
-          paddingTop: shouldShowCenterLoader || shouldShowEmptyState ? 0 : 14,
+          paddingTop: shouldShowCenterLoader ? 14 : shouldShowEmptyState ? 0 : 14,
           paddingHorizontal: 20,
           paddingBottom: insets.bottom + (watchlistItems.length > 0 ? 100 : 24),
           flexGrow: 1,
-          justifyContent:
-            shouldShowCenterLoader || shouldShowEmptyState ? "center" : "flex-start",
+          justifyContent: shouldShowEmptyState ? "center" : "flex-start",
         }}
         showsVerticalScrollIndicator={false}
         refreshControl={
@@ -500,13 +634,22 @@ export default function WatchlistTabScreen() {
         }
       >
         {shouldShowCenterLoader ? (
-          <View className="items-center px-6">
-            <Text className="text-2xl font-extrabold text-app-text dark:text-app-textDark">
-              Watchlist
-            </Text>
-            <View className="mt-4 w-full max-w-[260px] rounded-2xl bg-brand-white/80 p-4 dark:bg-brand-white/10">
-              <AppSkeletonTextGroup rows={3} rowHeight={12} />
+          <View
+            className="w-full gap-3"
+            style={{ minHeight: Math.max(windowHeight - insets.bottom - 220, 460) }}
+          >
+            <View className="rounded-2xl bg-brand-white/95 px-4 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+              <AppSkeletonBlock width={126} height={22} borderRadius={9} />
+              <AppSkeletonBlock
+                className="mt-3"
+                width="100%"
+                height={38}
+                borderRadius={12}
+              />
             </View>
+            {Array.from({ length: watchlistSkeletonCardCount }).map((_, index) => (
+              <WatchlistCardSkeleton key={`watchlist-card-skeleton-${index}`} />
+            ))}
           </View>
         ) : shouldShowEmptyState ? (
           <View className="items-center px-6">
@@ -547,8 +690,10 @@ export default function WatchlistTabScreen() {
             </View>
 
             {shouldShowRowsLoader ? (
-              <View className="rounded-2xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
-                <AppSkeletonTextGroup rows={3} rowHeight={12} />
+              <View className="gap-3">
+                <WatchlistCardSkeleton />
+                <WatchlistCardSkeleton />
+                <WatchlistCardSkeleton />
               </View>
             ) : filteredWatchlistRows.length === 0 ? (
               <View className="rounded-2xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">

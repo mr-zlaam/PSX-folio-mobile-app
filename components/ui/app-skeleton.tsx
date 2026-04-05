@@ -15,30 +15,23 @@ type AppSkeletonBlockProps = {
   style?: ViewStyle;
 };
 
-const SHARED_PULSE_VALUE = new Animated.Value(0);
-let isSharedPulseRunning = false;
+const SHARED_SHIMMER_VALUE = new Animated.Value(0);
+let isSharedShimmerRunning = false;
 
-function ensureSharedPulseAnimationStarted() {
-  if (isSharedPulseRunning) {
+function ensureSharedShimmerAnimationStarted() {
+  if (isSharedShimmerRunning) {
     return;
   }
 
-  isSharedPulseRunning = true;
+  isSharedShimmerRunning = true;
+  SHARED_SHIMMER_VALUE.setValue(0);
   Animated.loop(
-    Animated.sequence([
-      Animated.timing(SHARED_PULSE_VALUE, {
-        toValue: 1,
-        duration: 900,
-        easing: Easing.inOut(Easing.quad),
-        useNativeDriver: true,
-      }),
-      Animated.timing(SHARED_PULSE_VALUE, {
-        toValue: 0,
-        duration: 900,
-        easing: Easing.inOut(Easing.quad),
-        useNativeDriver: true,
-      }),
-    ])
+    Animated.timing(SHARED_SHIMMER_VALUE, {
+      toValue: 1,
+      duration: 1200,
+      easing: Easing.linear,
+      useNativeDriver: true,
+    })
   ).start();
 }
 
@@ -51,36 +44,51 @@ export function AppSkeletonBlock({
 }: AppSkeletonBlockProps) {
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
-  const animatedOpacity = React.useMemo(
+  const shimmerTranslateX = React.useMemo(
     () =>
-      SHARED_PULSE_VALUE.interpolate({
+      SHARED_SHIMMER_VALUE.interpolate({
         inputRange: [0, 1],
-        outputRange: [0.45, 0.95],
+        outputRange: [-160, 420],
       }),
     []
   );
 
   React.useEffect(() => {
-    ensureSharedPulseAnimationStarted();
+    ensureSharedShimmerAnimationStarted();
   }, []);
 
   const blockColor = isDarkMode
-    ? "rgba(255,255,255,0.16)"
-    : "rgba(20,10,38,0.12)";
+    ? "rgba(255,255,255,0.14)"
+    : "rgba(20,10,38,0.10)";
+  const shimmerColor = isDarkMode
+    ? "rgba(255,255,255,0.28)"
+    : "rgba(255,255,255,0.78)";
 
   return (
     <View className={className} style={style}>
-      <Animated.View style={{ opacity: animatedOpacity }}>
-        <View
+      <View
+        style={{
+          width,
+          height,
+          borderRadius,
+          backgroundColor: blockColor,
+          overflow: "hidden",
+          opacity: isDarkMode ? 0.97 : 1,
+        }}
+      >
+        <Animated.View
+          pointerEvents="none"
           style={{
-            width,
-            height,
-            borderRadius,
-            backgroundColor: blockColor,
-            opacity: isDarkMode ? 0.96 : 1,
+            position: "absolute",
+            top: 0,
+            bottom: 0,
+            width: 110,
+            backgroundColor: shimmerColor,
+            opacity: isDarkMode ? 0.58 : 0.72,
+            transform: [{ translateX: shimmerTranslateX }],
           }}
         />
-      </Animated.View>
+      </View>
     </View>
   );
 }

@@ -23,6 +23,7 @@ import {
   ScrollView,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
@@ -148,6 +149,7 @@ export default function MarketTabScreen() {
     originTab?: string | string[];
   }>();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
   const openPulseAnim = React.useRef(new Animated.Value(0)).current;
@@ -165,6 +167,14 @@ export default function MarketTabScreen() {
     });
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [isBootstrapping, setIsBootstrapping] = React.useState(true);
+  const marketSkeletonCardCount = React.useMemo(
+    () =>
+      Math.max(
+        5,
+        Math.ceil(Math.max(windowHeight - insets.bottom - 220, 420) / 150)
+      ),
+    [insets.bottom, windowHeight]
+  );
   const routeOriginTab = React.useMemo(() => {
     const rawOriginTab = Array.isArray(searchParams.originTab)
       ? searchParams.originTab[0]
@@ -178,6 +188,7 @@ export default function MarketTabScreen() {
     forceLive = false
   ) => {
     let cachedDpsStatus: DpsMarketStatusSnapshot | null = null;
+    let hasUsableCachedSnapshot = false;
 
     if (preferCachedFirst) {
       const [cachedSnapshot, statusSnapshot] = await Promise.all([
@@ -187,9 +198,19 @@ export default function MarketTabScreen() {
       cachedDpsStatus = statusSnapshot;
       setIndices(cachedSnapshot);
       setDpsMarketStatus(statusSnapshot);
+      hasUsableCachedSnapshot = cachedSnapshot.some(
+        (item) =>
+          item.asOf !== null &&
+          Number.isFinite(item.latestPrice) &&
+          item.latestPrice > 0
+      );
     }
 
-    if (!forceLive && cachedDpsStatus?.uiStatus !== "OPEN") {
+    if (
+      !forceLive &&
+      cachedDpsStatus?.uiStatus !== "OPEN" &&
+      hasUsableCachedSnapshot
+    ) {
       void getLatestDpsMarketStatus().then((latestDpsStatus) => {
         setDpsMarketStatus(latestDpsStatus);
         if (latestDpsStatus.uiStatus !== "OPEN") {
@@ -456,7 +477,9 @@ export default function MarketTabScreen() {
           </View>
 
           {isBootstrapping && !hasLiveData ? (
-            <AppListScreenSkeleton cardCount={4} />
+            <View style={{ minHeight: Math.max(windowHeight - insets.bottom - 120, 520) }}>
+              <AppListScreenSkeleton cardCount={marketSkeletonCardCount} />
+            </View>
           ) : null}
 
           {!isBootstrapping && !hasLiveData ? (

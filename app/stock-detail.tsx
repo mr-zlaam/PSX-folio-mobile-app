@@ -2,6 +2,7 @@ import StockLineChart from "@/components/charts/stock-line-chart";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
 import {
   AppChartSkeleton,
+  AppDetailScreenSkeleton,
   AppSkeletonTextGroup,
 } from "@/components/ui/app-skeleton";
 import ShariahChip from "@/components/ui/shariah-chip";
@@ -17,6 +18,7 @@ import {
   formatPKRAmount,
   formatSignedPercentage,
 } from "@/src/features/home/home-formatters";
+import { getCachedDpsMarketStatus } from "@/src/features/market/dps-market-status";
 import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
 import {
   getCachedSymbols,
@@ -46,6 +48,7 @@ import {
   ScrollView,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -410,6 +413,7 @@ function CompanyMetricRows({
       {metricNumbers.map((metricItem) => {
         const detectedUrl = extractUrlFromText(metricItem.value);
         const canOpenUrl = Boolean(detectedUrl) && Boolean(onOpenUrl);
+        const isMarketCapMetric = /market\s*cap/i.test(metricItem.label);
         const computedPercentage =
           showCalculatedPercentage &&
           metricItem.embeddedPercentage === null &&
@@ -419,11 +423,13 @@ function CompanyMetricRows({
             ? (metricItem.numericValue / percentageDenominator) * 100
             : null;
         const percentageText =
-          metricItem.embeddedPercentage !== null
-            ? formatMetricPercentage(metricItem.embeddedPercentage)
-            : computedPercentage !== null
-              ? formatMetricPercentage(computedPercentage)
-              : null;
+          isMarketCapMetric
+            ? null
+            : metricItem.embeddedPercentage !== null
+              ? formatMetricPercentage(metricItem.embeddedPercentage)
+              : computedPercentage !== null
+                ? formatMetricPercentage(computedPercentage)
+                : null;
 
         return (
           <View
@@ -541,6 +547,7 @@ export default function StockDetailScreen() {
   const { isShariahCompliantSymbol } = useShariahSymbols();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
+  const { height: windowHeight } = useWindowDimensions();
   const isDarkMode = colorScheme === "dark";
   const searchParams = useLocalSearchParams<{
     symbol?: string | string[];
@@ -603,7 +610,7 @@ export default function StockDetailScreen() {
   }, [normalizedSymbol]);
 
   const refreshQuote = React.useCallback(
-    async (showLoader = false) => {
+    async (showLoader = false, forceLive = false) => {
       if (showLoader) {
         setIsInitialLoading(true);
       }
@@ -615,8 +622,32 @@ export default function StockDetailScreen() {
         }
 
         const cachedQuote = await getCachedSymbolQuote(normalizedSymbol);
+        const hasUsableCachedQuote = Boolean(
+          cachedQuote &&
+            (cachedQuote.asOf !== null ||
+              cachedQuote.lastPrice > 0 ||
+              cachedQuote.previousClose > 0)
+        );
         if (cachedQuote) {
           setQuote(cachedQuote);
+          if (showLoader && hasUsableCachedQuote) {
+            setIsInitialLoading(false);
+          }
+        }
+
+        let shouldFetchLive = forceLive || !hasUsableCachedQuote;
+        if (!forceLive) {
+          try {
+            const cachedMarketStatus = await getCachedDpsMarketStatus();
+            shouldFetchLive =
+              cachedMarketStatus.uiStatus === "OPEN" || !hasUsableCachedQuote;
+          } catch {
+            shouldFetchLive = true;
+          }
+        }
+
+        if (!shouldFetchLive) {
+          return;
         }
 
         const latestQuote = await getLatestSymbolQuote(normalizedSymbol);
@@ -631,7 +662,7 @@ export default function StockDetailScreen() {
   );
 
   const refreshChart = React.useCallback(
-    async (range: StockChartRange, showLoader = false) => {
+    async (range: StockChartRange, showLoader = false, forceLive = false) => {
       const requestId = chartRequestIdRef.current + 1;
       chartRequestIdRef.current = requestId;
 
@@ -648,8 +679,27 @@ export default function StockDetailScreen() {
         }
 
         const cachedSeries = await getCachedStockChartSeries(normalizedSymbol, range);
+        const hasUsableCachedSeries = cachedSeries.points.length > 0;
         if (requestId === chartRequestIdRef.current) {
           setChartSeries(cachedSeries);
+          if (showLoader && hasUsableCachedSeries) {
+            setIsChartLoading(false);
+          }
+        }
+
+        let shouldFetchLive = forceLive || !hasUsableCachedSeries;
+        if (!forceLive) {
+          try {
+            const cachedMarketStatus = await getCachedDpsMarketStatus();
+            shouldFetchLive =
+              cachedMarketStatus.uiStatus === "OPEN" || !hasUsableCachedSeries;
+          } catch {
+            shouldFetchLive = true;
+          }
+        }
+
+        if (!shouldFetchLive) {
+          return;
         }
 
         const latestSeries = await getLatestStockChartSeries(normalizedSymbol, range);
@@ -744,8 +794,8 @@ export default function StockDetailScreen() {
     try {
       const refreshTasks: Promise<unknown>[] = [
         hydrateSymbolMeta(),
-        refreshQuote(),
-        refreshChart(chartRange),
+        refreshQuote(false, true),
+        refreshChart(chartRange, false, true),
       ];
 
       if (shouldLoadCompanyDetail) {
@@ -884,8 +934,12 @@ export default function StockDetailScreen() {
           </View>
 
           {isInitialLoading ? (
-            <View className="rounded-3xl bg-brand-white/95 p-6 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
-              <AppSkeletonTextGroup rows={5} rowHeight={14} />
+            <View
+              style={{
+                minHeight: Math.max(windowHeight - insets.bottom - 120, 560),
+              }}
+            >
+              <AppDetailScreenSkeleton />
             </View>
           ) : normalizedSymbol.length === 0 ? (
             <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">

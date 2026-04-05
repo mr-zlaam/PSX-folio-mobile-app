@@ -1,5 +1,5 @@
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
-import { AppSkeletonTextGroup } from "@/components/ui/app-skeleton";
+import { AppListScreenSkeleton } from "@/components/ui/app-skeleton";
 import ShariahChip from "@/components/ui/shariah-chip";
 import {
   getCachedMarketIndexConstituents,
@@ -20,6 +20,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -142,6 +143,7 @@ function FilterChip({
 export default function MarketIndexStocksScreen() {
   const router = useGuardedRouter();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { isShariahCompliantSymbol } = useShariahSymbols();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
@@ -168,6 +170,14 @@ export default function MarketIndexStocksScreen() {
     React.useState<MarketIndexConstituentSnapshot | null>(null);
   const [isInitialLoading, setIsInitialLoading] = React.useState(true);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const skeletonCardCount = React.useMemo(
+    () =>
+      Math.max(
+        5,
+        Math.ceil(Math.max(windowHeight - insets.bottom - 240, 420) / 150)
+      ),
+    [insets.bottom, windowHeight]
+  );
 
   const refreshConstituents = React.useCallback(
     async (showLoader = false, forceLive = false) => {
@@ -183,7 +193,10 @@ export default function MarketIndexStocksScreen() {
 
         const cachedSnapshot =
           await getCachedMarketIndexConstituents(normalizedCode);
-        if (cachedSnapshot) {
+        const hasUsableCachedSnapshot = Boolean(
+          cachedSnapshot && cachedSnapshot.items.length > 0
+        );
+        if (hasUsableCachedSnapshot && cachedSnapshot) {
           setConstituents(cachedSnapshot);
           if (showLoader) {
             setIsInitialLoading(false);
@@ -367,8 +380,11 @@ export default function MarketIndexStocksScreen() {
           </View>
 
           {isInitialLoading && (constituents?.items.length ?? 0) === 0 ? (
-            <View className="rounded-2xl bg-brand-white p-6 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
-              <AppSkeletonTextGroup rows={5} rowHeight={12} />
+            <View style={{ minHeight: Math.max(windowHeight - insets.bottom - 120, 520) }}>
+              <AppListScreenSkeleton
+                cardCount={skeletonCardCount}
+                includeSearchBar
+              />
             </View>
           ) : null}
 

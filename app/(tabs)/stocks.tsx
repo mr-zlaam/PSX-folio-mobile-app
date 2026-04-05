@@ -2,7 +2,6 @@
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
 import {
   AppSkeletonBlock,
-  AppSkeletonTextGroup,
 } from "@/components/ui/app-skeleton";
 import { useColorScheme } from "nativewind";
 import React from "react";
@@ -13,6 +12,7 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useFocusEffect } from "@react-navigation/native";
@@ -20,9 +20,14 @@ import { useLocalSearchParams } from "expo-router";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import ShariahChip from "@/components/ui/shariah-chip";
 import { useGuardedRouter } from "@/src/lib/navigation";
+import { getCachedDpsMarketStatus } from "@/src/features/market/dps-market-status";
 import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
 import { APP_COLORS } from "@/src/theme/colors";
 import {
+  getCachedSymbolQuote,
+  getCachedSymbols,
+  getLatestSymbolQuote,
+  getLatestSymbols,
   getStrictLiveSymbolQuote,
   getStrictLiveSymbols,
   getSymbolQuoteFallback,
@@ -30,11 +35,12 @@ import {
   SymbolQuote,
 } from "@/src/features/trade/trade-data";
 
-const STOCK_ROW_HEIGHT = 152;
+const STOCK_ROW_HEIGHT = 160;
 const STOCK_ROW_SPACING = 8;
 const STOCK_PAGE_SIZE = 20;
 const MAX_CONCURRENT_QUOTE_REQUESTS = 6;
 const SYMBOL_QUOTE_TIMEOUT_MS = 15_000;
+const STOCKS_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 function sortSymbolsAlphabetically(symbols: PsxSymbol[]): PsxSymbol[] {
   return [...symbols].sort((firstSymbol, secondSymbol) =>
@@ -147,7 +153,7 @@ const StockRow = React.memo(function StockRow({
     <TouchableOpacity
       activeOpacity={0.88}
       onPress={() => onPress(symbolItem.symbol)}
-      className="h-[152px] rounded-2xl bg-brand-white px-4 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
+      className="h-[160px] rounded-2xl bg-brand-white px-5 py-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
     >
       <View className="flex-row items-start justify-between gap-3">
         <View className="flex-1">
@@ -255,6 +261,81 @@ const StockRow = React.memo(function StockRow({
   previousProps.onPress === nextProps.onPress
 );
 
+function StockRowSkeleton() {
+  return (
+    <View className="h-[160px] rounded-2xl bg-brand-white px-5 py-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+      <View className="flex-row items-start justify-between gap-3">
+        <View className="flex-1">
+          <View className="flex-row items-center gap-2">
+            <AppSkeletonBlock width={70} height={22} borderRadius={8} />
+            <AppSkeletonBlock width={28} height={16} borderRadius={8} />
+          </View>
+          <AppSkeletonBlock
+            className="mt-2"
+            width="78%"
+            height={12}
+            borderRadius={7}
+          />
+          <AppSkeletonBlock
+            className="mt-2"
+            width="56%"
+            height={10}
+            borderRadius={6}
+          />
+        </View>
+
+        <View className="items-end">
+          <AppSkeletonBlock width={96} height={22} borderRadius={8} />
+          <AppSkeletonBlock
+            className="mt-2"
+            width={88}
+            height={12}
+            borderRadius={7}
+          />
+        </View>
+      </View>
+
+      <View className="mt-3 flex-row">
+        <View className="w-1/2 pr-2">
+          <AppSkeletonBlock width={38} height={10} borderRadius={6} />
+          <AppSkeletonBlock
+            className="mt-2"
+            width={72}
+            height={12}
+            borderRadius={7}
+          />
+          <AppSkeletonBlock
+            className="mt-2"
+            width={58}
+            height={10}
+            borderRadius={6}
+          />
+        </View>
+        <View className="w-1/2 pl-2">
+          <AppSkeletonBlock width={34} height={10} borderRadius={6} />
+          <AppSkeletonBlock
+            className="mt-2"
+            width={70}
+            height={12}
+            borderRadius={7}
+          />
+          <AppSkeletonBlock
+            className="mt-2"
+            width={56}
+            height={10}
+            borderRadius={6}
+          />
+        </View>
+      </View>
+
+      <View className="mt-2 flex-row items-center justify-between">
+        <AppSkeletonBlock width={78} height={10} borderRadius={6} />
+        <AppSkeletonBlock width={54} height={10} borderRadius={6} />
+      </View>
+    </View>
+  );
+}
+
 export default function StocksTabScreen() {
   const router = useGuardedRouter();
   const searchParams = useLocalSearchParams<{
@@ -262,6 +343,7 @@ export default function StocksTabScreen() {
   }>();
   const { isShariahCompliantSymbol } = useShariahSymbols();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
   const inputPlaceholderTextColor = isDarkMode
@@ -286,6 +368,17 @@ export default function StocksTabScreen() {
   const [visibleStockCount, setVisibleStockCount] = React.useState(
     STOCK_PAGE_SIZE
   );
+  const stocksSkeletonRowCount = React.useMemo(
+    () =>
+      Math.max(
+        5,
+        Math.ceil(
+          Math.max(windowHeight - insets.bottom - 240, 400) /
+            (STOCK_ROW_HEIGHT + STOCK_ROW_SPACING)
+        )
+      ),
+    [insets.bottom, windowHeight]
+  );
 
   const quoteQueueRef = React.useRef<{ symbol: string; forceRefresh: boolean }[]>(
     []
@@ -294,20 +387,66 @@ export default function StocksTabScreen() {
   const inFlightSymbolsRef = React.useRef(new Set<string>());
   const hydratedSymbolsRef = React.useRef(new Set<string>());
   const prefetchSymbolsRef = React.useRef<string[]>([]);
+  const shouldFetchLiveQuotesRef = React.useRef(true);
+  const isMountedRef = React.useRef(false);
+
+  React.useEffect(() => {
+    isMountedRef.current = true;
+    const queuedSymbolsSet = queuedSymbolsRef.current;
+    const inFlightSymbolsSet = inFlightSymbolsRef.current;
+    const hydratedSymbolsSet = hydratedSymbolsRef.current;
+
+    return () => {
+      isMountedRef.current = false;
+      quoteQueueRef.current = [];
+      queuedSymbolsSet.clear();
+      inFlightSymbolsSet.clear();
+      hydratedSymbolsSet.clear();
+    };
+  }, []);
 
   const loadSymbols = React.useCallback(
-    async (showLoader = false) => {
-      if (showLoader) {
+    async (showLoader = false, forceLive = false) => {
+      if (showLoader && isMountedRef.current) {
         setIsBootstrapping(true);
       }
 
       try {
-        const latestSymbols = await getStrictLiveSymbols();
-        setSymbols(sortSymbolsAlphabetically(latestSymbols));
+        const cachedSymbols = await getCachedSymbols();
+        const hasUsableCachedSymbols = cachedSymbols.length > 0;
+        if (hasUsableCachedSymbols && isMountedRef.current) {
+          setSymbols(sortSymbolsAlphabetically(cachedSymbols));
+          if (showLoader && isMountedRef.current) {
+            setIsBootstrapping(false);
+          }
+        }
+
+        let isMarketOpen = true;
+        if (!forceLive) {
+          try {
+            const cachedMarketStatus = await getCachedDpsMarketStatus();
+            isMarketOpen = cachedMarketStatus.uiStatus === "OPEN";
+          } catch {
+            isMarketOpen = true;
+          }
+        }
+
+        shouldFetchLiveQuotesRef.current = isMarketOpen;
+        const shouldFetchLiveSymbols =
+          forceLive || !hasUsableCachedSymbols || isMarketOpen;
+
+        if (shouldFetchLiveSymbols) {
+          const latestSymbols = forceLive
+            ? await getStrictLiveSymbols()
+            : await getLatestSymbols();
+          if (isMountedRef.current) {
+            setSymbols(sortSymbolsAlphabetically(latestSymbols));
+          }
+        }
       } catch {
         // Keep previously loaded symbols when live fetch fails.
       } finally {
-        if (showLoader) {
+        if (showLoader && isMountedRef.current) {
           setIsBootstrapping(false);
         }
       }
@@ -340,6 +479,10 @@ export default function StocksTabScreen() {
   }, [deferredSearchQuery, symbols.length]);
 
   const upsertQuote = React.useCallback((symbol: string, quote: SymbolQuote) => {
+    if (!isMountedRef.current) {
+      return;
+    }
+
     setQuotesBySymbol((currentMap) => {
       const currentQuote = currentMap[symbol];
       if (
@@ -366,10 +509,30 @@ export default function StocksTabScreen() {
   }, []);
 
   const loadQuoteForSymbol = React.useCallback(
-    async (symbol: string, _forceRefresh: boolean) => {
+    async (symbol: string, forceRefresh: boolean) => {
       const normalizedSymbol = symbol.trim().toUpperCase();
       if (normalizedSymbol.length === 0) {
         return;
+      }
+
+      if (!forceRefresh) {
+        const cachedQuote = await getCachedSymbolQuote(normalizedSymbol);
+        const hasUsableCachedQuote = Boolean(
+          cachedQuote &&
+            (cachedQuote.asOf !== null ||
+              cachedQuote.lastPrice > 0 ||
+              cachedQuote.previousClose > 0)
+        );
+        if (cachedQuote) {
+          upsertQuote(normalizedSymbol, cachedQuote);
+        }
+
+        const shouldFetchLiveQuote =
+          forceRefresh || shouldFetchLiveQuotesRef.current || !hasUsableCachedQuote;
+        if (!shouldFetchLiveQuote) {
+          hydratedSymbolsRef.current.add(normalizedSymbol);
+          return;
+        }
       }
 
       let timeoutId: ReturnType<typeof setTimeout> | null = null;
@@ -379,9 +542,10 @@ export default function StocksTabScreen() {
         }, SYMBOL_QUOTE_TIMEOUT_MS);
       });
       const latestQuote = await Promise.race([
-        getStrictLiveSymbolQuote(normalizedSymbol).catch(() =>
-          getSymbolQuoteFallback(normalizedSymbol)
-        ),
+        (forceRefresh
+          ? getStrictLiveSymbolQuote(normalizedSymbol)
+          : getLatestSymbolQuote(normalizedSymbol)
+        ).catch(() => getSymbolQuoteFallback(normalizedSymbol)),
         timeoutPromise,
       ]);
       if (timeoutId) {
@@ -396,6 +560,10 @@ export default function StocksTabScreen() {
   );
 
   const processQuoteQueue = React.useCallback(() => {
+    if (!isMountedRef.current) {
+      return;
+    }
+
     while (
       inFlightSymbolsRef.current.size < MAX_CONCURRENT_QUOTE_REQUESTS &&
       quoteQueueRef.current.length > 0
@@ -422,7 +590,9 @@ export default function StocksTabScreen() {
       inFlightSymbolsRef.current.add(nextItem.symbol);
       void loadQuoteForSymbol(nextItem.symbol, nextItem.forceRefresh).finally(() => {
         inFlightSymbolsRef.current.delete(nextItem.symbol);
-        processQuoteQueue();
+        if (isMountedRef.current) {
+          processQuoteQueue();
+        }
       });
     }
   }, [loadQuoteForSymbol]);
@@ -464,13 +634,19 @@ export default function StocksTabScreen() {
   );
 
   const refreshStocksLive = React.useCallback(
-    async () => {
-      await loadSymbols(false);
+    async (forceLive = false) => {
+      await loadSymbols(false, forceLive);
+      if (!isMountedRef.current) {
+        return;
+      }
       hydratedSymbolsRef.current.clear();
       quoteQueueRef.current = [];
       queuedSymbolsRef.current.clear();
       inFlightSymbolsRef.current.clear();
-      enqueueQuoteLoads(prefetchSymbolsRef.current, true);
+      enqueueQuoteLoads(
+        prefetchSymbolsRef.current,
+        forceLive || shouldFetchLiveQuotesRef.current
+      );
     },
     [enqueueQuoteLoads, loadSymbols]
   );
@@ -480,6 +656,16 @@ export default function StocksTabScreen() {
       void refreshStocksLive();
     }, [refreshStocksLive])
   );
+
+  React.useEffect(() => {
+    const intervalId = setInterval(() => {
+      void refreshStocksLive();
+    }, STOCKS_REFRESH_INTERVAL_MS);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [refreshStocksLive]);
 
   React.useEffect(() => {
     const appStateSubscription = AppState.addEventListener("change", (nextState) => {
@@ -538,11 +724,16 @@ export default function StocksTabScreen() {
   const keyExtractor = React.useCallback((item: PsxSymbol) => item.symbol, []);
 
   const handlePullToRefresh = React.useCallback(async () => {
+    if (!isMountedRef.current) {
+      return;
+    }
     setIsRefreshing(true);
     try {
-      await refreshStocksLive();
+      await refreshStocksLive(true);
     } finally {
-      setIsRefreshing(false);
+      if (isMountedRef.current) {
+        setIsRefreshing(false);
+      }
     }
   }, [refreshStocksLive]);
 
@@ -590,33 +781,42 @@ export default function StocksTabScreen() {
 
   const emptyState = React.useMemo(
     () => (
-      <View className="flex-1 items-center justify-center px-5 pb-8 pt-6">
+      <View
+        className="flex-1 px-1 pb-8 pt-4"
+        style={
+          isBootstrapping
+            ? { minHeight: Math.max(windowHeight - insets.bottom - 220, 460) }
+            : undefined
+        }
+      >
         {isBootstrapping ? (
-          <View className="w-full rounded-2xl bg-brand-white/80 p-5 dark:bg-brand-white/10">
-            <AppSkeletonTextGroup rows={5} rowHeight={13} />
+          <View className="gap-2">
+            {Array.from({ length: stocksSkeletonRowCount }).map((_, index) => (
+              <StockRowSkeleton key={`stock-row-skeleton-${index}`} />
+            ))}
           </View>
         ) : symbols.length === 0 ? (
-          <>
+          <View className="items-center justify-center px-4 pt-6">
             <Text className="text-base font-bold text-app-text dark:text-app-textDark">
               No stocks available
             </Text>
             <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
               Pull down to retry loading symbols.
             </Text>
-          </>
+          </View>
         ) : (
-          <>
+          <View className="items-center justify-center px-4 pt-6">
             <Text className="text-base font-bold text-app-text dark:text-app-textDark">
               No match found
             </Text>
             <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
               Try another symbol, company, or sector keyword.
             </Text>
-          </>
+          </View>
         )}
       </View>
     ),
-    [isBootstrapping, symbols.length]
+    [insets.bottom, isBootstrapping, stocksSkeletonRowCount, symbols.length, windowHeight]
   );
 
   const listFooter = React.useMemo(() => {

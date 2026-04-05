@@ -29,6 +29,7 @@ import {
   getPortfolioHoldingsWithLatestQuotes,
   PortfolioHolding,
 } from "@/src/features/portfolio/portfolio-data";
+import { getCachedDpsMarketStatus } from "@/src/features/market/dps-market-status";
 import { subscribeToTradeMutations } from "@/src/features/trade/trade-events";
 import {
   formatPKRAmount,
@@ -376,10 +377,39 @@ export default function PortfolioTabScreen() {
     [holdings]
   );
 
-  const refreshPortfolio = React.useCallback(async (preferCachedFirst = true) => {
+  const refreshPortfolio = React.useCallback(async (
+    preferCachedFirst = true,
+    forceLive = false
+  ) => {
+    let hasUsableCachedHoldings = false;
     if (preferCachedFirst) {
       const cachedHoldings = await getPortfolioHoldingsWithCachedQuotes();
       setHoldings(cachedHoldings);
+      hasUsableCachedHoldings =
+        cachedHoldings.length === 0 ||
+        cachedHoldings.some((holding) => {
+          return (
+            holding.asOf !== null ||
+            holding.currentPrice > 0 ||
+            holding.previousClose > 0
+          );
+        });
+    }
+
+    let isMarketOpen = true;
+    if (!forceLive) {
+      try {
+        const cachedMarketStatus = await getCachedDpsMarketStatus();
+        isMarketOpen = cachedMarketStatus.uiStatus === "OPEN";
+      } catch {
+        isMarketOpen = true;
+      }
+    }
+
+    const shouldFetchLiveQuotes =
+      forceLive || isMarketOpen || !hasUsableCachedHoldings;
+    if (!shouldFetchLiveQuotes) {
+      return;
     }
 
     const latestHoldings = await getPortfolioHoldingsWithLatestQuotes();
@@ -389,7 +419,7 @@ export default function PortfolioTabScreen() {
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await refreshPortfolio(false);
+      await refreshPortfolio(false, true);
     } finally {
       setIsRefreshing(false);
     }
