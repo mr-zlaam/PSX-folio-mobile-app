@@ -834,7 +834,7 @@ export default function HomeScreen() {
                 </Text>
               </TouchableOpacity>
             </View>
-            <View className="mt-3 rounded-2xl bg-app-highlight/8 px-3 py-3 dark:bg-brand-white/5">
+            <View className="mt-3 rounded-3xl bg-app-highlight/8 px-3 py-3 dark:bg-brand-white/5">
               <View className="flex-row flex-wrap">
                 <View className="w-1/2 pb-3 pr-2">
                   <Text className="text-[10px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">

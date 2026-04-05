@@ -1,6 +1,10 @@
 import StockLineChart from "@/components/charts/stock-line-chart";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
 import {
+  AppChartSkeleton,
+  AppDetailScreenSkeleton,
+} from "@/components/ui/app-skeleton";
+import {
   formatPKRAmount,
   formatSignedPercentage,
 } from "@/src/features/home/home-formatters";
@@ -10,6 +14,7 @@ import {
   getMarketIndexDefinitionByCode,
   MarketIndexDetailSnapshot,
 } from "@/src/features/market/market-data";
+import { getCachedDpsMarketStatus } from "@/src/features/market/dps-market-status";
 import {
   getCachedStockChartSeries,
   getLatestStockChartSeries,
@@ -24,11 +29,11 @@ import { useGuardedRouter } from "@/src/lib/navigation";
 import { useColorScheme } from "nativewind";
 import React from "react";
 import {
-  ActivityIndicator,
   RefreshControl,
   ScrollView,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -222,6 +227,7 @@ function RangeBar({
 export default function MarketIndexScreen() {
   const router = useGuardedRouter();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
   const searchParams = useLocalSearchParams<{ code?: string | string[] }>();
@@ -249,7 +255,7 @@ export default function MarketIndexScreen() {
   const chartRequestIdRef = React.useRef(0);
 
   const refreshDetail = React.useCallback(
-    async (showLoader = false) => {
+    async (showLoader = false, forceLive = false) => {
       if (showLoader) {
         setIsInitialLoading(true);
       }
@@ -263,9 +269,14 @@ export default function MarketIndexScreen() {
         const cachedDetail = await getCachedMarketIndexDetail(normalizedCode);
         if (cachedDetail) {
           setDetail(cachedDetail);
+          if (showLoader) {
+            setIsInitialLoading(false);
+          }
         }
 
-        const latestDetail = await getLatestMarketIndexDetail(normalizedCode);
+        const latestDetail = await getLatestMarketIndexDetail(normalizedCode, {
+          forceLive,
+        });
         if (latestDetail) {
           setDetail(latestDetail);
         }
@@ -279,7 +290,7 @@ export default function MarketIndexScreen() {
   );
 
   const refreshChart = React.useCallback(
-    async (range: StockChartRange, showLoader = false) => {
+    async (range: StockChartRange, showLoader = false, forceLive = false) => {
       const requestId = chartRequestIdRef.current + 1;
       chartRequestIdRef.current = requestId;
 
@@ -298,6 +309,23 @@ export default function MarketIndexScreen() {
         const cachedSeries = await getCachedStockChartSeries(normalizedCode, range);
         if (requestId === chartRequestIdRef.current) {
           setChartSeries(cachedSeries);
+          if (showLoader && cachedSeries.points.length > 0) {
+            setIsChartLoading(false);
+          }
+        }
+
+        let shouldUseCachedOnly = false;
+        if (!forceLive) {
+          try {
+            const cachedDpsStatus = await getCachedDpsMarketStatus();
+            shouldUseCachedOnly = cachedDpsStatus.uiStatus !== "OPEN";
+          } catch {
+            shouldUseCachedOnly = false;
+          }
+        }
+
+        if (shouldUseCachedOnly) {
+          return;
         }
 
         const latestSeries = await getLatestStockChartSeries(normalizedCode, range);
@@ -339,7 +367,10 @@ export default function MarketIndexScreen() {
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await Promise.all([refreshDetail(), refreshChart(chartRange)]);
+      await Promise.all([
+        refreshDetail(false, true),
+        refreshChart(chartRange, false, true),
+      ]);
     } finally {
       setIsRefreshing(false);
     }
@@ -447,15 +478,13 @@ export default function MarketIndexScreen() {
             <View className="w-14" />
           </View>
 
-          {isInitialLoading ? (
-            <View className="items-center rounded-2xl bg-brand-white p-6 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
-              <ActivityIndicator
-                size="small"
-                color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
-              />
-              <Text className="mt-3 text-sm font-semibold text-app-text dark:text-app-textDark">
-                Loading index details...
-              </Text>
+          {isInitialLoading && !detail ? (
+            <View
+              style={{
+                minHeight: Math.max(windowHeight - insets.bottom - 120, 560),
+              }}
+            >
+              <AppDetailScreenSkeleton />
             </View>
           ) : !detail ? (
             <View className="rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
@@ -526,15 +555,7 @@ export default function MarketIndexScreen() {
 
                 <View className="mt-4">
                   {isChartLoading ? (
-                    <View className="items-center justify-center rounded-2xl bg-brand-white/70 p-6 dark:bg-brand-white/5">
-                      <ActivityIndicator
-                        size="small"
-                        color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
-                      />
-                      <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
-                        Loading chart...
-                      </Text>
-                    </View>
+                    <AppChartSkeleton />
                   ) : (
                     <StockLineChart
                       points={chartSeries.points}

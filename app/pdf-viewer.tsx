@@ -1,11 +1,12 @@
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
-import { APP_COLORS } from "@/src/theme/colors";
+import {
+  AppSkeletonBlock,
+  AppSkeletonTextGroup,
+} from "@/components/ui/app-skeleton";
 import { useLocalSearchParams } from "expo-router";
 import { useGuardedRouter } from "@/src/lib/navigation";
-import { useColorScheme } from "nativewind";
 import React from "react";
 import {
-  ActivityIndicator,
   Linking,
   Platform,
   Text,
@@ -39,8 +40,6 @@ function buildEmbeddedViewerUrl(pdfUrl: string): string {
 export default function PdfViewerScreen() {
   const router = useGuardedRouter();
   const insets = useSafeAreaInsets();
-  const { colorScheme } = useColorScheme();
-  const isDarkMode = colorScheme === "dark";
   const searchParams = useLocalSearchParams<{
     url?: string | string[];
     title?: string | string[];
@@ -186,14 +185,8 @@ export default function PdfViewerScreen() {
               originWhitelist={["*"]}
               startInLoadingState
               renderLoading={() => (
-                <View className="flex-1 items-center justify-center">
-                  <ActivityIndicator
-                    size="small"
-                    color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
-                  />
-                  <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
-                    Loading PDF...
-                  </Text>
+                <View className="flex-1 justify-center px-5">
+                  <AppSkeletonTextGroup rows={6} rowHeight={12} />
                 </View>
               )}
               onLoadStart={() => {
@@ -208,9 +201,7 @@ export default function PdfViewerScreen() {
 
             {isLoading ? (
               <View className="absolute right-3 top-3 rounded-xl bg-brand-white/90 px-2 py-1 dark:bg-brand-white/15">
-                <Text className="text-[10px] font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                  Loading
-                </Text>
+                <AppSkeletonBlock width={52} height={10} borderRadius={6} />
               </View>
             ) : null}
           </View>

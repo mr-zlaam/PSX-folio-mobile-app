@@ -1,4 +1,5 @@
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
+import { AppSkeletonTextGroup } from "@/components/ui/app-skeleton";
 import ShariahChip from "@/components/ui/shariah-chip";
 import {
   getCachedMarketIndexConstituents,
@@ -14,7 +15,6 @@ import { useGuardedRouter } from "@/src/lib/navigation";
 import { useColorScheme } from "nativewind";
 import React from "react";
 import {
-  ActivityIndicator,
   RefreshControl,
   ScrollView,
   Text,
@@ -170,7 +170,7 @@ export default function MarketIndexStocksScreen() {
   const [isRefreshing, setIsRefreshing] = React.useState(false);
 
   const refreshConstituents = React.useCallback(
-    async (showLoader = false) => {
+    async (showLoader = false, forceLive = false) => {
       if (showLoader) {
         setIsInitialLoading(true);
       }
@@ -185,10 +185,15 @@ export default function MarketIndexStocksScreen() {
           await getCachedMarketIndexConstituents(normalizedCode);
         if (cachedSnapshot) {
           setConstituents(cachedSnapshot);
+          if (showLoader) {
+            setIsInitialLoading(false);
+          }
         }
 
         const latestSnapshot =
-          await getLatestMarketIndexConstituents(normalizedCode);
+          await getLatestMarketIndexConstituents(normalizedCode, {
+            forceLive,
+          });
         if (latestSnapshot) {
           setConstituents(latestSnapshot);
         }
@@ -215,7 +220,7 @@ export default function MarketIndexStocksScreen() {
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await refreshConstituents();
+      await refreshConstituents(false, true);
     } finally {
       setIsRefreshing(false);
     }
@@ -362,14 +367,8 @@ export default function MarketIndexStocksScreen() {
           </View>
 
           {isInitialLoading && (constituents?.items.length ?? 0) === 0 ? (
-            <View className="items-center rounded-2xl bg-brand-white p-6 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
-              <ActivityIndicator
-                size="small"
-                color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
-              />
-              <Text className="mt-3 text-sm font-semibold text-app-text dark:text-app-textDark">
-                Loading stocks...
-              </Text>
+            <View className="rounded-2xl bg-brand-white p-6 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+              <AppSkeletonTextGroup rows={5} rowHeight={12} />
             </View>
           ) : null}
 

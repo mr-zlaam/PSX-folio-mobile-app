@@ -1,6 +1,5 @@
 import React from "react";
 import {
-  ActivityIndicator,
   RefreshControl,
   ScrollView,
   Text,
@@ -13,6 +12,10 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useColorScheme } from "nativewind";
 import AppButton from "@/components/ui/app-button";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
+import {
+  AppChartSkeleton,
+  AppSkeletonTextGroup,
+} from "@/components/ui/app-skeleton";
 import ShariahChip from "@/components/ui/shariah-chip";
 import StockLineChart from "@/components/charts/stock-line-chart";
 import {
@@ -332,14 +335,8 @@ export default function PortfolioPositionScreen() {
           </View>
 
           {isInitialLoading ? (
-            <View className="items-center rounded-3xl bg-brand-white/95 p-6 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
-              <ActivityIndicator
-                size="small"
-                color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
-              />
-              <Text className="mt-3 text-sm font-semibold text-app-text dark:text-app-textDark">
-                Loading position details...
-              </Text>
+            <View className="rounded-3xl bg-brand-white/95 p-6 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
+              <AppSkeletonTextGroup rows={4} rowHeight={14} />
             </View>
           ) : !holding ? (
             <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
@@ -514,15 +511,7 @@ export default function PortfolioPositionScreen() {
 
                 <View className="mt-4">
                   {isChartLoading ? (
-                    <View className="items-center justify-center rounded-2xl bg-brand-white/70 p-6 dark:bg-brand-white/5">
-                      <ActivityIndicator
-                        size="small"
-                        color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
-                      />
-                      <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
-                        Loading chart...
-                      </Text>
-                    </View>
+                    <AppChartSkeleton />
                   ) : (
                     <StockLineChart
                       points={chartSeries.points}

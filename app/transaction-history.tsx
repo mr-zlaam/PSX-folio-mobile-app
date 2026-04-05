@@ -1,7 +1,6 @@
 import React from "react";
 import { useGuardedRouter } from "@/src/lib/navigation";
 import {
-  ActivityIndicator,
   Modal,
   RefreshControl,
   ScrollView,
@@ -15,6 +14,7 @@ import { useColorScheme } from "nativewind";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
 import AppButton from "@/components/ui/app-button";
 import AppFeedbackModal from "@/components/ui/app-feedback-modal";
+import { AppSkeletonBlock } from "@/components/ui/app-skeleton";
 import { formatPKRAmount } from "@/src/features/home/home-formatters";
 import {
   BonusShareRecord,
@@ -719,9 +719,11 @@ export default function TransactionHistoryScreen() {
                           className="rounded-lg bg-brand-red/15 px-2.5 py-1.5"
                         >
                           {deletingEntryId === entry.id ? (
-                            <ActivityIndicator
-                              size="small"
-                              color={APP_COLORS.brand.red}
+                            <AppSkeletonBlock
+                              width={14}
+                              height={14}
+                              borderRadius={7}
+                              className="bg-brand-red/35"
                             />
                           ) : (
                             <MaterialCommunityIcons
@@ -844,7 +846,12 @@ export default function TransactionHistoryScreen() {
                 >
                   {deletingEntryId !== null ? (
                     <View className="items-center justify-center">
-                      <ActivityIndicator size="small" color={APP_COLORS.brand.white} />
+                      <AppSkeletonBlock
+                        width={56}
+                        height={10}
+                        borderRadius={6}
+                        className="bg-brand-white/40"
+                      />
                     </View>
                   ) : (
                     <Text className="text-center text-sm font-semibold text-brand-white">

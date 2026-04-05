@@ -2,7 +2,6 @@ import React from "react";
 import { useGuardedRouter } from "@/src/lib/navigation";
 import { useLocalSearchParams } from "expo-router";
 import {
-  ActivityIndicator,
   InteractionManager,
   Modal,
   RefreshControl,
@@ -20,6 +19,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
 import AppButton from "@/components/ui/app-button";
 import AppFeedbackModal from "@/components/ui/app-feedback-modal";
+import { AppSkeletonBlock } from "@/components/ui/app-skeleton";
 import { APP_COLORS } from "@/src/theme/colors";
 import { getLatestKse100Summary } from "@/src/features/home/home-data";
 import { getLatestSymbols } from "@/src/features/trade/trade-data";
@@ -522,7 +522,12 @@ export default function SettingsTabScreen() {
                 >
                   {isResettingPortfolio ? (
                     <View className="items-center justify-center">
-                      <ActivityIndicator size="small" color={APP_COLORS.brand.white} />
+                      <AppSkeletonBlock
+                        width={74}
+                        height={10}
+                        borderRadius={6}
+                        className="bg-brand-white/40"
+                      />
                     </View>
                   ) : (
                     <Text className="text-center text-sm font-semibold text-brand-white">

@@ -1,6 +1,5 @@
 import React from "react";
 import {
-  ActivityIndicator,
   RefreshControl,
   ScrollView,
   Text,
@@ -12,6 +11,7 @@ import { useGuardedRouter } from "@/src/lib/navigation";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
+import { AppSkeletonTextGroup } from "@/components/ui/app-skeleton";
 import ShariahChip from "@/components/ui/shariah-chip";
 import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
 import {
@@ -383,14 +383,8 @@ export default function PortfolioSectorScreen() {
           </View>
 
           {isInitialLoading ? (
-            <View className="items-center rounded-3xl bg-brand-white/95 p-6 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
-              <ActivityIndicator
-                size="small"
-                color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
-              />
-              <Text className="mt-3 text-sm font-semibold text-app-text dark:text-app-textDark">
-                Loading companies...
-              </Text>
+            <View className="rounded-3xl bg-brand-white/95 p-6 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
+              <AppSkeletonTextGroup rows={4} rowHeight={14} />
             </View>
           ) : holdings.length === 0 ? (
             <View className="rounded-2xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">

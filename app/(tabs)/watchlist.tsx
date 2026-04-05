@@ -1,4 +1,5 @@
 import AppButton from "@/components/ui/app-button";
+import { AppSkeletonTextGroup } from "@/components/ui/app-skeleton";
 import { useGuardedRouter } from "@/src/lib/navigation";
 import AppFeedbackModal, {
   AppFeedbackModalTone,
@@ -503,9 +504,9 @@ export default function WatchlistTabScreen() {
             <Text className="text-2xl font-extrabold text-app-text dark:text-app-textDark">
               Watchlist
             </Text>
-            <Text className="mt-3 text-sm font-semibold text-app-text dark:text-app-textDark">
-              Loading symbols...
-            </Text>
+            <View className="mt-4 w-full max-w-[260px] rounded-2xl bg-brand-white/80 p-4 dark:bg-brand-white/10">
+              <AppSkeletonTextGroup rows={3} rowHeight={12} />
+            </View>
           </View>
         ) : shouldShowEmptyState ? (
           <View className="items-center px-6">
@@ -547,9 +548,7 @@ export default function WatchlistTabScreen() {
 
             {shouldShowRowsLoader ? (
               <View className="rounded-2xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
-                <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
-                  Loading latest prices...
-                </Text>
+                <AppSkeletonTextGroup rows={3} rowHeight={12} />
               </View>
             ) : filteredWatchlistRows.length === 0 ? (
               <View className="rounded-2xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">

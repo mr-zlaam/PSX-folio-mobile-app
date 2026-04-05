@@ -15,7 +15,6 @@ type TabIconName =
   | "dots-horizontal-circle-outline";
 
 const MORE_MANAGED_ROUTES = new Set([
-  "market",
   "transactions",
   "stocks",
   "settings",
@@ -58,6 +57,10 @@ function getTabLabel(routeName: string): string {
 
   if (routeName === "watchlist") {
     return "Watchlist";
+  }
+
+  if (routeName === "market") {
+    return "Market";
   }
 
   return "More";
@@ -119,7 +122,7 @@ export default function TabsLayout() {
           return (
             <Text
               style={{
-                fontWeight: "700",
+                fontWeight: "600",
                 fontSize: 12,
                 marginBottom: 6,
                 color: shouldHighlight ? activeTintColor : inactiveTintColor,
@@ -138,7 +141,7 @@ export default function TabsLayout() {
               name={getTabIconName(route.name)}
               size={22}
               color={shouldHighlight ? activeTintColor : color}
-              style={{ opacity: shouldHighlight ? 1 : 0.75 }}
+              style={{ opacity: shouldHighlight ? 1 : 0.85 }}
             />
           );
         },
@@ -166,7 +169,6 @@ export default function TabsLayout() {
         name="market"
         options={{
           title: "Market",
-          href: null,
         }}
       />
       <Tabs.Screen

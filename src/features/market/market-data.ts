@@ -1,4 +1,5 @@
 import * as FileSystem from "expo-file-system/legacy";
+import { getCachedDpsMarketStatus } from "@/src/features/market/dps-market-status";
 
 export type MarketEndpointType = "int" | "eod";
 type MarketSource = "live" | "cache" | "fallback";
@@ -858,6 +859,21 @@ function buildMarketIndexDetail(
   };
 }
 
+async function shouldPreferCachedMarketData(
+  forceLive: boolean
+): Promise<boolean> {
+  if (forceLive) {
+    return false;
+  }
+
+  try {
+    const cachedStatus = await getCachedDpsMarketStatus();
+    return cachedStatus.uiStatus !== "OPEN";
+  } catch {
+    return false;
+  }
+}
+
 export function getMarketIndexDefinitions(): MarketIndexDefinition[] {
   return [...MARKET_INDEX_DEFINITIONS];
 }
@@ -886,7 +902,17 @@ export async function getCachedMarketSnapshot(): Promise<MarketIndexSnapshot[]> 
   });
 }
 
-export async function getLatestMarketSnapshot(): Promise<MarketIndexSnapshot[]> {
+export async function getLatestMarketSnapshot(options?: {
+  forceLive?: boolean;
+}): Promise<MarketIndexSnapshot[]> {
+  const shouldUseCache = await shouldPreferCachedMarketData(
+    options?.forceLive === true
+  );
+
+  if (shouldUseCache) {
+    return getCachedMarketSnapshot();
+  }
+
   const cachedItems = await getCachedMarketSnapshot();
   const cachedByCode = new Map(cachedItems.map((item) => [item.code, item]));
 
@@ -941,7 +967,10 @@ export async function getCachedMarketIndexDetail(
 }
 
 export async function getLatestMarketIndexDetail(
-  code: string
+  code: string,
+  options?: {
+    forceLive?: boolean;
+  }
 ): Promise<MarketIndexDetailSnapshot | null> {
   const definition = getMarketIndexDefinitionByCodeInternal(code);
   if (!definition) {
@@ -949,6 +978,12 @@ export async function getLatestMarketIndexDetail(
   }
 
   const cachedDetail = await getCachedMarketIndexDetail(definition.code);
+  const shouldUseCache = await shouldPreferCachedMarketData(
+    options?.forceLive === true
+  );
+  if (shouldUseCache) {
+    return cachedDetail;
+  }
 
   try {
     const [intradayRows, eodRows] = await Promise.all([
@@ -1009,7 +1044,10 @@ export async function getCachedMarketIndexConstituents(
 }
 
 export async function getLatestMarketIndexConstituents(
-  code: string
+  code: string,
+  options?: {
+    forceLive?: boolean;
+  }
 ): Promise<MarketIndexConstituentSnapshot | null> {
   const definition = getMarketIndexDefinitionByCodeInternal(code);
   if (!definition) {
@@ -1019,6 +1057,13 @@ export async function getLatestMarketIndexConstituents(
   const cachedSnapshot =
     (await getCachedMarketIndexConstituents(definition.code)) ??
     getFallbackConstituentSnapshot(definition.code);
+  const shouldUseCache = await shouldPreferCachedMarketData(
+    options?.forceLive === true
+  );
+  if (shouldUseCache) {
+    return cachedSnapshot;
+  }
+
   const endpointCandidates = getConstituentEndpointCandidates(definition.code);
 
   for (const endpointCode of endpointCandidates) {

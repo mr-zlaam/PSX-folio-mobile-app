@@ -1,4 +1,5 @@
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
+import { AppSkeletonTextGroup } from "@/components/ui/app-skeleton";
 import { useGuardedRouter } from "@/src/lib/navigation";
 import {
   getInAppNotifications,
@@ -13,7 +14,6 @@ import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useColorScheme } from "nativewind";
 import React from "react";
 import {
-  ActivityIndicator,
   RefreshControl,
   ScrollView,
   Text,
@@ -226,14 +226,8 @@ export default function NotificationsScreen() {
           </View>
 
           {isInitialLoading ? (
-            <View className="items-center justify-center rounded-3xl bg-brand-white p-8 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
-              <ActivityIndicator
-                size="small"
-                color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
-              />
-              <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
-                Checking latest updates...
-              </Text>
+            <View className="rounded-3xl bg-brand-white p-8 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+              <AppSkeletonTextGroup rows={5} rowHeight={12} />
             </View>
           ) : notifications.length === 0 ? (
             <View className="items-center rounded-3xl bg-brand-white p-6 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">

@@ -1,7 +1,8 @@
 import React from "react";
-import { Appearance, Text, View } from "react-native";
+import { Appearance, View } from "react-native";
 import { Redirect } from "expo-router";
 import { useColorScheme } from "nativewind";
+import { AppSkeletonTextGroup } from "@/components/ui/app-skeleton";
 import {
   AppTheme,
   getThemePreference,
@@ -53,9 +54,9 @@ export default function IndexScreen() {
   if (isBootstrapping) {
     return (
       <View className="flex-1 items-center justify-center bg-app-bg px-6 dark:bg-app-bgDark">
-        <Text className="text-base font-semibold text-app-text dark:text-app-textDark">
-          Preparing PSX Portfolio...
-        </Text>
+        <View className="w-full max-w-[260px] rounded-2xl bg-brand-white/80 p-4 dark:bg-brand-white/10">
+          <AppSkeletonTextGroup rows={3} rowHeight={12} />
+        </View>
       </View>
     );
   }

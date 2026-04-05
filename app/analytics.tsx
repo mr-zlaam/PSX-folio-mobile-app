@@ -1,5 +1,6 @@
 import StockLineChart from "@/components/charts/stock-line-chart";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
+import { AppSkeletonTextGroup } from "@/components/ui/app-skeleton";
 import {
   AnalyticsAllocationItem,
   AnalyticsSnapshot,
@@ -19,7 +20,6 @@ import { useGuardedRouter } from "@/src/lib/navigation";
 import { useColorScheme } from "nativewind";
 import React from "react";
 import {
-  ActivityIndicator,
   RefreshControl,
   ScrollView,
   Text,
@@ -423,14 +423,8 @@ export default function AnalyticsScreen() {
           </View>
 
           {isBootstrapping && !snapshot ? (
-            <View className="items-center rounded-3xl bg-brand-white/95 p-6 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
-              <ActivityIndicator
-                size="small"
-                color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
-              />
-              <Text className="mt-3 text-sm font-semibold text-app-text dark:text-app-textDark">
-                Building analytics...
-              </Text>
+            <View className="rounded-3xl bg-brand-white/95 p-6 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
+              <AppSkeletonTextGroup rows={5} rowHeight={14} />
             </View>
           ) : !snapshot ? (
             <View className="rounded-3xl bg-brand-white/95 p-5 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">

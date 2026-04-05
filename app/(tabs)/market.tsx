@@ -12,6 +12,7 @@ import {
 import { useGuardedRouter } from "@/src/lib/navigation";
 import { APP_COLORS } from "@/src/theme/colors";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
+import { AppListScreenSkeleton } from "@/components/ui/app-skeleton";
 
 import React from "react";
 import {
@@ -172,18 +173,38 @@ export default function MarketTabScreen() {
   }, [searchParams.originTab]);
   const shouldShowBackToMore = routeOriginTab === "more";
 
-  const refreshMarket = React.useCallback(async (preferCachedFirst = true) => {
+  const refreshMarket = React.useCallback(async (
+    preferCachedFirst = true,
+    forceLive = false
+  ) => {
+    let cachedDpsStatus: DpsMarketStatusSnapshot | null = null;
+
     if (preferCachedFirst) {
-      const [cachedSnapshot, cachedDpsStatus] = await Promise.all([
+      const [cachedSnapshot, statusSnapshot] = await Promise.all([
         getCachedMarketSnapshot(),
         getCachedDpsMarketStatus(),
       ]);
+      cachedDpsStatus = statusSnapshot;
       setIndices(cachedSnapshot);
-      setDpsMarketStatus(cachedDpsStatus);
+      setDpsMarketStatus(statusSnapshot);
+    }
+
+    if (!forceLive && cachedDpsStatus?.uiStatus !== "OPEN") {
+      void getLatestDpsMarketStatus().then((latestDpsStatus) => {
+        setDpsMarketStatus(latestDpsStatus);
+        if (latestDpsStatus.uiStatus !== "OPEN") {
+          return;
+        }
+
+        void getLatestMarketSnapshot().then((latestSnapshot) => {
+          setIndices(latestSnapshot);
+        });
+      });
+      return;
     }
 
     const [latestSnapshot, latestDpsStatus] = await Promise.all([
-      getLatestMarketSnapshot(),
+      getLatestMarketSnapshot({ forceLive }),
       getLatestDpsMarketStatus(),
     ]);
     setIndices(latestSnapshot);
@@ -235,7 +256,7 @@ export default function MarketTabScreen() {
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await refreshMarket(false);
+      await refreshMarket(false, true);
     } finally {
       setIsRefreshing(false);
     }
@@ -435,11 +456,7 @@ export default function MarketTabScreen() {
           </View>
 
           {isBootstrapping && !hasLiveData ? (
-            <View className="rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
-              <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
-                Loading market indices...
-              </Text>
-            </View>
+            <AppListScreenSkeleton cardCount={4} />
           ) : null}
 
           {!isBootstrapping && !hasLiveData ? (

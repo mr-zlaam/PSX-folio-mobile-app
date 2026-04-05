@@ -1,9 +1,12 @@
 
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
+import {
+  AppSkeletonBlock,
+  AppSkeletonTextGroup,
+} from "@/components/ui/app-skeleton";
 import { useColorScheme } from "nativewind";
 import React from "react";
 import {
-  ActivityIndicator,
   AppState,
   FlatList,
   RefreshControl,
@@ -179,8 +182,13 @@ const StockRow = React.memo(function StockRow({
           >
             {isQuoteReady
               ? `${formatSignedPriceChange(quote?.change ?? 0)} (${formatSignedPercentage(quote?.changePct ?? 0)})`
-              : "Loading..."}
+              : ""}
           </Text>
+          {!isQuoteReady ? (
+            <View className="mt-1">
+              <AppSkeletonBlock width={88} height={10} borderRadius={6} />
+            </View>
+          ) : null}
         </View>
       </View>
 
@@ -279,7 +287,7 @@ export default function StocksTabScreen() {
     STOCK_PAGE_SIZE
   );
 
-  const quoteQueueRef = React.useRef<Array<{ symbol: string; forceRefresh: boolean }>>(
+  const quoteQueueRef = React.useRef<{ symbol: string; forceRefresh: boolean }[]>(
     []
   );
   const queuedSymbolsRef = React.useRef(new Set<string>());
@@ -584,15 +592,9 @@ export default function StocksTabScreen() {
     () => (
       <View className="flex-1 items-center justify-center px-5 pb-8 pt-6">
         {isBootstrapping ? (
-          <>
-            <ActivityIndicator
-              size="small"
-              color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
-            />
-            <Text className="mt-3 text-sm font-semibold text-app-text dark:text-app-textDark">
-              Loading stocks...
-            </Text>
-          </>
+          <View className="w-full rounded-2xl bg-brand-white/80 p-5 dark:bg-brand-white/10">
+            <AppSkeletonTextGroup rows={5} rowHeight={13} />
+          </View>
         ) : symbols.length === 0 ? (
           <>
             <Text className="text-base font-bold text-app-text dark:text-app-textDark">
@@ -614,7 +616,7 @@ export default function StocksTabScreen() {
         )}
       </View>
     ),
-    [isBootstrapping, isDarkMode, symbols.length]
+    [isBootstrapping, symbols.length]
   );
 
   const listFooter = React.useMemo(() => {
