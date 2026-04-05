@@ -19,7 +19,8 @@ import {
 import ShariahChip from "@/components/ui/shariah-chip";
 import StockLineChart from "@/components/charts/stock-line-chart";
 import {
-  getPortfolioHoldingBySymbol,
+  getPortfolioHoldingsWithCachedQuotes,
+  getPortfolioHoldingsWithLatestQuotes,
   PortfolioHolding,
 } from "@/src/features/portfolio/portfolio-data";
 import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
@@ -35,6 +36,7 @@ import {
   StockChartRange,
   StockChartSeries,
 } from "@/src/features/trade/stock-chart-data";
+import { getCachedDpsMarketStatus } from "@/src/features/market/dps-market-status";
 import { APP_COLORS } from "@/src/theme/colors";
 
 const POSITION_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
@@ -162,7 +164,7 @@ export default function PortfolioPositionScreen() {
   const chartRequestIdRef = React.useRef(0);
 
   const refreshPosition = React.useCallback(
-    async (showLoader = false) => {
+    async (showLoader = false, forceLive = false) => {
       if (showLoader) {
         setIsInitialLoading(true);
       }
@@ -173,7 +175,40 @@ export default function PortfolioPositionScreen() {
           return;
         }
 
-        const nextHolding = await getPortfolioHoldingBySymbol(normalizedSymbol);
+        const cachedHoldings = await getPortfolioHoldingsWithCachedQuotes();
+        const cachedHolding =
+          cachedHoldings.find((item) => item.symbol === normalizedSymbol) ?? null;
+        const hasUsableCachedHolding = Boolean(
+          cachedHolding &&
+            (cachedHolding.asOf !== null ||
+              cachedHolding.currentPrice > 0 ||
+              cachedHolding.previousClose > 0)
+        );
+        if (cachedHolding) {
+          setHolding(cachedHolding);
+          if (showLoader && hasUsableCachedHolding) {
+            setIsInitialLoading(false);
+          }
+        }
+
+        let shouldFetchLive = forceLive || !hasUsableCachedHolding;
+        if (!forceLive) {
+          try {
+            const cachedMarketStatus = await getCachedDpsMarketStatus();
+            shouldFetchLive =
+              cachedMarketStatus.uiStatus === "OPEN" || !hasUsableCachedHolding;
+          } catch {
+            shouldFetchLive = true;
+          }
+        }
+
+        if (!shouldFetchLive) {
+          return;
+        }
+
+        const latestHoldings = await getPortfolioHoldingsWithLatestQuotes();
+        const nextHolding =
+          latestHoldings.find((item) => item.symbol === normalizedSymbol) ?? null;
         setHolding(nextHolding);
       } finally {
         if (showLoader) {
@@ -203,7 +238,7 @@ export default function PortfolioPositionScreen() {
   );
 
   const refreshChart = React.useCallback(
-    async (range: StockChartRange, showLoader = false) => {
+    async (range: StockChartRange, showLoader = false, forceLive = false) => {
       const requestId = chartRequestIdRef.current + 1;
       chartRequestIdRef.current = requestId;
 
@@ -220,8 +255,27 @@ export default function PortfolioPositionScreen() {
         }
 
         const cachedSeries = await getCachedStockChartSeries(normalizedSymbol, range);
+        const hasUsableCachedSeries = cachedSeries.points.length > 0;
         if (requestId === chartRequestIdRef.current) {
           setChartSeries(cachedSeries);
+          if (showLoader && hasUsableCachedSeries) {
+            setIsChartLoading(false);
+          }
+        }
+
+        let shouldFetchLive = forceLive || !hasUsableCachedSeries;
+        if (!forceLive) {
+          try {
+            const cachedMarketStatus = await getCachedDpsMarketStatus();
+            shouldFetchLive =
+              cachedMarketStatus.uiStatus === "OPEN" || !hasUsableCachedSeries;
+          } catch {
+            shouldFetchLive = true;
+          }
+        }
+
+        if (!shouldFetchLive) {
+          return;
         }
 
         const latestSeries = await getLatestStockChartSeries(normalizedSymbol, range);
@@ -240,7 +294,10 @@ export default function PortfolioPositionScreen() {
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await Promise.all([refreshPosition(), refreshChart(chartRange)]);
+      await Promise.all([
+        refreshPosition(false, true),
+        refreshChart(chartRange, false, true),
+      ]);
     } finally {
       setIsRefreshing(false);
     }

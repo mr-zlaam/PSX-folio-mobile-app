@@ -37,6 +37,7 @@ import {
   getSavedDividendRecords,
 } from "@/src/features/dividend/dividend-records";
 import { subscribeToTradeMutations } from "@/src/features/trade/trade-events";
+import { calculateBrokerFeeAmount } from "@/src/lib/broker-fee";
 import { APP_COLORS } from "@/src/theme/colors";
 import {
   BottomSheetBackdrop,
@@ -55,6 +56,7 @@ type TransactionEntry = {
   title: string;
   subtitle: string;
   amount: number;
+  brokerDeductionAmount: number;
   occurredAt: string;
 };
 
@@ -163,6 +165,14 @@ function formatRecordDateTime(value: string): string {
 function toTradeEntry(order: TradeOrderRecord): TransactionEntry {
   const grossAmount = order.price * order.units;
   const signedAmount = order.side === "buy" ? -grossAmount : grossAmount;
+  const brokerDeductionAmount = calculateBrokerFeeAmount({
+    price: order.price,
+    units: order.units,
+    brokerFeeType: order.brokerFeeType,
+    brokerFeeValue: order.brokerFeeValue,
+    brokerFeePct:
+      typeof order.brokerFeePct === "number" ? order.brokerFeePct : null,
+  });
 
   return {
     id: `trade_${order.id}`,
@@ -172,6 +182,7 @@ function toTradeEntry(order: TradeOrderRecord): TransactionEntry {
     title: order.side === "buy" ? "Buy Order" : "Sell Order",
     subtitle: `${Math.round(order.units)} shares @ ${formatPKRAmount(order.price)}`,
     amount: signedAmount,
+    brokerDeductionAmount,
     occurredAt: order.tradedAt || order.createdAt,
   };
 }
@@ -185,6 +196,7 @@ function toDividendEntry(record: DividendRecord): TransactionEntry {
     title: "Dividend",
     subtitle: `${Math.round(record.shares)} shares`,
     amount: record.finalAmount,
+    brokerDeductionAmount: 0,
     occurredAt: record.dividendDate || record.createdAt,
   };
 }
@@ -198,6 +210,7 @@ function toDepositEntry(record: DepositRecord): TransactionEntry {
     title: "Deposit",
     subtitle: record.note ? record.note : "Portfolio funding",
     amount: record.amount,
+    brokerDeductionAmount: 0,
     occurredAt: record.depositedAt || record.createdAt,
   };
 }
@@ -211,6 +224,7 @@ function toBonusEntry(record: BonusShareRecord): TransactionEntry {
     title: "Bonus Share",
     subtitle: `${Math.round(record.units)} shares`,
     amount: 0,
+    brokerDeductionAmount: 0,
     occurredAt: record.awardedAt || record.createdAt,
   };
 }
@@ -657,6 +671,11 @@ export default function TransactionHistoryScreen() {
                       <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
                         {entry.subtitle}
                       </Text>
+                      {entry.type === "buy" || entry.type === "sell" ? (
+                        <Text className="mt-1 text-[11px] font-semibold text-brand-red">
+                          Broker Deduction: -{formatPKRAmount(entry.brokerDeductionAmount)}
+                        </Text>
+                      ) : null}
                     </View>
 
                     <View className="items-end">

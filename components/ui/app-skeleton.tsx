@@ -15,26 +15,6 @@ type AppSkeletonBlockProps = {
   style?: ViewStyle;
 };
 
-const SHARED_SHIMMER_VALUE = new Animated.Value(0);
-let isSharedShimmerRunning = false;
-
-function ensureSharedShimmerAnimationStarted() {
-  if (isSharedShimmerRunning) {
-    return;
-  }
-
-  isSharedShimmerRunning = true;
-  SHARED_SHIMMER_VALUE.setValue(0);
-  Animated.loop(
-    Animated.timing(SHARED_SHIMMER_VALUE, {
-      toValue: 1,
-      duration: 1200,
-      easing: Easing.linear,
-      useNativeDriver: true,
-    })
-  ).start();
-}
-
 export function AppSkeletonBlock({
   width = "100%",
   height = 12,
@@ -44,25 +24,40 @@ export function AppSkeletonBlock({
 }: AppSkeletonBlockProps) {
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
+  const shimmerProgress = React.useRef(new Animated.Value(0)).current;
   const shimmerTranslateX = React.useMemo(
     () =>
-      SHARED_SHIMMER_VALUE.interpolate({
+      shimmerProgress.interpolate({
         inputRange: [0, 1],
-        outputRange: [-160, 420],
+        outputRange: [-220, 520],
       }),
-    []
+    [shimmerProgress]
   );
 
   React.useEffect(() => {
-    ensureSharedShimmerAnimationStarted();
-  }, []);
+    shimmerProgress.setValue(0);
+    const animation = Animated.loop(
+      Animated.timing(shimmerProgress, {
+        toValue: 1,
+        duration: 1050,
+        easing: Easing.linear,
+        useNativeDriver: true,
+      })
+    );
+    animation.start();
+
+    return () => {
+      animation.stop();
+      shimmerProgress.stopAnimation();
+    };
+  }, [shimmerProgress]);
 
   const blockColor = isDarkMode
-    ? "rgba(255,255,255,0.14)"
-    : "rgba(20,10,38,0.10)";
+    ? "rgba(255,255,255,0.16)"
+    : "rgba(20,10,38,0.12)";
   const shimmerColor = isDarkMode
-    ? "rgba(255,255,255,0.28)"
-    : "rgba(255,255,255,0.78)";
+    ? "rgba(255,255,255,0.34)"
+    : "rgba(255,255,255,0.92)";
 
   return (
     <View className={className} style={style}>
@@ -82,10 +77,10 @@ export function AppSkeletonBlock({
             position: "absolute",
             top: 0,
             bottom: 0,
-            width: 110,
+            width: 140,
             backgroundColor: shimmerColor,
-            opacity: isDarkMode ? 0.58 : 0.72,
-            transform: [{ translateX: shimmerTranslateX }],
+            opacity: isDarkMode ? 0.64 : 0.78,
+            transform: [{ translateX: shimmerTranslateX }, { rotateZ: "14deg" }],
           }}
         />
       </View>

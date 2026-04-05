@@ -18,6 +18,10 @@ import { useColorScheme } from "nativewind";
 import AppFeedbackModal, {
   AppFeedbackModalTone,
 } from "@/components/ui/app-feedback-modal";
+import {
+  AppListScreenSkeleton,
+  AppSkeletonBlock,
+} from "@/components/ui/app-skeleton";
 import ShariahChip from "@/components/ui/shariah-chip";
 import {
   exportPortfolioWorkbookBackup,
@@ -361,6 +365,7 @@ export default function PortfolioTabScreen() {
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
   const [holdings, setHoldings] = React.useState<PortfolioHolding[]>([]);
+  const [isInitialLoading, setIsInitialLoading] = React.useState(true);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [isFilterPanelVisible, setIsFilterPanelVisible] = React.useState(false);
   const [isBackupBusy, setIsBackupBusy] = React.useState(false);
@@ -379,41 +384,55 @@ export default function PortfolioTabScreen() {
 
   const refreshPortfolio = React.useCallback(async (
     preferCachedFirst = true,
-    forceLive = false
+    forceLive = false,
+    showLoader = false
   ) => {
-    let hasUsableCachedHoldings = false;
-    if (preferCachedFirst) {
-      const cachedHoldings = await getPortfolioHoldingsWithCachedQuotes();
-      setHoldings(cachedHoldings);
-      hasUsableCachedHoldings =
-        cachedHoldings.length === 0 ||
-        cachedHoldings.some((holding) => {
-          return (
-            holding.asOf !== null ||
-            holding.currentPrice > 0 ||
-            holding.previousClose > 0
-          );
-        });
+    if (showLoader) {
+      setIsInitialLoading(true);
     }
 
-    let isMarketOpen = true;
-    if (!forceLive) {
-      try {
-        const cachedMarketStatus = await getCachedDpsMarketStatus();
-        isMarketOpen = cachedMarketStatus.uiStatus === "OPEN";
-      } catch {
-        isMarketOpen = true;
+    let hasUsableCachedHoldings = false;
+    try {
+      if (preferCachedFirst) {
+        const cachedHoldings = await getPortfolioHoldingsWithCachedQuotes();
+        setHoldings(cachedHoldings);
+        hasUsableCachedHoldings =
+          cachedHoldings.length === 0 ||
+          cachedHoldings.some((holding) => {
+            return (
+              holding.asOf !== null ||
+              holding.currentPrice > 0 ||
+              holding.previousClose > 0
+            );
+          });
+        if (showLoader && hasUsableCachedHoldings) {
+          setIsInitialLoading(false);
+        }
+      }
+
+      let isMarketOpen = true;
+      if (!forceLive) {
+        try {
+          const cachedMarketStatus = await getCachedDpsMarketStatus();
+          isMarketOpen = cachedMarketStatus.uiStatus === "OPEN";
+        } catch {
+          isMarketOpen = true;
+        }
+      }
+
+      const shouldFetchLiveQuotes =
+        forceLive || isMarketOpen || !hasUsableCachedHoldings;
+      if (!shouldFetchLiveQuotes) {
+        return;
+      }
+
+      const latestHoldings = await getPortfolioHoldingsWithLatestQuotes();
+      setHoldings(latestHoldings);
+    } finally {
+      if (showLoader) {
+        setIsInitialLoading(false);
       }
     }
-
-    const shouldFetchLiveQuotes =
-      forceLive || isMarketOpen || !hasUsableCachedHoldings;
-    if (!shouldFetchLiveQuotes) {
-      return;
-    }
-
-    const latestHoldings = await getPortfolioHoldingsWithLatestQuotes();
-    setHoldings(latestHoldings);
   }, []);
 
   const handlePullToRefresh = React.useCallback(async () => {
@@ -460,7 +479,7 @@ export default function PortfolioTabScreen() {
   }, [displayMode, groupingMode, hasHydratedViewPreferences]);
 
   React.useEffect(() => {
-    void refreshPortfolio(true);
+    void refreshPortfolio(true, false, true);
     const intervalId = setInterval(() => {
       void refreshPortfolio(true);
     }, PORTFOLIO_REFRESH_INTERVAL_MS);
@@ -742,7 +761,20 @@ export default function PortfolioTabScreen() {
             </View>
           ) : null}
 
-          {holdings.length === 0 ? (
+          {isInitialLoading ? (
+            <View className="gap-3">
+              <View className="rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/30 dark:bg-brand-white/10">
+                <AppSkeletonBlock width="36%" height={12} borderRadius={7} />
+                <AppSkeletonBlock
+                  className="mt-3"
+                  width="100%"
+                  height={36}
+                  borderRadius={12}
+                />
+              </View>
+              <AppListScreenSkeleton cardCount={4} />
+            </View>
+          ) : holdings.length === 0 ? (
             <View className="rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
               <Text className="text-base font-semibold text-app-text dark:text-app-textDark">
                 No holdings yet.

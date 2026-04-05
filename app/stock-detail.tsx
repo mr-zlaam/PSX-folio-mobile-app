@@ -413,7 +413,8 @@ function CompanyMetricRows({
       {metricNumbers.map((metricItem) => {
         const detectedUrl = extractUrlFromText(metricItem.value);
         const canOpenUrl = Boolean(detectedUrl) && Boolean(onOpenUrl);
-        const isMarketCapMetric = /market\s*cap/i.test(metricItem.label);
+        const shouldHidePercentageForMetric =
+          /market\s*cap|shares|free\s*float/i.test(metricItem.label);
         const computedPercentage =
           showCalculatedPercentage &&
           metricItem.embeddedPercentage === null &&
@@ -423,7 +424,7 @@ function CompanyMetricRows({
             ? (metricItem.numericValue / percentageDenominator) * 100
             : null;
         const percentageText =
-          isMarketCapMetric
+          shouldHidePercentageForMetric
             ? null
             : metricItem.embeddedPercentage !== null
               ? formatMetricPercentage(metricItem.embeddedPercentage)

@@ -27,6 +27,7 @@ import {
   getPortfolioDisplayModePreference,
   setPortfolioDisplayModePreference,
 } from "@/src/lib/app-preferences";
+import { getCachedDpsMarketStatus } from "@/src/features/market/dps-market-status";
 import { APP_COLORS } from "@/src/theme/colors";
 
 const SECTOR_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
@@ -267,7 +268,7 @@ export default function PortfolioSectorScreen() {
   );
 
   const refreshSector = React.useCallback(
-    async (showLoader = false) => {
+    async (showLoader = false, forceLive = false) => {
       if (showLoader) {
         setIsInitialLoading(true);
       }
@@ -281,6 +282,33 @@ export default function PortfolioSectorScreen() {
 
         const cachedHoldings = await getPortfolioHoldingsWithCachedQuotes();
         applySectorHoldings(cachedHoldings);
+        const hasUsableCachedHoldings =
+          cachedHoldings.length === 0 ||
+          cachedHoldings.some((holding) => {
+            return (
+              holding.asOf !== null ||
+              holding.currentPrice > 0 ||
+              holding.previousClose > 0
+            );
+          });
+        if (showLoader && hasUsableCachedHoldings) {
+          setIsInitialLoading(false);
+        }
+
+        let shouldFetchLive = forceLive || !hasUsableCachedHoldings;
+        if (!forceLive) {
+          try {
+            const cachedMarketStatus = await getCachedDpsMarketStatus();
+            shouldFetchLive =
+              cachedMarketStatus.uiStatus === "OPEN" || !hasUsableCachedHoldings;
+          } catch {
+            shouldFetchLive = true;
+          }
+        }
+
+        if (!shouldFetchLive) {
+          return;
+        }
 
         const latestHoldings = await getPortfolioHoldingsWithLatestQuotes();
         applySectorHoldings(latestHoldings);
@@ -296,7 +324,7 @@ export default function PortfolioSectorScreen() {
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await refreshSector();
+      await refreshSector(false, true);
     } finally {
       setIsRefreshing(false);
     }

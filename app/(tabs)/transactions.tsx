@@ -74,7 +74,6 @@ const TRADE_QUOTE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
 type TradeSide = "buy" | "sell";
 type BrokerMode = "saved" | "custom";
-type TradeDateTimePickerMode = "date" | "time";
 type TradeNoticeState = {
   title: string;
   message: string;
@@ -87,14 +86,17 @@ function getTaxpayerProfileLabel(profile: TaxpayerProfile): string {
   return profile === "filer" ? "Filer" : "Non-Filer";
 }
 
-function formatDateTimeInput(date: Date): string {
+function formatDateInput(date: Date): string {
   const year = date.getFullYear();
   const month = String(date.getMonth() + 1).padStart(2, "0");
   const day = String(date.getDate()).padStart(2, "0");
-  const hours = String(date.getHours()).padStart(2, "0");
-  const minutes = String(date.getMinutes()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
 
-  return `${year}-${month}-${day} ${hours}:${minutes}`;
+function normalizeTradeDateForStorage(date: Date): string {
+  const normalizedDate = new Date(date);
+  normalizedDate.setHours(12, 0, 0, 0);
+  return normalizedDate.toISOString();
 }
 
 function formatEditablePrice(value: number): string {
@@ -247,11 +249,7 @@ export default function TransactionsTabScreen() {
   const [priceInput, setPriceInput] = React.useState("");
   const [unitsInput, setUnitsInput] = React.useState("");
   const [tradeDateTime, setTradeDateTime] = React.useState(new Date());
-  const [tradeDateTimePickerMode, setTradeDateTimePickerMode] =
-    React.useState<TradeDateTimePickerMode>("date");
   const [isTradeDateTimePickerVisible, setIsTradeDateTimePickerVisible] =
-    React.useState(false);
-  const [isAwaitingTimeSelection, setIsAwaitingTimeSelection] =
     React.useState(false);
   const [customBrokerFeeType, setCustomBrokerFeeType] =
     React.useState<BrokerFeeType>("percentage");
@@ -903,7 +901,7 @@ export default function TransactionsTabScreen() {
             symbol: normalizedSymbol,
             price: parsedPrice,
             units: parsedUnits,
-            tradedAt: tradeDateTime.toISOString(),
+            tradedAt: normalizeTradeDateForStorage(tradeDateTime),
             brokerMode,
             brokerName,
             brokerFeeType,
@@ -914,7 +912,7 @@ export default function TransactionsTabScreen() {
             symbol: normalizedSymbol,
             price: parsedPrice,
             units: parsedUnits,
-            tradedAt: tradeDateTime.toISOString(),
+            tradedAt: normalizeTradeDateForStorage(tradeDateTime),
             brokerMode,
             brokerName,
             brokerFeeType,
@@ -1040,55 +1038,22 @@ export default function TransactionsTabScreen() {
     showTradeNotice,
   ]);
 
-  const handleStartTradeDateTimeSelection = React.useCallback(() => {
-    setTradeDateTimePickerMode("date");
-    setIsAwaitingTimeSelection(false);
+  const handleStartTradeDateSelection = React.useCallback(() => {
     setIsTradeDateTimePickerVisible(true);
   }, []);
 
-  const handleTradeDateTimeChange = React.useCallback(
+  const handleTradeDateChange = React.useCallback(
     (event: DateTimePickerEvent, selectedValue?: Date) => {
       if (event.type === "dismissed" || !selectedValue) {
         setIsTradeDateTimePickerVisible(false);
-        setIsAwaitingTimeSelection(false);
-        setTradeDateTimePickerMode("date");
         return;
       }
 
-      if (tradeDateTimePickerMode === "date") {
-        setTradeDateTime((currentValue) => {
-          const nextValue = new Date(currentValue);
-          nextValue.setFullYear(
-            selectedValue.getFullYear(),
-            selectedValue.getMonth(),
-            selectedValue.getDate()
-          );
-          return nextValue;
-        });
-
-        setTradeDateTimePickerMode("time");
-        setIsAwaitingTimeSelection(true);
-
-        if (Platform.OS === "android") {
-          setIsTradeDateTimePickerVisible(false);
-          setTimeout(() => {
-            setIsTradeDateTimePickerVisible(true);
-          }, 0);
-        }
-        return;
-      }
-
-      setTradeDateTime((currentValue) => {
-        const nextValue = new Date(currentValue);
-        nextValue.setHours(selectedValue.getHours(), selectedValue.getMinutes());
-        return nextValue;
-      });
+      setTradeDateTime(selectedValue);
 
       setIsTradeDateTimePickerVisible(false);
-      setIsAwaitingTimeSelection(false);
-      setTradeDateTimePickerMode("date");
     },
-    [tradeDateTimePickerMode]
+    []
   );
 
   return (
@@ -1299,15 +1264,15 @@ export default function TransactionsTabScreen() {
 
                 <View className="flex-1">
                   <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                    Trade Date & Time
+                    Trade Date
                   </Text>
                   <TouchableOpacity
                     activeOpacity={0.88}
-                    onPress={handleStartTradeDateTimeSelection}
+                    onPress={handleStartTradeDateSelection}
                     className="mt-1 rounded-xl border border-app-highlight/25 bg-app-highlight/8 px-3 py-2 dark:border-app-highlightDark/35 dark:bg-brand-white/5"
                   >
                     <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
-                      {formatDateTimeInput(tradeDateTime)}
+                      {formatDateInput(tradeDateTime)}
                     </Text>
                   </TouchableOpacity>
                 </View>
@@ -1555,14 +1520,14 @@ export default function TransactionsTabScreen() {
             {isTradeDateTimePickerVisible ? (
               <View className="mt-4 rounded-2xl bg-brand-white/70 p-2 dark:bg-brand-white/5">
                 <Text className="px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                  {isAwaitingTimeSelection ? "Pick Time" : "Pick Date"}
+                  Pick Date
                 </Text>
                 <DateTimePicker
-                  key={tradeDateTimePickerMode}
                   value={tradeDateTime}
-                  mode={tradeDateTimePickerMode}
+                  mode="date"
                   display="default"
-                  onChange={handleTradeDateTimeChange}
+                  themeVariant={isDarkMode ? "dark" : "light"}
+                  onChange={handleTradeDateChange}
                 />
               </View>
             ) : null}

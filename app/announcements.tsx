@@ -1,5 +1,8 @@
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
-import { AppSkeletonTextGroup } from "@/components/ui/app-skeleton";
+import {
+  AppListScreenSkeleton,
+  AppSkeletonBlock,
+} from "@/components/ui/app-skeleton";
 import {
   getCachedPsxAnnouncements,
   getLatestPsxAnnouncements,
@@ -27,6 +30,7 @@ import {
   ScrollView,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -113,6 +117,7 @@ function AnnouncementSourceRow({
 export default function AnnouncementsScreen() {
   const router = useGuardedRouter();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
   const searchParams = useLocalSearchParams<{ source?: string | string[] }>();
@@ -262,6 +267,10 @@ export default function AnnouncementsScreen() {
   }, [searchParams.source]);
 
   const announcementItems = snapshot.items;
+  const loadingSkeletonMinHeight = React.useMemo(
+    () => Math.max(520, windowHeight - insets.top - insets.bottom - 120),
+    [insets.bottom, insets.top, windowHeight],
+  );
 
   return (
     <SafeAreaView
@@ -324,8 +333,23 @@ export default function AnnouncementsScreen() {
           </View>
 
           {isInitialLoading ? (
-            <View className="rounded-3xl bg-brand-white p-8 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
-              <AppSkeletonTextGroup rows={5} rowHeight={12} />
+            <View style={{ minHeight: loadingSkeletonMinHeight }} className="gap-3">
+              <View className="rounded-3xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+                <AppSkeletonBlock width="42%" height={12} borderRadius={7} />
+                <AppSkeletonBlock
+                  className="mt-2"
+                  width="28%"
+                  height={11}
+                  borderRadius={7}
+                />
+                <AppSkeletonBlock
+                  className="mt-2"
+                  width="36%"
+                  height={10}
+                  borderRadius={6}
+                />
+              </View>
+              <AppListScreenSkeleton cardCount={5} />
             </View>
           ) : announcementItems.length === 0 ? (
             <View className="rounded-3xl bg-brand-white p-6 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">

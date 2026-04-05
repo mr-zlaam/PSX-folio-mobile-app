@@ -1,5 +1,8 @@
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
-import { AppSkeletonTextGroup } from "@/components/ui/app-skeleton";
+import {
+  AppListScreenSkeleton,
+  AppSkeletonBlock,
+} from "@/components/ui/app-skeleton";
 import { useGuardedRouter } from "@/src/lib/navigation";
 import {
   getInAppNotifications,
@@ -18,6 +21,7 @@ import {
   ScrollView,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
@@ -47,6 +51,7 @@ function formatTimestamp(value: string | null): string {
 export default function NotificationsScreen() {
   const router = useGuardedRouter();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
 
@@ -162,6 +167,11 @@ export default function NotificationsScreen() {
     [router],
   );
 
+  const loadingSkeletonMinHeight = React.useMemo(
+    () => Math.max(520, windowHeight - insets.top - insets.bottom - 120),
+    [insets.bottom, insets.top, windowHeight],
+  );
+
   return (
     <SafeAreaView
       edges={["top", "left", "right"]}
@@ -226,8 +236,20 @@ export default function NotificationsScreen() {
           </View>
 
           {isInitialLoading ? (
-            <View className="rounded-3xl bg-brand-white p-8 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
-              <AppSkeletonTextGroup rows={5} rowHeight={12} />
+            <View style={{ minHeight: loadingSkeletonMinHeight }} className="gap-3">
+              <View className="rounded-3xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+                <View className="flex-row items-center justify-between">
+                  <AppSkeletonBlock width="26%" height={12} borderRadius={7} />
+                  <AppSkeletonBlock width={40} height={20} borderRadius={10} />
+                </View>
+                <AppSkeletonBlock
+                  className="mt-3"
+                  width="62%"
+                  height={12}
+                  borderRadius={7}
+                />
+              </View>
+              <AppListScreenSkeleton cardCount={5} />
             </View>
           ) : notifications.length === 0 ? (
             <View className="items-center rounded-3xl bg-brand-white p-6 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
