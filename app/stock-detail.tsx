@@ -79,18 +79,21 @@ const COMPANY_DETAIL_TOP_TAB_KEYS = [
 const FUNDAMENTALS_TAB_KEYS = ["equity", "financials", "ratios"] as const;
 const ANNOUNCEMENT_FILTER_OPTIONS = [
   { value: "all", label: "All" },
-  { value: "financialResults", label: "Financial Results" },
-  { value: "boardMeeting", label: "Board Meeting" },
   { value: "dividend", label: "Dividend" },
-  { value: "materialInfo", label: "Material Info" },
-  { value: "corporateBriefing", label: "Corporate Briefing" },
-  { value: "disclosureOfInterest", label: "Disclosure of Interest" },
-  { value: "other", label: "Other" },
+  { value: "boardMeeting", label: "Board Meeting" },
+  { value: "financialResults", label: "Earnings Update" },
+  { value: "corporateBriefing", label: "Briefing Session" },
+  { value: "materialInfo", label: "Material Update" },
+  { value: "disclosureOfInterest", label: "Interest Disclosure" },
+  { value: "other", label: "General Notice" },
 ] as const;
 
 type CompanyDetailTopTabKey = (typeof COMPANY_DETAIL_TOP_TAB_KEYS)[number];
 type FundamentalsTabKey = (typeof FUNDAMENTALS_TAB_KEYS)[number];
 type AnnouncementFilterKey = (typeof ANNOUNCEMENT_FILTER_OPTIONS)[number]["value"];
+type CategorizedAnnouncementItem = CompanyDetailAnnouncement & {
+  normalizedCategory: AnnouncementFilterKey;
+};
 
 function getValueToneClassName(value: number): string {
   if (value > 0) {
@@ -388,49 +391,119 @@ function getAnnouncementFilterLabel(filterKey: AnnouncementFilterKey): string {
 function classifyAnnouncementCategory(
   announcement: CompanyDetailAnnouncement
 ): AnnouncementFilterKey {
+  const containsAny = (value: string, tokens: readonly string[]): boolean => {
+    return tokens.some((token) => value.includes(token));
+  };
+
+  const normalizedCategory = announcement.category.toLowerCase().trim();
   const normalizedText = `${announcement.category} ${announcement.title} ${announcement.document}`
     .toLowerCase()
     .trim();
 
+  // Keep dividend first so dividend-type notices from "Others"
+  // do not leak into broad categories.
   if (
-    normalizedText.includes("disclosure of interest") ||
-    normalizedText.includes("disclosure")
+    containsAny(normalizedText, [
+      "dividend",
+      "cash dividend",
+      "interim dividend",
+      "final dividend",
+      "distribution",
+      "payout",
+      "dps",
+    ])
   ) {
-    return "disclosureOfInterest";
+    return "dividend";
   }
 
   if (
-    normalizedText.includes("corporate briefing") ||
-    normalizedText.includes("cbs")
+    normalizedCategory.includes("board meeting") ||
+    normalizedCategory.includes("board meetings")
+  ) {
+    return "boardMeeting";
+  }
+
+  if (normalizedCategory.includes("financial result")) {
+    return "financialResults";
+  }
+
+  if (
+    normalizedCategory.includes("corporate briefing") ||
+    normalizedCategory.includes("briefing")
   ) {
     return "corporateBriefing";
   }
 
   if (
-    normalizedText.includes("material information") ||
-    normalizedText.includes("material info")
+    normalizedCategory.includes("material information") ||
+    normalizedCategory.includes("material info")
   ) {
     return "materialInfo";
   }
 
-  if (normalizedText.includes("dividend")) {
-    return "dividend";
+  if (normalizedCategory.includes("disclosure")) {
+    return "disclosureOfInterest";
   }
 
   if (
-    normalizedText.includes("board meeting") ||
-    normalizedText.includes("agm") ||
-    normalizedText.includes("eogm")
+    containsAny(normalizedText, [
+      "board meeting",
+      "board meetings",
+      "board of directors",
+      "bod meeting",
+      "agm",
+      "eogm",
+    ])
   ) {
     return "boardMeeting";
   }
 
   if (
-    normalizedText.includes("financial result") ||
-    normalizedText.includes("financials") ||
-    normalizedText.includes("result")
+    containsAny(normalizedText, [
+      "financial result",
+      "financial results",
+      "quarterly result",
+      "annual result",
+      "half yearly result",
+      "half yearly report",
+      "quarterly report",
+      "annual report",
+      "statement of accounts",
+      "transmission of quarterly report",
+      "period ended",
+    ])
   ) {
     return "financialResults";
+  }
+
+  if (
+    containsAny(normalizedText, [
+      "corporate briefing",
+      "briefing session",
+      "cbs",
+    ])
+  ) {
+    return "corporateBriefing";
+  }
+
+  if (
+    containsAny(normalizedText, [
+      "material information",
+      "material info",
+      "material development",
+      "material update",
+    ])
+  ) {
+    return "materialInfo";
+  }
+
+  if (
+    containsAny(normalizedText, [
+      "disclosure of interest",
+      "disclosure",
+    ])
+  ) {
+    return "disclosureOfInterest";
   }
 
   return "other";
@@ -634,6 +707,12 @@ export default function StockDetailScreen() {
   const { colorScheme } = useColorScheme();
   const { height: windowHeight, width: windowWidth } = useWindowDimensions();
   const isDarkMode = colorScheme === "dark";
+  const sheetDividerColor = isDarkMode
+    ? "rgba(255, 255, 255, 0.08)"
+    : "rgba(20, 10, 38, 0.08)";
+  const sheetContainerBorderColor = isDarkMode
+    ? "rgba(255, 255, 255, 0.08)"
+    : "rgba(20, 10, 38, 0.06)";
   const searchParams = useLocalSearchParams<{
     symbol?: string | string[];
     origin?: string | string[];
@@ -1042,16 +1121,25 @@ export default function StockDetailScreen() {
     () => companyDetail?.announcements ?? [],
     [companyDetail?.announcements]
   );
+  const categorizedCompanyAnnouncementItems =
+    React.useMemo<CategorizedAnnouncementItem[]>(
+      () =>
+        companyAnnouncementItems.map((announcementItem) => ({
+          ...announcementItem,
+          normalizedCategory: classifyAnnouncementCategory(announcementItem),
+        })),
+      [companyAnnouncementItems]
+    );
   const filteredCompanyAnnouncementItems = React.useMemo(() => {
     if (selectedAnnouncementFilter === "all") {
-      return companyAnnouncementItems;
+      return categorizedCompanyAnnouncementItems;
     }
 
-    return companyAnnouncementItems.filter(
+    return categorizedCompanyAnnouncementItems.filter(
       (announcementItem) =>
-        classifyAnnouncementCategory(announcementItem) === selectedAnnouncementFilter
+        announcementItem.normalizedCategory === selectedAnnouncementFilter
     );
-  }, [companyAnnouncementItems, selectedAnnouncementFilter]);
+  }, [categorizedCompanyAnnouncementItems, selectedAnnouncementFilter]);
   const companyDetailsSourceLabel = companyDetail
     ? companyDetail.source === "cache"
       ? "Cached"
@@ -1382,7 +1470,10 @@ export default function StockDetailScreen() {
 
                           <View style={{ width: companyDetailPageWidth }} className="pl-1">
                             <View className="gap-3">
-                              <View className="items-end">
+                              <View className="flex-row items-center justify-between">
+                                <Text className="text-[11px] font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                                  Filter
+                                </Text>
                                 <TouchableOpacity
                                   activeOpacity={0.86}
                                   onPress={handleOpenAnnouncementFilterSheet}
@@ -1419,7 +1510,7 @@ export default function StockDetailScreen() {
                                 <View className="gap-2">
                                   {filteredCompanyAnnouncementItems.map(
                                     (
-                                      announcement: CompanyDetailAnnouncement,
+                                      announcement: CategorizedAnnouncementItem,
                                       announcementIndex
                                     ) => {
                                       const hasPdfUrl =
@@ -1448,7 +1539,9 @@ export default function StockDetailScreen() {
                                         >
                                           <View className="flex-row items-center justify-between gap-3">
                                             <Text className="flex-1 text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                                              {announcement.category}
+                                              {getAnnouncementFilterLabel(
+                                                announcement.normalizedCategory
+                                              )}
                                             </Text>
                                             <Text className="text-xs font-semibold text-app-text dark:text-app-textDark">
                                               {announcement.date}
@@ -1513,43 +1606,57 @@ export default function StockDetailScreen() {
             Fundamentals
           </Text>
 
-          <View className="mt-4 rounded-2xl bg-brand-white p-2 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/12 dark:bg-brand-white/10">
+          <View
+            className="mt-4 rounded-2xl bg-brand-white p-2 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10"
+            style={{
+              borderWidth: 1,
+              borderColor: sheetContainerBorderColor,
+            }}
+          >
             {FUNDAMENTALS_TAB_KEYS.map((tabKey, tabIndex) => {
               const selected = selectedFundamentalsTab === tabKey;
 
               return (
-                <TouchableOpacity
-                  key={tabKey}
-                  activeOpacity={0.86}
-                  onPress={() => {
-                    setSelectedFundamentalsTab(tabKey);
-                    fundamentalsFilterSheetRef.current?.dismiss();
-                  }}
-                  className={[
-                    "flex-row items-center justify-between rounded-xl px-3 py-3",
-                    selected ? "bg-app-highlight/8 dark:bg-brand-white/10" : "",
-                    tabIndex < FUNDAMENTALS_TAB_KEYS.length - 1
-                      ? "border-b border-app-highlight/8 dark:border-app-highlightDark/12"
-                      : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                >
-                  <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
-                    {getFundamentalsTabLabel(tabKey)}
-                  </Text>
-                  {selected ? (
-                    <MaterialCommunityIcons
-                      name="check"
-                      size={20}
-                      color={
-                        isDarkMode
-                          ? APP_COLORS.brand.white
-                          : APP_COLORS.brand.purple
-                      }
+                <View key={tabKey}>
+                  <TouchableOpacity
+                    activeOpacity={0.86}
+                    onPress={() => {
+                      setSelectedFundamentalsTab(tabKey);
+                      fundamentalsFilterSheetRef.current?.dismiss();
+                    }}
+                    className={[
+                      "flex-row items-center justify-between rounded-xl px-3 py-3",
+                      selected ? "bg-app-highlight/8 dark:bg-brand-white/10" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
+                    <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+                      {getFundamentalsTabLabel(tabKey)}
+                    </Text>
+                    {selected ? (
+                      <MaterialCommunityIcons
+                        name="check"
+                        size={20}
+                        color={
+                          isDarkMode
+                            ? APP_COLORS.brand.white
+                            : APP_COLORS.brand.purple
+                        }
+                      />
+                    ) : null}
+                  </TouchableOpacity>
+
+                  {tabIndex < FUNDAMENTALS_TAB_KEYS.length - 1 ? (
+                    <View
+                      style={{
+                        marginHorizontal: 12,
+                        height: 1,
+                        backgroundColor: sheetDividerColor,
+                      }}
                     />
                   ) : null}
-                </TouchableOpacity>
+                </View>
               );
             })}
           </View>
@@ -1583,43 +1690,57 @@ export default function StockDetailScreen() {
             Filter by Category
           </Text>
 
-          <View className="mt-4 rounded-2xl bg-brand-white p-2 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/12 dark:bg-brand-white/10">
+          <View
+            className="mt-4 rounded-2xl bg-brand-white p-2 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10"
+            style={{
+              borderWidth: 1,
+              borderColor: sheetContainerBorderColor,
+            }}
+          >
             {ANNOUNCEMENT_FILTER_OPTIONS.map((filterOption, filterIndex) => {
               const selected = selectedAnnouncementFilter === filterOption.value;
 
               return (
-                <TouchableOpacity
-                  key={filterOption.value}
-                  activeOpacity={0.86}
-                  onPress={() => {
-                    setSelectedAnnouncementFilter(filterOption.value);
-                    announcementFilterSheetRef.current?.dismiss();
-                  }}
-                  className={[
-                    "flex-row items-center justify-between rounded-xl px-3 py-3",
-                    selected ? "bg-app-highlight/8 dark:bg-brand-white/10" : "",
-                    filterIndex < ANNOUNCEMENT_FILTER_OPTIONS.length - 1
-                      ? "border-b border-app-highlight/8 dark:border-app-highlightDark/12"
-                      : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                >
-                  <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
-                    {filterOption.label}
-                  </Text>
-                  {selected ? (
-                    <MaterialCommunityIcons
-                      name="check"
-                      size={20}
-                      color={
-                        isDarkMode
-                          ? APP_COLORS.brand.white
-                          : APP_COLORS.brand.purple
-                      }
+                <View key={filterOption.value}>
+                  <TouchableOpacity
+                    activeOpacity={0.86}
+                    onPress={() => {
+                      setSelectedAnnouncementFilter(filterOption.value);
+                      announcementFilterSheetRef.current?.dismiss();
+                    }}
+                    className={[
+                      "flex-row items-center justify-between rounded-xl px-3 py-3",
+                      selected ? "bg-app-highlight/8 dark:bg-brand-white/10" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
+                    <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+                      {filterOption.label}
+                    </Text>
+                    {selected ? (
+                      <MaterialCommunityIcons
+                        name="check"
+                        size={20}
+                        color={
+                          isDarkMode
+                            ? APP_COLORS.brand.white
+                            : APP_COLORS.brand.purple
+                        }
+                      />
+                    ) : null}
+                  </TouchableOpacity>
+
+                  {filterIndex < ANNOUNCEMENT_FILTER_OPTIONS.length - 1 ? (
+                    <View
+                      style={{
+                        marginHorizontal: 12,
+                        height: 1,
+                        backgroundColor: sheetDividerColor,
+                      }}
                     />
                   ) : null}
-                </TouchableOpacity>
+                </View>
               );
             })}
           </View>
