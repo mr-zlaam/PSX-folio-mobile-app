@@ -3,6 +3,7 @@ import AppBackIconButton from "@/components/ui/app-back-icon-button";
 import {
   AppSkeletonBlock,
 } from "@/components/ui/app-skeleton";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useColorScheme } from "nativewind";
 import React from "react";
 import {
@@ -20,9 +21,18 @@ import { useLocalSearchParams } from "expo-router";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import ShariahChip from "@/components/ui/shariah-chip";
 import { useGuardedRouter } from "@/src/lib/navigation";
+import {
+  getCachedMarketIndexConstituents,
+  getLatestMarketIndexConstituents,
+} from "@/src/features/market/market-data";
 import { getCachedDpsMarketStatus } from "@/src/features/market/dps-market-status";
 import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
 import { APP_COLORS } from "@/src/theme/colors";
+import {
+  BottomSheetBackdrop,
+  BottomSheetModal,
+  BottomSheetView,
+} from "@gorhom/bottom-sheet";
 import {
   getCachedSymbolQuote,
   getCachedSymbols,
@@ -35,12 +45,32 @@ import {
   SymbolQuote,
 } from "@/src/features/trade/trade-data";
 
-const STOCK_ROW_HEIGHT = 160;
+const STOCK_ROW_HEIGHT = 184;
 const STOCK_ROW_SPACING = 8;
 const STOCK_PAGE_SIZE = 20;
 const MAX_CONCURRENT_QUOTE_REQUESTS = 6;
 const SYMBOL_QUOTE_TIMEOUT_MS = 15_000;
 const STOCKS_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+type StockShariahFilter = "all" | "shariah" | "nonShariah";
+type StockSortMode = "az" | "weightHigh" | "weightLow";
+
+const STOCK_SHARIAH_FILTER_OPTIONS: {
+  value: StockShariahFilter;
+  label: string;
+}[] = [
+  { value: "all", label: "All Stocks" },
+  { value: "shariah", label: "Shariah" },
+  { value: "nonShariah", label: "Non-Shariah" },
+];
+
+const STOCK_SORT_OPTIONS: {
+  value: StockSortMode;
+  label: string;
+}[] = [
+  { value: "az", label: "A-Z" },
+  { value: "weightHigh", label: "Weight High" },
+  { value: "weightLow", label: "Weight Low" },
+];
 
 function sortSymbolsAlphabetically(symbols: PsxSymbol[]): PsxSymbol[] {
   return [...symbols].sort((firstSymbol, secondSymbol) =>
@@ -121,6 +151,14 @@ function formatCompactVolume(value: number): string {
   return Math.round(value).toLocaleString("en-PK");
 }
 
+function formatWeightPercentage(value: number | undefined): string {
+  if (!Number.isFinite(value)) {
+    return "--";
+  }
+
+  return `${(value ?? 0).toFixed(2)}%`;
+}
+
 function getRelativePercentage(currentValue: number, referenceValue: number): number {
   if (!Number.isFinite(currentValue) || !Number.isFinite(referenceValue) || referenceValue === 0) {
     return 0;
@@ -132,11 +170,13 @@ function getRelativePercentage(currentValue: number, referenceValue: number): nu
 const StockRow = React.memo(function StockRow({
   symbolItem,
   quote,
+  weightPct,
   isShariahCompliant,
   onPress,
 }: {
   symbolItem: PsxSymbol;
   quote?: SymbolQuote;
+  weightPct?: number;
   isShariahCompliant: boolean;
   onPress: (symbol: string) => void;
 }) {
@@ -153,7 +193,7 @@ const StockRow = React.memo(function StockRow({
     <TouchableOpacity
       activeOpacity={0.88}
       onPress={() => onPress(symbolItem.symbol)}
-      className="h-[160px] rounded-2xl bg-brand-white px-5 py-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
+      className="h-[184px] rounded-2xl bg-brand-white px-5 pt-4 pb-5 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
     >
       <View className="flex-row items-start justify-between gap-3">
         <View className="flex-1">
@@ -174,6 +214,9 @@ const StockRow = React.memo(function StockRow({
             numberOfLines={1}
           >
             {symbolItem.sectorName}
+          </Text>
+          <Text className="mt-0.5 text-[10px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+            Weight {formatWeightPercentage(weightPct)}
           </Text>
         </View>
 
@@ -232,7 +275,7 @@ const StockRow = React.memo(function StockRow({
         </View>
       </View>
 
-      <View className="mt-1 flex-row items-center justify-between">
+      <View className="mt-2 flex-row items-center justify-between">
         <Text className="text-[10px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
           Total Volume
         </Text>
@@ -247,6 +290,7 @@ const StockRow = React.memo(function StockRow({
   previousProps.symbolItem.symbol === nextProps.symbolItem.symbol &&
   previousProps.symbolItem.name === nextProps.symbolItem.name &&
   previousProps.symbolItem.sectorName === nextProps.symbolItem.sectorName &&
+  previousProps.weightPct === nextProps.weightPct &&
   previousProps.quote?.symbol === nextProps.quote?.symbol &&
   previousProps.quote?.lastPrice === nextProps.quote?.lastPrice &&
   previousProps.quote?.change === nextProps.quote?.change &&
@@ -263,7 +307,7 @@ const StockRow = React.memo(function StockRow({
 
 function StockRowSkeleton() {
   return (
-    <View className="h-[160px] rounded-2xl bg-brand-white px-5 py-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+    <View className="h-[184px] rounded-2xl bg-brand-white px-5 pt-4 pb-5 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
       <View className="flex-row items-start justify-between gap-3">
         <View className="flex-1">
           <View className="flex-row items-center gap-2">
@@ -280,6 +324,12 @@ function StockRowSkeleton() {
             className="mt-2"
             width="56%"
             height={10}
+            borderRadius={6}
+          />
+          <AppSkeletonBlock
+            className="mt-1.5"
+            width={72}
+            height={9}
             borderRadius={6}
           />
         </View>
@@ -336,6 +386,44 @@ function StockRowSkeleton() {
   );
 }
 
+function StockFilterChip({
+  label,
+  selected,
+  onPress,
+}: {
+  label: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <TouchableOpacity
+      activeOpacity={0.88}
+      onPress={onPress}
+      className={[
+        "rounded-xl border px-3 py-2",
+        selected
+          ? "border-app-highlight bg-app-highlight dark:border-app-highlightDark dark:bg-app-highlightDark"
+          : "border-app-highlight/20 bg-app-highlight/5 dark:border-app-highlightDark/30 dark:bg-brand-white/5",
+      ]
+        .filter(Boolean)
+        .join(" ")}
+    >
+      <Text
+        className={[
+          "text-[11px] font-bold uppercase tracking-wide",
+          selected
+            ? "text-brand-white dark:text-brand-purple"
+            : "text-app-highlight dark:text-app-highlightDark",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        {label}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 export default function StocksTabScreen() {
   const router = useGuardedRouter();
   const searchParams = useLocalSearchParams<{
@@ -359,10 +447,16 @@ export default function StocksTabScreen() {
 
   const [symbols, setSymbols] = React.useState<PsxSymbol[]>([]);
   const [searchQuery, setSearchQuery] = React.useState("");
+  const [shariahFilter, setShariahFilter] =
+    React.useState<StockShariahFilter>("all");
+  const [sortMode, setSortMode] = React.useState<StockSortMode>("az");
   const deferredSearchQuery = React.useDeferredValue(searchQuery);
   const [isBootstrapping, setIsBootstrapping] = React.useState(true);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [quotesBySymbol, setQuotesBySymbol] = React.useState<Record<string, SymbolQuote>>(
+    {}
+  );
+  const [weightsBySymbol, setWeightsBySymbol] = React.useState<Record<string, number>>(
     {}
   );
   const [visibleStockCount, setVisibleStockCount] = React.useState(
@@ -389,6 +483,8 @@ export default function StocksTabScreen() {
   const prefetchSymbolsRef = React.useRef<string[]>([]);
   const shouldFetchLiveQuotesRef = React.useRef(true);
   const isMountedRef = React.useRef(false);
+  const filterSheetRef = React.useRef<BottomSheetModal>(null);
+  const filterSheetSnapPoints = React.useMemo(() => ["56%"], []);
 
   React.useEffect(() => {
     isMountedRef.current = true;
@@ -454,29 +550,172 @@ export default function StocksTabScreen() {
     []
   );
 
+  const loadIndexWeights = React.useCallback(async (forceLive = false) => {
+    const toWeightMap = (items: { symbol: string; idxWeightPct: number }[]) => {
+      const nextMap: Record<string, number> = {};
+      for (const item of items) {
+        const normalizedSymbol = item.symbol.trim().toUpperCase();
+        if (normalizedSymbol.length === 0 || !Number.isFinite(item.idxWeightPct)) {
+          continue;
+        }
+        nextMap[normalizedSymbol] = item.idxWeightPct;
+      }
+      return nextMap;
+    };
+
+    const mergeWeightMaps = (
+      primaryItems: { symbol: string; idxWeightPct: number }[],
+      fallbackItems: { symbol: string; idxWeightPct: number }[]
+    ) => {
+      const merged = toWeightMap(fallbackItems);
+      const primary = toWeightMap(primaryItems);
+      return {
+        ...merged,
+        ...primary,
+      };
+    };
+
+    try {
+      const [cachedKse100Snapshot, cachedAllShareSnapshot] = await Promise.all([
+        getCachedMarketIndexConstituents("KSE100"),
+        getCachedMarketIndexConstituents("ALLSHR"),
+      ]);
+      const hasCachedKse100 = Boolean(
+        cachedKse100Snapshot && cachedKse100Snapshot.items.length > 0
+      );
+      const hasCachedAllShare = Boolean(
+        cachedAllShareSnapshot && cachedAllShareSnapshot.items.length > 0
+      );
+      if ((hasCachedKse100 || hasCachedAllShare) && isMountedRef.current) {
+        setWeightsBySymbol(
+          mergeWeightMaps(
+            cachedKse100Snapshot?.items ?? [],
+            cachedAllShareSnapshot?.items ?? []
+          )
+        );
+      }
+
+      const [latestKse100Snapshot, latestAllShareSnapshot] = await Promise.all([
+        getLatestMarketIndexConstituents("KSE100", {
+          forceLive,
+        }),
+        getLatestMarketIndexConstituents("ALLSHR", {
+          forceLive,
+        }),
+      ]);
+      const hasLatestKse100 = Boolean(
+        latestKse100Snapshot && latestKse100Snapshot.items.length > 0
+      );
+      const hasLatestAllShare = Boolean(
+        latestAllShareSnapshot && latestAllShareSnapshot.items.length > 0
+      );
+      if ((hasLatestKse100 || hasLatestAllShare) && isMountedRef.current) {
+        setWeightsBySymbol(
+          mergeWeightMaps(
+            latestKse100Snapshot?.items ?? [],
+            latestAllShareSnapshot?.items ?? []
+          )
+        );
+      }
+    } catch {
+      // Keep previous map when refresh fails.
+    }
+  }, []);
+
   React.useEffect(() => {
-    void loadSymbols(true);
-  }, [loadSymbols]);
+    void Promise.all([loadSymbols(true), loadIndexWeights()]);
+  }, [loadSymbols, loadIndexWeights]);
 
   const filteredSymbols = React.useMemo(() => {
     const normalizedQuery = deferredSearchQuery.trim().toLowerCase();
-    if (normalizedQuery.length === 0) {
-      return symbols;
+    let nextSymbols = symbols;
+
+    if (normalizedQuery.length > 0) {
+      nextSymbols = nextSymbols.filter((symbolItem) => {
+        const symbolMatch = symbolItem.symbol.toLowerCase().includes(normalizedQuery);
+        const nameMatch = symbolItem.name.toLowerCase().includes(normalizedQuery);
+        const sectorMatch = symbolItem.sectorName
+          .toLowerCase()
+          .includes(normalizedQuery);
+        return symbolMatch || nameMatch || sectorMatch;
+      });
     }
 
-    return symbols.filter((symbolItem) => {
-      const symbolMatch = symbolItem.symbol.toLowerCase().includes(normalizedQuery);
-      const nameMatch = symbolItem.name.toLowerCase().includes(normalizedQuery);
-      const sectorMatch = symbolItem.sectorName
-        .toLowerCase()
-        .includes(normalizedQuery);
-      return symbolMatch || nameMatch || sectorMatch;
+    if (shariahFilter === "shariah") {
+      nextSymbols = nextSymbols.filter((item) => isShariahCompliantSymbol(item.symbol));
+    } else if (shariahFilter === "nonShariah") {
+      nextSymbols = nextSymbols.filter((item) => !isShariahCompliantSymbol(item.symbol));
+    }
+
+    const sortedSymbols = [...nextSymbols];
+    if (sortMode === "az") {
+      sortedSymbols.sort((firstSymbol, secondSymbol) =>
+        firstSymbol.symbol.localeCompare(secondSymbol.symbol)
+      );
+      return sortedSymbols;
+    }
+
+    sortedSymbols.sort((firstSymbol, secondSymbol) => {
+      const firstWeight = weightsBySymbol[firstSymbol.symbol];
+      const secondWeight = weightsBySymbol[secondSymbol.symbol];
+
+      const normalizedFirstWeight = Number.isFinite(firstWeight)
+        ? firstWeight
+        : sortMode === "weightLow"
+          ? Number.POSITIVE_INFINITY
+          : Number.NEGATIVE_INFINITY;
+      const normalizedSecondWeight = Number.isFinite(secondWeight)
+        ? secondWeight
+        : sortMode === "weightLow"
+          ? Number.POSITIVE_INFINITY
+          : Number.NEGATIVE_INFINITY;
+
+      if (normalizedFirstWeight === normalizedSecondWeight) {
+        return firstSymbol.symbol.localeCompare(secondSymbol.symbol);
+      }
+
+      if (sortMode === "weightLow") {
+        return normalizedFirstWeight - normalizedSecondWeight;
+      }
+
+      return normalizedSecondWeight - normalizedFirstWeight;
     });
-  }, [deferredSearchQuery, symbols]);
+
+    return sortedSymbols;
+  }, [
+    deferredSearchQuery,
+    isShariahCompliantSymbol,
+    shariahFilter,
+    sortMode,
+    symbols,
+    weightsBySymbol,
+  ]);
 
   React.useEffect(() => {
     setVisibleStockCount(STOCK_PAGE_SIZE);
-  }, [deferredSearchQuery, symbols.length]);
+  }, [deferredSearchQuery, shariahFilter, sortMode, symbols.length]);
+
+  const hasActiveFilters = shariahFilter !== "all" || sortMode !== "az";
+
+  const openFilterSheet = React.useCallback(() => {
+    filterSheetRef.current?.present();
+  }, []);
+
+  const closeFilterSheet = React.useCallback(() => {
+    filterSheetRef.current?.dismiss();
+  }, []);
+
+  const filterSheetBackdrop = React.useCallback(
+    (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        pressBehavior="close"
+      />
+    ),
+    []
+  );
 
   const upsertQuote = React.useCallback((symbol: string, quote: SymbolQuote) => {
     if (!isMountedRef.current) {
@@ -635,7 +874,7 @@ export default function StocksTabScreen() {
 
   const refreshStocksLive = React.useCallback(
     async (forceLive = false) => {
-      await loadSymbols(false, forceLive);
+      await Promise.all([loadSymbols(false, forceLive), loadIndexWeights(forceLive)]);
       if (!isMountedRef.current) {
         return;
       }
@@ -648,7 +887,7 @@ export default function StocksTabScreen() {
         forceLive || shouldFetchLiveQuotesRef.current
       );
     },
-    [enqueueQuoteLoads, loadSymbols]
+    [enqueueQuoteLoads, loadIndexWeights, loadSymbols]
   );
 
   useFocusEffect(
@@ -715,11 +954,17 @@ export default function StocksTabScreen() {
       <StockRow
         symbolItem={item}
         quote={quotesBySymbol[item.symbol]}
+        weightPct={weightsBySymbol[item.symbol]}
         isShariahCompliant={isShariahCompliantSymbol(item.symbol)}
         onPress={handleOpenStockDetail}
       />
     ),
-    [handleOpenStockDetail, isShariahCompliantSymbol, quotesBySymbol]
+    [
+      handleOpenStockDetail,
+      isShariahCompliantSymbol,
+      quotesBySymbol,
+      weightsBySymbol,
+    ]
   );
   const keyExtractor = React.useCallback((item: PsxSymbol) => item.symbol, []);
 
@@ -765,18 +1010,39 @@ export default function StocksTabScreen() {
           A-Z listing with high, low, total volume and live move
         </Text>
 
-        <TextInput
-          value={searchQuery}
-          onChangeText={setSearchQuery}
-          placeholder="Search by symbol, company, or sector"
-          placeholderTextColor={inputPlaceholderTextColor}
-          autoCorrect={false}
-          autoCapitalize="characters"
-          className="mt-3 rounded-2xl border border-app-highlight bg-brand-white px-4 py-3 text-sm font-semibold text-app-text dark:border-app-highlightDark dark:bg-transparent dark:text-app-textDark"
-        />
+        <View className="mt-3 flex-row items-center gap-2">
+          <TextInput
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+            placeholder="Search by symbol, company, or sector"
+            placeholderTextColor={inputPlaceholderTextColor}
+            autoCorrect={false}
+            autoCapitalize="characters"
+            className="flex-1 rounded-2xl border border-app-highlight bg-brand-white px-4 py-3 text-sm font-semibold text-app-text dark:border-app-highlightDark dark:bg-transparent dark:text-app-textDark"
+          />
+          <TouchableOpacity
+            activeOpacity={0.88}
+            onPress={openFilterSheet}
+            className="h-[48px] w-[48px] items-center justify-center rounded-2xl border border-app-highlight/25 bg-app-highlight/8 dark:border-app-highlightDark/25 dark:bg-brand-white/10"
+          >
+            <MaterialCommunityIcons
+              name={hasActiveFilters ? "filter-check-outline" : "filter-variant"}
+              size={22}
+              color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
+            />
+          </TouchableOpacity>
+        </View>
       </View>
     ),
-    [handleBackToMore, inputPlaceholderTextColor, searchQuery, shouldShowBackToMore]
+    [
+      handleBackToMore,
+      hasActiveFilters,
+      inputPlaceholderTextColor,
+      isDarkMode,
+      openFilterSheet,
+      searchQuery,
+      shouldShowBackToMore,
+    ]
   );
 
   const emptyState = React.useMemo(
@@ -898,6 +1164,106 @@ export default function StocksTabScreen() {
           />
         }
       />
+
+      <BottomSheetModal
+        ref={filterSheetRef}
+        snapPoints={filterSheetSnapPoints}
+        enablePanDownToClose
+        backdropComponent={filterSheetBackdrop}
+        backgroundStyle={{
+          backgroundColor: isDarkMode
+            ? APP_COLORS.brand.purple
+            : APP_COLORS.brand.white,
+        }}
+        handleIndicatorStyle={{
+          backgroundColor: isDarkMode
+            ? APP_COLORS.brand.white
+            : APP_COLORS.brand.purple,
+        }}
+      >
+        <BottomSheetView
+          style={{
+            paddingHorizontal: 16,
+            paddingTop: 8,
+            paddingBottom: insets.bottom + 16,
+          }}
+        >
+          <View className="flex-row items-center justify-between">
+            <Text className="text-lg font-extrabold text-app-text dark:text-app-textDark">
+              Sort & Filter
+            </Text>
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={closeFilterSheet}
+              className="h-9 w-9 items-center justify-center rounded-xl border border-app-highlight/25 bg-app-highlight/8 dark:border-app-highlightDark/25 dark:bg-brand-white/10"
+            >
+              <MaterialCommunityIcons
+                name="close"
+                size={20}
+                color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
+              />
+            </TouchableOpacity>
+          </View>
+
+          <View className="mt-4 rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+            <Text className="text-[11px] font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
+              Filter By Compliance
+            </Text>
+            <View className="mt-2 flex-row flex-wrap gap-2">
+              {STOCK_SHARIAH_FILTER_OPTIONS.map((option) => (
+                <StockFilterChip
+                  key={option.value}
+                  label={option.label}
+                  selected={shariahFilter === option.value}
+                  onPress={() => setShariahFilter(option.value)}
+                />
+              ))}
+            </View>
+
+            <Text className="mt-4 text-[11px] font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
+              Sort By
+            </Text>
+            <View className="mt-2 flex-row flex-wrap gap-2">
+              {STOCK_SORT_OPTIONS.map((option) => (
+                <StockFilterChip
+                  key={option.value}
+                  label={option.label}
+                  selected={sortMode === option.value}
+                  onPress={() => setSortMode(option.value)}
+                />
+              ))}
+            </View>
+
+            <Text className="mt-3 text-[10px] font-semibold text-app-text dark:text-app-textDark">
+              Weight source: KSE100 (primary), ALLSHR (fallback).
+            </Text>
+          </View>
+
+          <View className="mt-4 flex-row gap-3">
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={() => {
+                setShariahFilter("all");
+                setSortMode("az");
+              }}
+              className="flex-1 rounded-2xl border border-app-highlight/25 bg-app-highlight/8 px-4 py-3 dark:border-app-highlightDark/25 dark:bg-brand-white/10"
+            >
+              <Text className="text-center text-sm font-bold text-app-highlight dark:text-app-highlightDark">
+                Reset
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={closeFilterSheet}
+              className="flex-1 rounded-2xl bg-app-highlight px-4 py-3 dark:bg-app-highlightDark"
+            >
+              <Text className="text-center text-sm font-bold text-brand-white dark:text-brand-purple">
+                Done
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </BottomSheetView>
+      </BottomSheetModal>
     </SafeAreaView>
   );
 }

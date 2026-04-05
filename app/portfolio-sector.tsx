@@ -4,6 +4,7 @@ import {
   ScrollView,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
@@ -11,7 +12,7 @@ import { useGuardedRouter } from "@/src/lib/navigation";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
-import { AppSkeletonTextGroup } from "@/components/ui/app-skeleton";
+import { AppListScreenSkeleton } from "@/components/ui/app-skeleton";
 import ShariahChip from "@/components/ui/shariah-chip";
 import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
 import {
@@ -184,6 +185,7 @@ export default function PortfolioSectorScreen() {
   const router = useGuardedRouter();
   const { isShariahCompliantSymbol } = useShariahSymbols();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
   const searchParams = useLocalSearchParams<{
@@ -214,6 +216,14 @@ export default function PortfolioSectorScreen() {
   const [portfolioTotalValue, setPortfolioTotalValue] = React.useState(0);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [isInitialLoading, setIsInitialLoading] = React.useState(true);
+  const sectorSkeletonCardCount = React.useMemo(
+    () =>
+      Math.max(
+        4,
+        Math.ceil(Math.max(windowHeight - insets.bottom - 220, 420) / 150)
+      ),
+    [insets.bottom, windowHeight]
+  );
 
   React.useEffect(() => {
     let isMounted = true;
@@ -411,8 +421,12 @@ export default function PortfolioSectorScreen() {
           </View>
 
           {isInitialLoading ? (
-            <View className="rounded-3xl bg-brand-white/95 p-6 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
-              <AppSkeletonTextGroup rows={4} rowHeight={14} />
+            <View
+              style={{
+                minHeight: Math.max(windowHeight - insets.bottom - 120, 560),
+              }}
+            >
+              <AppListScreenSkeleton cardCount={sectorSkeletonCardCount} />
             </View>
           ) : holdings.length === 0 ? (
             <View className="rounded-2xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">

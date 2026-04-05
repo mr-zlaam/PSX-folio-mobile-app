@@ -4,6 +4,7 @@ import {
   ScrollView,
   Text,
   TouchableOpacity,
+  useWindowDimensions,
   View,
 } from "react-native";
 import { useLocalSearchParams } from "expo-router";
@@ -14,7 +15,7 @@ import AppButton from "@/components/ui/app-button";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
 import {
   AppChartSkeleton,
-  AppSkeletonTextGroup,
+  AppDetailScreenSkeleton,
 } from "@/components/ui/app-skeleton";
 import ShariahChip from "@/components/ui/shariah-chip";
 import StockLineChart from "@/components/charts/stock-line-chart";
@@ -141,6 +142,7 @@ export default function PortfolioPositionScreen() {
   const router = useGuardedRouter();
   const { isShariahCompliantSymbol } = useShariahSymbols();
   const insets = useSafeAreaInsets();
+  const { height: windowHeight } = useWindowDimensions();
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
   const searchParams = useLocalSearchParams<{ symbol?: string | string[] }>();
@@ -392,8 +394,12 @@ export default function PortfolioPositionScreen() {
           </View>
 
           {isInitialLoading ? (
-            <View className="rounded-3xl bg-brand-white/95 p-6 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
-              <AppSkeletonTextGroup rows={4} rowHeight={14} />
+            <View
+              style={{
+                minHeight: Math.max(windowHeight - insets.bottom - 120, 560),
+              }}
+            >
+              <AppDetailScreenSkeleton />
             </View>
           ) : !holding ? (
             <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">

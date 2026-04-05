@@ -3,6 +3,8 @@ import { useGuardedRouter } from "@/src/lib/navigation";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import {
   AppState,
+  Modal,
+  Pressable,
   RefreshControl,
   ScrollView,
   Text,
@@ -706,60 +708,21 @@ export default function PortfolioTabScreen() {
 
               <TouchableOpacity
                 activeOpacity={0.88}
-                onPress={() => setIsFilterPanelVisible((currentValue) => !currentValue)}
-                className="flex-row items-center gap-1 rounded-xl bg-app-highlight/10 px-3 py-2 dark:bg-brand-white/10"
+                onPress={() => setIsFilterPanelVisible(true)}
+                className="h-[40px] w-[40px] items-center justify-center rounded-xl bg-app-highlight/10 dark:bg-brand-white/10"
               >
                 <MaterialCommunityIcons
-                  name={isFilterPanelVisible ? "close" : "filter-variant"}
-                  size={18}
+                  name={
+                    groupingMode !== "sectors" || displayMode !== "percentage"
+                      ? "filter-check-outline"
+                      : "filter-variant"
+                  }
+                  size={20}
                   color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
                 />
-                <Text className="text-sm font-semibold text-app-highlight dark:text-app-highlightDark">
-                  Filter
-                </Text>
               </TouchableOpacity>
             </View>
           </View>
-
-          {isFilterPanelVisible ? (
-            <View className="rounded-2xl bg-brand-white p-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/30 dark:bg-brand-white/10">
-              <View className="flex-row items-center justify-between">
-                <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                  Filters
-                </Text>
-                <Text className="text-[11px] font-semibold text-app-text dark:text-app-textDark">
-                  {groupingMode === "sectors" ? "Sectors" : "Companies"} •{" "}
-                  {displayMode === "percentage" ? "%" : "PKR"}
-                </Text>
-              </View>
-
-              <View className="mt-2 flex-row gap-2">
-                <ModeSegmentButton
-                  label="Sectors"
-                  selected={groupingMode === "sectors"}
-                  onPress={() => setGroupingMode("sectors")}
-                />
-                <ModeSegmentButton
-                  label="Companies"
-                  selected={groupingMode === "companies"}
-                  onPress={() => setGroupingMode("companies")}
-                />
-              </View>
-
-              <View className="mt-2 flex-row gap-2">
-                <ModeSegmentButton
-                  label="Percentage"
-                  selected={displayMode === "percentage"}
-                  onPress={() => setDisplayMode("percentage")}
-                />
-                <ModeSegmentButton
-                  label="Price"
-                  selected={displayMode === "price"}
-                  onPress={() => setDisplayMode("price")}
-                />
-              </View>
-            </View>
-          ) : null}
 
           {isInitialLoading ? (
             <View className="gap-3">
@@ -818,6 +781,96 @@ export default function PortfolioTabScreen() {
         tone={backupNotice?.tone ?? "info"}
         onClose={handleCloseBackupNotice}
       />
+
+      <Modal
+        visible={isFilterPanelVisible}
+        transparent
+        animationType="slide"
+        onRequestClose={() => setIsFilterPanelVisible(false)}
+      >
+        <View className="flex-1 justify-end">
+          <Pressable
+            className="flex-1 bg-black/45"
+            onPress={() => setIsFilterPanelVisible(false)}
+          />
+          <View className="rounded-t-3xl border-t border-app-highlight/20 bg-app-bg px-5 pt-4 dark:border-app-highlightDark/20 dark:bg-app-bgDark">
+            <View className="flex-row items-center justify-between">
+              <Text className="text-lg font-extrabold text-app-text dark:text-app-textDark">
+                Portfolio Filters
+              </Text>
+              <TouchableOpacity
+                activeOpacity={0.88}
+                onPress={() => setIsFilterPanelVisible(false)}
+                className="h-9 w-9 items-center justify-center rounded-xl border border-app-highlight/25 bg-app-highlight/8 dark:border-app-highlightDark/25 dark:bg-brand-white/10"
+              >
+                <MaterialCommunityIcons
+                  name="close"
+                  size={20}
+                  color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
+                />
+              </TouchableOpacity>
+            </View>
+
+            <View className="mt-4 rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+              <Text className="text-[11px] font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                Group By
+              </Text>
+              <View className="mt-2 flex-row gap-2">
+                <ModeSegmentButton
+                  label="Sectors"
+                  selected={groupingMode === "sectors"}
+                  onPress={() => setGroupingMode("sectors")}
+                />
+                <ModeSegmentButton
+                  label="Companies"
+                  selected={groupingMode === "companies"}
+                  onPress={() => setGroupingMode("companies")}
+                />
+              </View>
+
+              <Text className="mt-4 text-[11px] font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                Value Mode
+              </Text>
+              <View className="mt-2 flex-row gap-2">
+                <ModeSegmentButton
+                  label="Percentage"
+                  selected={displayMode === "percentage"}
+                  onPress={() => setDisplayMode("percentage")}
+                />
+                <ModeSegmentButton
+                  label="Price"
+                  selected={displayMode === "price"}
+                  onPress={() => setDisplayMode("price")}
+                />
+              </View>
+            </View>
+
+            <View className="mt-4 flex-row gap-3" style={{ paddingBottom: insets.bottom + 12 }}>
+              <TouchableOpacity
+                activeOpacity={0.88}
+                onPress={() => {
+                  setGroupingMode("sectors");
+                  setDisplayMode("percentage");
+                }}
+                className="flex-1 rounded-2xl border border-app-highlight/25 bg-app-highlight/8 px-4 py-3 dark:border-app-highlightDark/25 dark:bg-brand-white/10"
+              >
+                <Text className="text-center text-sm font-bold text-app-highlight dark:text-app-highlightDark">
+                  Reset
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.88}
+                onPress={() => setIsFilterPanelVisible(false)}
+                className="flex-1 rounded-2xl bg-app-highlight px-4 py-3 dark:bg-app-highlightDark"
+              >
+                <Text className="text-center text-sm font-bold text-brand-white dark:text-brand-purple">
+                  Done
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
