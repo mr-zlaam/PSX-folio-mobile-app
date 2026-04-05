@@ -70,7 +70,7 @@ export function calculateBrokerDeductionBreakdown(
     brokerCommissionAmount = (grossAmount * brokerFeeValue) / 100;
   }
 
-  if (brokerCommissionAmount <= 0 || safeUnits <= 0) {
+  if (safeUnits <= 0) {
     return {
       brokerCommissionAmount: 0,
       sstAmount: 0,
@@ -86,12 +86,14 @@ export function calculateBrokerDeductionBreakdown(
     input.cdcChargePerShare ?? DEFAULT_CDC_CHARGE_PER_SHARE
   );
 
-  const sstAmount = (brokerCommissionAmount * safeSstRatePct) / 100;
+  const normalizedCommissionAmount =
+    brokerCommissionAmount > 0 ? brokerCommissionAmount : 0;
+  const sstAmount = (normalizedCommissionAmount * safeSstRatePct) / 100;
   const cdcAmount = safeUnits * safeCdcChargePerShare;
-  const totalAmount = brokerCommissionAmount + sstAmount + cdcAmount;
+  const totalAmount = normalizedCommissionAmount + sstAmount + cdcAmount;
 
   return {
-    brokerCommissionAmount,
+    brokerCommissionAmount: normalizedCommissionAmount,
     sstAmount,
     cdcAmount,
     totalAmount,

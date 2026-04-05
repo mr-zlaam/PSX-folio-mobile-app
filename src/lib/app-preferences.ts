@@ -19,6 +19,7 @@ export type BrokerSettings = {
   transactionFeeType: BrokerFeeType;
   transactionFeeValue: number;
   profileMode: BrokerProfileMode;
+  cdcChargePerShare: number;
 };
 
 const STORAGE_KEYS = {
@@ -74,6 +75,7 @@ const DEFAULT_BROKER_SETTINGS: BrokerSettings = {
   transactionFeeType: "percentage",
   transactionFeeValue: DEFAULT_BROKER_COMMISSION_PCT,
   profileMode: "default",
+  cdcChargePerShare: 0.005,
 };
 
 type PreferencesStore = Record<string, string>;
@@ -239,12 +241,19 @@ function parseBrokerSettings(rawValue: string | null): BrokerSettings | null {
         : normalizedFeeType === "fixed"
           ? DEFAULT_BROKER_COMMISSION_PCT
           : parsedFeeValue;
+    const normalizedCdcChargePerShare =
+      typeof parsedValue.cdcChargePerShare === "number" &&
+      Number.isFinite(parsedValue.cdcChargePerShare) &&
+      parsedValue.cdcChargePerShare >= 0
+        ? parsedValue.cdcChargePerShare
+        : DEFAULT_BROKER_SETTINGS.cdcChargePerShare;
 
     return {
       brokerName: normalizedBrokerName,
       transactionFeeType: "percentage",
       transactionFeeValue: normalizedFeeValue,
       profileMode: normalizedProfileMode,
+      cdcChargePerShare: normalizedCdcChargePerShare,
     };
   } catch {
     return null;
@@ -610,10 +619,13 @@ export async function setBrokerSettings(
         : "Custom Broker"
       : "Default Broker";
   const normalizedTransactionFeeValue = brokerSettings.transactionFeeValue;
+  const normalizedCdcChargePerShare = brokerSettings.cdcChargePerShare;
 
   if (
     !Number.isFinite(normalizedTransactionFeeValue) ||
-    normalizedTransactionFeeValue < 0
+    normalizedTransactionFeeValue < 0 ||
+    !Number.isFinite(normalizedCdcChargePerShare) ||
+    normalizedCdcChargePerShare < 0
   ) {
     throw new Error("Invalid broker settings");
   }
@@ -625,6 +637,7 @@ export async function setBrokerSettings(
       transactionFeeType: "percentage",
       transactionFeeValue: normalizedTransactionFeeValue,
       profileMode: normalizedProfileMode,
+      cdcChargePerShare: normalizedCdcChargePerShare,
     })
   );
 }

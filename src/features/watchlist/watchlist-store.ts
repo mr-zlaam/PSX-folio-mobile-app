@@ -91,28 +91,9 @@ async function writeStore(store: WatchlistStore): Promise<void> {
   await FileSystem.writeAsStringAsync(WATCHLIST_FILE_URI, JSON.stringify(store));
 }
 
-function sortByRecent(items: WatchlistItem[]): WatchlistItem[] {
-  return [...items].sort((firstItem, secondItem) => {
-    const firstTimestamp = new Date(firstItem.addedAt).getTime();
-    const secondTimestamp = new Date(secondItem.addedAt).getTime();
-
-    if (Number.isFinite(firstTimestamp) && Number.isFinite(secondTimestamp)) {
-      if (firstTimestamp !== secondTimestamp) {
-        return secondTimestamp - firstTimestamp;
-      }
-    } else if (Number.isFinite(firstTimestamp)) {
-      return -1;
-    } else if (Number.isFinite(secondTimestamp)) {
-      return 1;
-    }
-
-    return firstItem.symbol.localeCompare(secondItem.symbol);
-  });
-}
-
 export async function getSavedWatchlistItems(): Promise<WatchlistItem[]> {
   const store = await readStore();
-  return sortByRecent(store.items);
+  return store.items;
 }
 
 export async function getSavedWatchlistSymbols(): Promise<string[]> {

@@ -21,6 +21,7 @@ import {
 import {
   addSymbolToWatchlist,
   getSavedWatchlistItems,
+  replaceSavedWatchlistItems,
   removeSymbolFromWatchlist,
   WatchlistItem,
 } from "@/src/features/watchlist/watchlist-store";
@@ -37,6 +38,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import React from "react";
 import {
   AppState,
+  Modal,
   RefreshControl,
   ScrollView,
   Text,
@@ -47,6 +49,9 @@ import {
 } from "react-native";
 import { useColorScheme } from "nativewind";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import DraggableFlatList, {
+  RenderItemParams,
+} from "react-native-draggable-flatlist";
 
 const WATCHLIST_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -276,6 +281,10 @@ export default function WatchlistTabScreen() {
   const [allSymbols, setAllSymbols] = React.useState<PsxSymbol[]>([]);
   const [watchlistItems, setWatchlistItems] = React.useState<WatchlistItem[]>([]);
   const [rows, setRows] = React.useState<WatchlistRow[]>([]);
+  const [isReorderMode, setIsReorderMode] = React.useState(false);
+  const [deleteCandidateSymbol, setDeleteCandidateSymbol] = React.useState<string | null>(
+    null
+  );
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [isHydrating, setIsHydrating] = React.useState(true);
   const [hasLoadedWatchlistItems, setHasLoadedWatchlistItems] = React.useState(false);
@@ -319,6 +328,11 @@ export default function WatchlistTabScreen() {
     });
   }, [rows, watchlistSearchQuery]);
 
+  const displayedRows = React.useMemo(
+    () => (isReorderMode ? rows : filteredWatchlistRows),
+    [filteredWatchlistRows, isReorderMode, rows]
+  );
+
   const showNotice = React.useCallback(
     (title: string, message: string, tone: AppFeedbackModalTone) => {
       setNotice({ title, message, tone });
@@ -336,6 +350,19 @@ export default function WatchlistTabScreen() {
 
   const closeAddSheet = React.useCallback(() => {
     addSheetRef.current?.dismiss();
+  }, []);
+
+  const enterReorderMode = React.useCallback(() => {
+    setWatchlistSearchQuery("");
+    setIsReorderMode(true);
+  }, []);
+
+  const exitReorderMode = React.useCallback(() => {
+    setIsReorderMode(false);
+  }, []);
+
+  const closeDeleteCandidateModal = React.useCallback(() => {
+    setDeleteCandidateSymbol(null);
   }, []);
 
   const addSheetBackdrop = React.useCallback(
@@ -475,6 +502,36 @@ export default function WatchlistTabScreen() {
     }
   }, [loadWatchlistFromCache, loadWatchlistLatest]);
 
+  const persistReorderedRows = React.useCallback(
+    async (nextRows: WatchlistRow[]) => {
+      const addedAtBySymbol = new Map(
+        watchlistItems.map((watchlistItem) => [
+          watchlistItem.symbol,
+          watchlistItem.addedAt,
+        ])
+      );
+      const nextAddedAtFallback = new Date().toISOString();
+      const nextItems: WatchlistItem[] = nextRows.map((row) => ({
+        symbol: row.symbol,
+        addedAt: addedAtBySymbol.get(row.symbol) ?? nextAddedAtFallback,
+      }));
+
+      setRows(nextRows);
+      setWatchlistItems(nextItems);
+
+      try {
+        await replaceSavedWatchlistItems(nextItems);
+      } catch {
+        showNotice(
+          "Reorder Failed",
+          "Could not save the new watchlist order. Please try again.",
+          "error"
+        );
+      }
+    },
+    [showNotice, watchlistItems]
+  );
+
   const bootstrap = React.useCallback(async () => {
     setIsHydrating(true);
     try {
@@ -515,6 +572,12 @@ export default function WatchlistTabScreen() {
       appStateSubscription.remove();
     };
   }, [hydrateWatchlist]);
+
+  React.useEffect(() => {
+    if (watchlistItems.length < 2 && isReorderMode) {
+      setIsReorderMode(false);
+    }
+  }, [isReorderMode, watchlistItems.length]);
 
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
@@ -593,18 +656,144 @@ export default function WatchlistTabScreen() {
     async (symbol: string) => {
       try {
         await removeSymbolFromWatchlist(symbol);
-        await hydrateWatchlist(false);
+        setWatchlistItems((currentItems) =>
+          currentItems.filter((item) => item.symbol !== symbol)
+        );
+        setRows((currentRows) => currentRows.filter((row) => row.symbol !== symbol));
+        setDeleteCandidateSymbol((currentSymbol) =>
+          currentSymbol === symbol ? null : currentSymbol
+        );
       } catch {
         showNotice("Remove Failed", "Could not remove symbol.", "error");
       }
     },
-    [hydrateWatchlist, showNotice]
+    [showNotice]
   );
 
   const shouldShowCenterLoader = !hasLoadedWatchlistItems;
   const shouldShowEmptyState = hasLoadedWatchlistItems && watchlistItems.length === 0;
   const shouldShowRowsLoader =
     watchlistItems.length > 0 && rows.length === 0 && (isHydrating || isLoadingRows);
+  const deleteCandidateRow = React.useMemo(
+    () =>
+      deleteCandidateSymbol
+        ? rows.find((row) => row.symbol === deleteCandidateSymbol) ?? null
+        : null,
+    [deleteCandidateSymbol, rows]
+  );
+
+  const renderWatchlistRow = React.useCallback(
+    ({ item, drag, isActive }: RenderItemParams<WatchlistRow>) => (
+      <TouchableOpacity
+        activeOpacity={0.95}
+        onPress={() => {
+          if (isReorderMode) {
+            return;
+          }
+
+          router.push({
+            pathname: "/stock-detail",
+            params: {
+              symbol: item.symbol,
+              origin: "watchlist",
+            },
+          });
+        }}
+        onLongPress={() => {
+          if (!isReorderMode) {
+            enterReorderMode();
+          }
+          requestAnimationFrame(() => {
+            drag();
+          });
+        }}
+        delayLongPress={180}
+        className={[
+          "rounded-2xl bg-brand-white/95 px-3 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10",
+          isActive ? "opacity-90" : "",
+        ]
+          .filter(Boolean)
+          .join(" ")}
+      >
+        <View className="flex-row items-start justify-between gap-2">
+          <View className="flex-1 pr-2">
+            <View className="flex-row items-center gap-2">
+              <Text className="text-xl font-extrabold text-app-text dark:text-app-textDark">
+                {item.symbol}
+              </Text>
+              {isShariahCompliantSymbol(item.symbol) ? <ShariahChip compact /> : null}
+            </View>
+            <Text
+              className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark"
+              numberOfLines={2}
+            >
+              {item.name}
+            </Text>
+            <Text
+              className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark"
+              numberOfLines={1}
+            >
+              {item.sectorName}
+            </Text>
+          </View>
+
+          <View className="items-end">
+            {isReorderMode ? (
+              <TouchableOpacity
+                activeOpacity={0.88}
+                onPress={(event) => {
+                  event.stopPropagation();
+                  setDeleteCandidateSymbol(item.symbol);
+                }}
+                className="rounded-lg border border-brand-red/60 px-2 py-1"
+              >
+                <MaterialCommunityIcons
+                  name="trash-can-outline"
+                  size={14}
+                  color={APP_COLORS.brand.red}
+                />
+              </TouchableOpacity>
+            ) : null}
+
+            <Text className="mt-2 text-2xl font-extrabold text-app-text dark:text-app-textDark">
+              {formatPrice(item.quote.lastPrice)}
+            </Text>
+            <Text
+              className={[
+                "mt-1 text-sm font-extrabold",
+                getChangeTextClassName(item.quote.change),
+              ]
+                .filter(Boolean)
+                .join(" ")}
+            >
+              {formatSignedPriceChange(item.quote.change)} (
+              {formatSignedPercentage(item.quote.changePct)})
+            </Text>
+          </View>
+        </View>
+
+        <View className="mt-3 flex-row flex-wrap gap-y-2">
+          <View className="w-1/2 pr-2">
+            <Metric label="High" value={formatPrice(item.quote.highPrice)} />
+          </View>
+          <View className="w-1/2 pl-2">
+            <Metric label="Low" value={formatPrice(item.quote.lowPrice)} />
+          </View>
+          <View className="w-1/2 pr-2">
+            <Metric label="Volume" value={formatCompactVolume(item.quote.lastVolume)} />
+          </View>
+          <View className="w-1/2 pl-2">
+            <Metric label="LDCP" value={formatPrice(item.quote.previousClose)} />
+          </View>
+        </View>
+
+        <Text className="mt-2 text-[11px] font-semibold text-app-text dark:text-app-textDark">
+          Updated: {formatQuoteAsOf(item.quote)}
+        </Text>
+      </TouchableOpacity>
+    ),
+    [enterReorderMode, isReorderMode, isShariahCompliantSymbol, router]
+  );
 
   return (
     <SafeAreaView
@@ -675,9 +864,21 @@ export default function WatchlistTabScreen() {
                 <Text className="text-2xl font-extrabold text-app-text dark:text-app-textDark">
                   Watchlist
                 </Text>
-                <Text className="text-xs font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                  {watchlistItems.length} stocks
-                </Text>
+                {isReorderMode ? (
+                  <TouchableOpacity
+                    activeOpacity={0.88}
+                    onPress={exitReorderMode}
+                    className="rounded-xl bg-app-highlight px-3 py-1.5 dark:bg-app-highlightDark"
+                  >
+                    <Text className="text-xs font-bold uppercase tracking-wide text-brand-white dark:text-brand-purple">
+                      Done
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <Text className="text-xs font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                    {watchlistItems.length} stocks
+                  </Text>
+                )}
               </View>
 
               <TextInput
@@ -685,8 +886,18 @@ export default function WatchlistTabScreen() {
                 onChangeText={setWatchlistSearchQuery}
                 placeholder="Search in watchlist"
                 placeholderTextColor={inputPlaceholderTextColor}
+                editable={!isReorderMode}
                 className="mt-3 rounded-xl border border-app-highlight/20 bg-app-highlight/5 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/30 dark:bg-brand-white/5 dark:text-app-textDark"
               />
+              {isReorderMode ? (
+                <Text className="mt-2 text-xs font-semibold text-app-text dark:text-app-textDark">
+                  Reorder mode is active. Long-press and drag cards.
+                </Text>
+              ) : (
+                <Text className="mt-2 text-xs font-semibold text-app-text dark:text-app-textDark">
+                  Long-press any card to reorder your watchlist.
+                </Text>
+              )}
             </View>
 
             {shouldShowRowsLoader ? (
@@ -695,108 +906,34 @@ export default function WatchlistTabScreen() {
                 <WatchlistCardSkeleton />
                 <WatchlistCardSkeleton />
               </View>
-            ) : filteredWatchlistRows.length === 0 ? (
+            ) : displayedRows.length === 0 ? (
               <View className="rounded-2xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
                 <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
                   No stock matches your search.
                 </Text>
               </View>
             ) : (
-              filteredWatchlistRows.map((row) => (
-                <TouchableOpacity
-                  key={row.symbol}
-                  activeOpacity={0.9}
-                  onPress={() => {
-                    router.push({
-                      pathname: "/stock-detail",
-                      params: {
-                        symbol: row.symbol,
-                        origin: "watchlist",
-                      },
-                    });
-                  }}
-                  className="rounded-2xl bg-brand-white/95 px-3 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
-                >
-                  <View className="flex-row items-start justify-between gap-2">
-                    <View className="flex-1 pr-2">
-                      <View className="flex-row items-center gap-2">
-                        <Text className="text-xl font-extrabold text-app-text dark:text-app-textDark">
-                          {row.symbol}
-                        </Text>
-                        {isShariahCompliantSymbol(row.symbol) ? <ShariahChip compact /> : null}
-                      </View>
-                      <Text
-                        className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark"
-                        numberOfLines={2}
-                      >
-                        {row.name}
-                      </Text>
-                      <Text
-                        className="mt-1 text-[10px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark"
-                        numberOfLines={1}
-                      >
-                        {row.sectorName}
-                      </Text>
-                    </View>
-
-                    <View className="items-end">
-                      <TouchableOpacity
-                        activeOpacity={0.88}
-                        onPress={(event) => {
-                          event.stopPropagation();
-                          void handleRemoveSymbol(row.symbol);
-                        }}
-                        className="rounded-lg border border-brand-red/60 px-2 py-1"
-                      >
-                        <MaterialCommunityIcons
-                          name="trash-can-outline"
-                          size={14}
-                          color={APP_COLORS.brand.red}
-                        />
-                      </TouchableOpacity>
-
-                      <Text className="mt-2 text-2xl font-extrabold text-app-text dark:text-app-textDark">
-                        {formatPrice(row.quote.lastPrice)}
-                      </Text>
-                      <Text
-                        className={[
-                          "mt-1 text-sm font-extrabold",
-                          getChangeTextClassName(row.quote.change),
-                        ]
-                          .filter(Boolean)
-                          .join(" ")}
-                      >
-                        {formatSignedPriceChange(row.quote.change)} ({formatSignedPercentage(row.quote.changePct)})
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View className="mt-3 flex-row flex-wrap gap-y-2">
-                    <View className="w-1/2 pr-2">
-                      <Metric label="High" value={formatPrice(row.quote.highPrice)} />
-                    </View>
-                    <View className="w-1/2 pl-2">
-                      <Metric label="Low" value={formatPrice(row.quote.lowPrice)} />
-                    </View>
-                    <View className="w-1/2 pr-2">
-                      <Metric label="Volume" value={formatCompactVolume(row.quote.lastVolume)} />
-                    </View>
-                    <View className="w-1/2 pl-2">
-                      <Metric label="LDCP" value={formatPrice(row.quote.previousClose)} />
-                    </View>
-                  </View>
-
-                  <Text className="mt-2 text-[11px] font-semibold text-app-text dark:text-app-textDark">
-                    Updated: {formatQuoteAsOf(row.quote)}
-                  </Text>
-                </TouchableOpacity>
-              ))
+              <DraggableFlatList
+                data={displayedRows}
+                keyExtractor={(item) => item.symbol}
+                onDragEnd={({ data }) => {
+                  if (!isReorderMode) {
+                    return;
+                  }
+                  void persistReorderedRows(data);
+                }}
+                activationDistance={isReorderMode ? 8 : 10_000}
+                scrollEnabled={false}
+                showsVerticalScrollIndicator={false}
+                renderItem={renderWatchlistRow}
+                contentContainerStyle={{ gap: 12 }}
+              />
             )}
           </View>
         )}
       </ScrollView>
 
-      {watchlistItems.length > 0 ? (
+      {watchlistItems.length > 0 && !isReorderMode ? (
         <TouchableOpacity
           activeOpacity={0.9}
           onPress={openAddSheet}
@@ -923,6 +1060,56 @@ export default function WatchlistTabScreen() {
           </TouchableOpacity>
         </BottomSheetView>
       </BottomSheetModal>
+
+      <Modal
+        visible={deleteCandidateRow !== null}
+        transparent
+        animationType="fade"
+        statusBarTranslucent
+        onRequestClose={closeDeleteCandidateModal}
+      >
+        <View className="flex-1 items-center justify-center bg-brand-purple/70 px-6">
+          <View className="w-full max-w-md rounded-3xl border border-app-highlight/20 bg-app-bg p-5 shadow-sm dark:border-app-highlightDark/20 dark:bg-app-bgDark">
+            <Text className="text-xs font-bold uppercase tracking-wide text-brand-red">
+              Confirm Remove
+            </Text>
+            <Text className="mt-3 text-xl font-extrabold text-app-text dark:text-app-textDark">
+              Remove {deleteCandidateRow?.symbol ?? "stock"} from watchlist?
+            </Text>
+            <Text className="mt-2 text-sm font-semibold leading-6 text-app-text dark:text-app-textDark">
+              This stock will be removed from your watchlist.
+            </Text>
+
+            <View className="mt-5 flex-row gap-3">
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={closeDeleteCandidateModal}
+                className="flex-1 items-center justify-center rounded-2xl border border-app-highlight/15 bg-app-highlight/8 px-4 py-3 dark:border-brand-white/15 dark:bg-brand-white/10"
+              >
+                <Text className="text-sm font-semibold tracking-wide text-app-highlight dark:text-app-highlightDark">
+                  Cancel
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                activeOpacity={0.9}
+                onPress={() => {
+                  if (!deleteCandidateRow?.symbol) {
+                    closeDeleteCandidateModal();
+                    return;
+                  }
+
+                  void handleRemoveSymbol(deleteCandidateRow.symbol);
+                }}
+                className="flex-1 items-center justify-center rounded-2xl bg-button-danger px-4 py-3"
+              >
+                <Text className="text-sm font-semibold tracking-wide text-brand-white">
+                  Delete
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <AppFeedbackModal
         visible={notice !== null}

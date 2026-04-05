@@ -59,7 +59,6 @@ import {
   calculateBrokerFeeAmount,
   DEFAULT_BROKER_COMMISSION_PCT,
   DEFAULT_CDC_CHARGE_PER_SHARE,
-  DEFAULT_SST_RATE_PCT,
 } from "@/src/lib/broker-fee";
 import { APP_COLORS } from "@/src/theme/colors";
 import {
@@ -615,6 +614,18 @@ export default function TransactionsTabScreen() {
     return Math.max(0, savedCommission);
   }, [savedBrokerSettings?.transactionFeeValue]);
 
+  const effectiveCdcChargePerShare = React.useMemo(() => {
+    const savedCdcChargePerShare = savedBrokerSettings?.cdcChargePerShare;
+    if (
+      typeof savedCdcChargePerShare !== "number" ||
+      !Number.isFinite(savedCdcChargePerShare)
+    ) {
+      return DEFAULT_CDC_CHARGE_PER_SHARE;
+    }
+
+    return Math.max(0, savedCdcChargePerShare);
+  }, [savedBrokerSettings?.cdcChargePerShare]);
+
   const estimatedGrossTradeAmount = React.useMemo(() => {
     if (!hasTradeInputs) {
       return 0;
@@ -633,8 +644,10 @@ export default function TransactionsTabScreen() {
       units: parsedUnits,
       brokerFeeType: "percentage",
       brokerFeeValue: isBrokerDeductionEnabled ? effectiveBrokerCommissionPct : 0,
+      cdcChargePerShare: isBrokerDeductionEnabled ? effectiveCdcChargePerShare : 0,
     });
   }, [
+    effectiveCdcChargePerShare,
     effectiveBrokerCommissionPct,
     hasTradeInputs,
     isBrokerDeductionEnabled,
@@ -649,8 +662,15 @@ export default function TransactionsTabScreen() {
         units: parsedUnits,
         brokerFeeType: "percentage",
         brokerFeeValue: isBrokerDeductionEnabled ? effectiveBrokerCommissionPct : 0,
+        cdcChargePerShare: isBrokerDeductionEnabled ? effectiveCdcChargePerShare : 0,
       }),
-    [effectiveBrokerCommissionPct, isBrokerDeductionEnabled, parsedPrice, parsedUnits]
+    [
+      effectiveCdcChargePerShare,
+      effectiveBrokerCommissionPct,
+      isBrokerDeductionEnabled,
+      parsedPrice,
+      parsedUnits,
+    ]
   );
 
   const estimatedTradeFinalAmount = React.useMemo(() => {
@@ -809,6 +829,9 @@ export default function TransactionsTabScreen() {
     const brokerCommissionPctForTrade = isBrokerDeductionEnabled
       ? Math.max(0, effectiveBrokerSettings.transactionFeeValue)
       : 0;
+    const brokerCdcChargePerShareForTrade = isBrokerDeductionEnabled
+      ? Math.max(0, effectiveBrokerSettings.cdcChargePerShare)
+      : 0;
 
     let sellGrossProfit = 0;
     let sellNetProfit = 0;
@@ -878,6 +901,7 @@ export default function TransactionsTabScreen() {
             brokerName: effectiveBrokerSettings.brokerName,
             brokerFeeType: "percentage",
             brokerFeeValue: brokerCommissionPctForTrade,
+            brokerCdcChargePerShare: brokerCdcChargePerShareForTrade,
           })
         : await saveTradeOrder({
             side: tradeSide,
@@ -889,6 +913,7 @@ export default function TransactionsTabScreen() {
             brokerName: effectiveBrokerSettings.brokerName,
             brokerFeeType: "percentage",
             brokerFeeValue: brokerCommissionPctForTrade,
+            brokerCdcChargePerShare: brokerCdcChargePerShareForTrade,
           });
 
       if (tradeSide === "sell") {
@@ -988,6 +1013,7 @@ export default function TransactionsTabScreen() {
     savedBrokerSettings,
     isBrokerDeductionEnabled,
     symbolQuote.lastPrice,
+    effectiveCdcChargePerShare,
     taxpayerProfile,
     autoTaxDeductionEnabled,
     deductTaxFromCgtEnabled,
@@ -1222,45 +1248,27 @@ export default function TransactionsTabScreen() {
                 </TouchableOpacity>
               </View>
 
-              <View className="rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5">
-                <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                  Broker Charges
-                </Text>
-
-                <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
-                  Mode:{" "}
-                  {savedBrokerSettings?.profileMode === "custom"
-                    ? "Custom"
-                    : "Default"}
-                </Text>
-                <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
-                  Commission: {effectiveBrokerCommissionPct}% • SST:{" "}
-                  {DEFAULT_SST_RATE_PCT}% of commission • CDC: PKR{" "}
-                  {DEFAULT_CDC_CHARGE_PER_SHARE.toFixed(3)} / share
-                </Text>
-
-                <View className="mt-3 flex-row items-center justify-between rounded-xl bg-brand-white/70 px-3 py-2 dark:bg-brand-white/10">
-                  <View className="mr-3 flex-1">
-                    <Text className="text-xs font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                      Deduct Broker Charges
-                    </Text>
-                    <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
-                      This toggle is saved until you change it.
-                    </Text>
-                  </View>
-                  <Switch
-                    value={isBrokerDeductionEnabled}
-                    onValueChange={(nextValue) => {
-                      void handleBrokerDeductionToggle(nextValue);
-                    }}
-                    thumbColor={APP_COLORS.brand.white}
-                    ios_backgroundColor={switchTrackOffColor}
-                    trackColor={{
-                      true: switchTrackOnColor,
-                      false: switchTrackOffColor,
-                    }}
-                  />
+              <View className="flex-row items-center justify-between rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5">
+                <View className="mr-3 flex-1">
+                  <Text className="text-xs font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                    Deduct Broker Charges
+                  </Text>
+                  <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
+                    This toggle is saved until you change it.
+                  </Text>
                 </View>
+                <Switch
+                  value={isBrokerDeductionEnabled}
+                  onValueChange={(nextValue) => {
+                    void handleBrokerDeductionToggle(nextValue);
+                  }}
+                  thumbColor={APP_COLORS.brand.white}
+                  ios_backgroundColor={switchTrackOffColor}
+                  trackColor={{
+                    true: switchTrackOnColor,
+                    false: switchTrackOffColor,
+                  }}
+                />
               </View>
 
               {tradeSide === "sell" ? (

@@ -24,6 +24,7 @@ export type TradeOrderInput = {
   brokerName: string | null;
   brokerFeeType: BrokerFeeType;
   brokerFeeValue: number | null;
+  brokerCdcChargePerShare?: number | null;
 };
 
 export type TradeOrderRecord = TradeOrderInput & {
@@ -91,6 +92,9 @@ function getSafeOrdersStore(value: unknown): TradeOrdersStore {
       (typeof order.brokerFeeValue === "number" ||
         order.brokerFeeValue === null ||
         typeof order.brokerFeeValue === "undefined") &&
+      (typeof order.brokerCdcChargePerShare === "number" ||
+        order.brokerCdcChargePerShare === null ||
+        typeof order.brokerCdcChargePerShare === "undefined") &&
       (typeof order.brokerFeePct === "number" ||
         order.brokerFeePct === null ||
         typeof order.brokerFeePct === "undefined") &&
@@ -111,6 +115,12 @@ function getSafeOrdersStore(value: unknown): TradeOrdersStore {
             ? order.brokerFeePct
             : null,
       });
+      const normalizedBrokerCdcChargePerShare =
+        typeof order.brokerCdcChargePerShare === "number" &&
+        Number.isFinite(order.brokerCdcChargePerShare) &&
+        order.brokerCdcChargePerShare >= 0
+          ? order.brokerCdcChargePerShare
+          : null;
 
       return {
         id: order.id,
@@ -123,6 +133,7 @@ function getSafeOrdersStore(value: unknown): TradeOrdersStore {
         brokerName: order.brokerName,
         brokerFeeType: normalizedBrokerFeeType,
         brokerFeeValue: normalizedBrokerFeeValue,
+        brokerCdcChargePerShare: normalizedBrokerCdcChargePerShare,
         createdAt: order.createdAt,
       };
     });
@@ -216,6 +227,12 @@ export async function saveTradeOrder(
     brokerFeeValue: resolveBrokerFeeValue({
       brokerFeeValue: orderInput.brokerFeeValue,
     }),
+    brokerCdcChargePerShare:
+      typeof orderInput.brokerCdcChargePerShare === "number" &&
+      Number.isFinite(orderInput.brokerCdcChargePerShare) &&
+      orderInput.brokerCdcChargePerShare >= 0
+        ? orderInput.brokerCdcChargePerShare
+        : null,
     createdAt: new Date().toISOString(),
   };
 
@@ -311,6 +328,12 @@ export async function updateTradeOrder(
     brokerFeeValue: resolveBrokerFeeValue({
       brokerFeeValue: orderInput.brokerFeeValue,
     }),
+    brokerCdcChargePerShare:
+      typeof orderInput.brokerCdcChargePerShare === "number" &&
+      Number.isFinite(orderInput.brokerCdcChargePerShare) &&
+      orderInput.brokerCdcChargePerShare >= 0
+        ? orderInput.brokerCdcChargePerShare
+        : null,
   };
 
   const nextOrders = [...store.orders];

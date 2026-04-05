@@ -45,7 +45,10 @@ import {
   setTaxpayerProfilePreference,
   setThemePreference,
 } from "@/src/lib/app-preferences";
-import { DEFAULT_BROKER_COMMISSION_PCT } from "@/src/lib/broker-fee";
+import {
+  DEFAULT_BROKER_COMMISSION_PCT,
+  DEFAULT_CDC_CHARGE_PER_SHARE,
+} from "@/src/lib/broker-fee";
 
 type CsvEntity =
   | "meta"
@@ -259,6 +262,7 @@ async function readBackupSnapshot(): Promise<BackupSnapshot> {
     preferences.brokerName = brokerSettings.brokerName;
     preferences.brokerFeeType = brokerSettings.transactionFeeType;
     preferences.brokerFeeValue = String(brokerSettings.transactionFeeValue);
+    preferences.brokerCdcChargePerShare = String(brokerSettings.cdcChargePerShare);
     if (brokerSettings.transactionFeeType === "percentage") {
       preferences.brokerFeePct = String(brokerSettings.transactionFeeValue);
     }
@@ -669,6 +673,9 @@ async function applyPreferences(preferences: Record<string, string>): Promise<vo
   const brokerName = (preferences.brokerName ?? "").trim();
   const brokerFeeValue = parseFiniteNumber(preferences.brokerFeeValue ?? "");
   const brokerFeePct = parseFiniteNumber(preferences.brokerFeePct ?? "");
+  const brokerCdcChargePerShare = parseFiniteNumber(
+    preferences.brokerCdcChargePerShare ?? ""
+  );
   const resolvedBrokerFeeValue =
     brokerFeeValue === null ? brokerFeePct : brokerFeeValue;
   if (
@@ -685,6 +692,10 @@ async function applyPreferences(preferences: Record<string, string>): Promise<vo
       transactionFeeType: "percentage",
       transactionFeeValue:
         resolvedBrokerFeeValue > 0 ? resolvedBrokerFeeValue : DEFAULT_BROKER_COMMISSION_PCT,
+      cdcChargePerShare:
+        brokerCdcChargePerShare !== null && brokerCdcChargePerShare >= 0
+          ? brokerCdcChargePerShare
+          : DEFAULT_CDC_CHARGE_PER_SHARE,
     });
   } else {
     await clearBrokerSettings();

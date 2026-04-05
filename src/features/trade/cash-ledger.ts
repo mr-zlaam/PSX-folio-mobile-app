@@ -29,6 +29,7 @@ function getBrokerFeeAmount(order: TradeOrderRecord): number {
     brokerFeeType: order.brokerFeeType,
     brokerFeeValue: order.brokerFeeValue,
     brokerFeePct: order.brokerFeePct,
+    cdcChargePerShare: order.brokerCdcChargePerShare,
   });
 }
 

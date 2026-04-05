@@ -134,11 +134,11 @@ function SettingSwitchRow({
 
 function formatBrokerSummary(brokerSettings: BrokerSettings | null): string {
   if (!brokerSettings) {
-    return "Default Broker • 0.15% commission";
+    return "Default • 0.15% commission • CDC 0.005/share";
   }
 
   const modeText = brokerSettings.profileMode === "custom" ? "Custom" : "Default";
-  return `${modeText} • ${brokerSettings.transactionFeeValue}% commission`;
+  return `${modeText} • ${brokerSettings.transactionFeeValue}% commission • CDC ${brokerSettings.cdcChargePerShare}/share`;
 }
 
 export default function SettingsTabScreen() {

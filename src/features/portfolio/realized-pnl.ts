@@ -125,6 +125,7 @@ function getBrokerFeeForExecutedUnits(
     brokerFeeType: tradeOrder.brokerFeeType,
     brokerFeeValue: tradeOrder.brokerFeeValue,
     brokerFeePct: tradeOrder.brokerFeePct,
+    cdcChargePerShare: tradeOrder.brokerCdcChargePerShare,
   });
 
   if (safeExecutedUnits >= safeOrderUnits) {
