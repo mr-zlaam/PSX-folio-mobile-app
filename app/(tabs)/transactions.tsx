@@ -82,7 +82,7 @@ type TradeNoticeState = {
   tone: AppFeedbackModalTone;
 };
 
-const DEFAULT_CGT_TAX_RATE_PCT = 30;
+const DEFAULT_CGT_TAX_RATE_PCT = 15;
 
 function getTaxpayerProfileLabel(profile: TaxpayerProfile): string {
   return profile === "filer" ? "Filer" : "Non-Filer";

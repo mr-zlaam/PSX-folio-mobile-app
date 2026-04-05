@@ -67,7 +67,7 @@ const TAX_COMPUTATION_MODE_VALUES: readonly TaxComputationMode[] = [
 ];
 const DEFAULT_TAX_RATE_BY_PROFILE: TaxRateByProfile = {
   filer: 15,
-  nonFiler: 30,
+  nonFiler: 15,
 };
 
 const DEFAULT_BROKER_SETTINGS: BrokerSettings = {
