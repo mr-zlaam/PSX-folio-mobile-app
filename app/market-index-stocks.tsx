@@ -1,6 +1,7 @@
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
 import { AppListScreenSkeleton } from "@/components/ui/app-skeleton";
 import ShariahChip from "@/components/ui/shariah-chip";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import {
   getCachedMarketIndexConstituents,
   getLatestMarketIndexConstituents,
@@ -23,6 +24,11 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
+import {
+  BottomSheetBackdrop,
+  BottomSheetModal,
+  BottomSheetView,
+} from "@gorhom/bottom-sheet";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 const MARKET_CONSTITUENTS_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
@@ -102,7 +108,7 @@ function formatUpdatedAt(value: string | null): string {
   });
 }
 
-function FilterChip({
+function ConstituentsFilterRowOption({
   label,
   selected,
   onPress,
@@ -111,31 +117,47 @@ function FilterChip({
   selected: boolean;
   onPress: () => void;
 }) {
+  const { colorScheme } = useColorScheme();
+  const isDarkMode = colorScheme === "dark";
+
   return (
     <TouchableOpacity
       activeOpacity={0.88}
       onPress={onPress}
       className={[
-        "rounded-xl border px-3 py-2",
+        "flex-row items-center justify-between rounded-xl border px-3 py-3",
         selected
-          ? "border-app-highlight bg-app-highlight dark:border-app-highlightDark dark:bg-app-highlightDark"
-          : "border-app-highlight/20 bg-app-highlight/5 dark:border-app-highlightDark/30 dark:bg-brand-white/5",
+          ? "border-app-highlight/20 bg-app-highlight/8 dark:border-app-highlightDark/14 dark:bg-brand-white/8"
+          : "border-app-highlight/12 bg-brand-white dark:border-app-highlightDark/12 dark:bg-brand-white/5",
       ]
         .filter(Boolean)
         .join(" ")}
     >
       <Text
         className={[
-          "text-xs font-bold uppercase tracking-wide",
+          "text-sm font-semibold",
           selected
-            ? "text-brand-white dark:text-brand-purple"
-            : "text-app-highlight dark:text-app-highlightDark",
+            ? "text-app-highlight dark:text-app-highlightDark"
+            : "text-app-text dark:text-app-textDark",
         ]
           .filter(Boolean)
           .join(" ")}
       >
         {label}
       </Text>
+      <MaterialCommunityIcons
+        name={selected ? "check-circle" : "checkbox-blank-circle-outline"}
+        size={18}
+        color={
+          selected
+            ? isDarkMode
+              ? APP_COLORS.brand.white
+              : APP_COLORS.brand.purple
+            : isDarkMode
+              ? "rgba(255, 255, 255, 0.55)"
+              : "rgba(40, 40, 43, 0.55)"
+        }
+      />
     </TouchableOpacity>
   );
 }
@@ -170,6 +192,8 @@ export default function MarketIndexStocksScreen() {
     React.useState<MarketIndexConstituentSnapshot | null>(null);
   const [isInitialLoading, setIsInitialLoading] = React.useState(true);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const filterSheetRef = React.useRef<BottomSheetModal>(null);
+  const filterSheetSnapPoints = React.useMemo(() => ["44%"], []);
   const skeletonCardCount = React.useMemo(
     () =>
       Math.max(
@@ -239,6 +263,22 @@ export default function MarketIndexStocksScreen() {
     }
   }, [refreshConstituents]);
 
+  const openFilterSheet = React.useCallback(() => {
+    filterSheetRef.current?.present();
+  }, []);
+
+  const filterSheetBackdrop = React.useCallback(
+    (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        pressBehavior="close"
+      />
+    ),
+    []
+  );
+
   const tabFilteredConstituents = React.useMemo(() => {
     const items = constituents?.items ?? [];
     if (activeFilter === "all") {
@@ -297,6 +337,7 @@ export default function MarketIndexStocksScreen() {
   const totalConstituentsCount = constituents?.items.length ?? 0;
   const shouldShowFilteredCountSuffix =
     activeFilter !== "all" || deferredSearchQuery.trim().length > 0;
+  const hasActiveFilters = activeFilter !== "active";
 
   React.useEffect(() => {
     setSearchQuery("");
@@ -356,25 +397,34 @@ export default function MarketIndexStocksScreen() {
 
             {(constituents?.items.length ?? 0) > 0 ? (
               <>
-                <View className="mt-3 flex-row flex-wrap gap-2">
-                  {CONSTITUENTS_FILTER_OPTIONS.map((option) => (
-                    <FilterChip
-                      key={option.value}
-                      label={option.label}
-                      selected={activeFilter === option.value}
-                      onPress={() => setActiveFilter(option.value)}
+                <View className="mt-3 flex-row items-center gap-2">
+                  <TextInput
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    placeholder="Search symbol or company"
+                    placeholderTextColor={searchPlaceholderTextColor}
+                    autoCorrect={false}
+                    autoCapitalize="characters"
+                    className="flex-1 rounded-xl border border-app-highlight/20 bg-app-highlight/5 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/30 dark:bg-brand-white/5 dark:text-app-textDark"
+                  />
+                  <TouchableOpacity
+                    activeOpacity={0.88}
+                    onPress={openFilterSheet}
+                    className="h-[42px] w-[42px] items-center justify-center rounded-xl border border-app-highlight/20 bg-app-highlight/8 dark:border-app-highlightDark/20 dark:bg-brand-white/10"
+                  >
+                    <MaterialCommunityIcons
+                      name={
+                        hasActiveFilters ? "filter-check-outline" : "filter-variant"
+                      }
+                      size={20}
+                      color={
+                        isDarkMode
+                          ? APP_COLORS.brand.white
+                          : APP_COLORS.brand.purple
+                      }
                     />
-                  ))}
+                  </TouchableOpacity>
                 </View>
-                <TextInput
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  placeholder="Search symbol or company"
-                  placeholderTextColor={searchPlaceholderTextColor}
-                  autoCorrect={false}
-                  autoCapitalize="characters"
-                  className="mt-3 rounded-xl border border-app-highlight/20 bg-app-highlight/5 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/30 dark:bg-brand-white/5 dark:text-app-textDark"
-                />
               </>
             ) : null}
           </View>
@@ -460,6 +510,54 @@ export default function MarketIndexStocksScreen() {
           ) : null}
         </View>
       </ScrollView>
+
+      <BottomSheetModal
+        ref={filterSheetRef}
+        snapPoints={filterSheetSnapPoints}
+        enablePanDownToClose
+        backdropComponent={filterSheetBackdrop}
+        backgroundStyle={{
+          backgroundColor: isDarkMode
+            ? APP_COLORS.brand.purple
+            : APP_COLORS.brand.white,
+        }}
+        handleIndicatorStyle={{
+          backgroundColor: isDarkMode
+            ? APP_COLORS.brand.white
+            : APP_COLORS.brand.purple,
+        }}
+      >
+        <BottomSheetView
+          style={{
+            paddingHorizontal: 16,
+            paddingTop: 8,
+            paddingBottom: insets.bottom + 16,
+          }}
+        >
+          <Text className="text-lg font-extrabold text-app-text dark:text-app-textDark">
+            Constituents Filter
+          </Text>
+
+          <View className="mt-4 rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/12 dark:bg-brand-white/10">
+            <Text className="text-[11px] font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
+              Sort/Mode (select one)
+            </Text>
+            <View className="mt-2 gap-2">
+              {CONSTITUENTS_FILTER_OPTIONS.map((option) => (
+                <ConstituentsFilterRowOption
+                  key={option.value}
+                  label={option.label}
+                  selected={activeFilter === option.value}
+                  onPress={() => {
+                    setActiveFilter(option.value);
+                    filterSheetRef.current?.dismiss();
+                  }}
+                />
+              ))}
+            </View>
+          </View>
+        </BottomSheetView>
+      </BottomSheetModal>
     </SafeAreaView>
   );
 }
