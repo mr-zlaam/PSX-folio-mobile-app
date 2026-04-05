@@ -1013,7 +1013,6 @@ export default function TransactionsTabScreen() {
     savedBrokerSettings,
     isBrokerDeductionEnabled,
     symbolQuote.lastPrice,
-    effectiveCdcChargePerShare,
     taxpayerProfile,
     autoTaxDeductionEnabled,
     deductTaxFromCgtEnabled,
