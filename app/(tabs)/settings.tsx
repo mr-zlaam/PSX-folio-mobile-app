@@ -21,6 +21,7 @@ import AppButton from "@/components/ui/app-button";
 import AppFeedbackModal from "@/components/ui/app-feedback-modal";
 import { AppSkeletonBlock } from "@/components/ui/app-skeleton";
 import { APP_COLORS } from "@/src/theme/colors";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { getLatestKse100Summary } from "@/src/features/home/home-data";
 import { getLatestSymbols } from "@/src/features/trade/trade-data";
 import {
@@ -368,11 +369,20 @@ export default function SettingsTabScreen() {
             <TouchableOpacity
               activeOpacity={0.88}
               onPress={() => router.push("/broker-settings")}
-              className="mt-4 rounded-xl border border-app-highlight/25 bg-app-highlight/5 px-3 py-2 dark:border-app-highlightDark/35 dark:bg-brand-white/5"
+              className="mt-4 flex-row items-center justify-between rounded-xl bg-app-highlight/8 px-3 py-2.5 dark:bg-brand-white/8"
             >
-              <Text className="text-sm font-semibold text-app-highlight dark:text-app-highlightDark">
-                Open Broker Settings
+              <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+                Broker Settings
               </Text>
+              <MaterialCommunityIcons
+                name="chevron-right"
+                size={20}
+                color={
+                  isDarkMode
+                    ? "rgba(255, 255, 255, 0.72)"
+                    : "rgba(20, 10, 38, 0.58)"
+                }
+              />
             </TouchableOpacity>
           </View>
 
@@ -386,11 +396,20 @@ export default function SettingsTabScreen() {
             <TouchableOpacity
               activeOpacity={0.88}
               onPress={() => router.push("/tax-settings")}
-              className="mt-4 rounded-xl border border-app-highlight/25 bg-app-highlight/5 px-3 py-2 dark:border-app-highlightDark/35 dark:bg-brand-white/5"
+              className="mt-4 flex-row items-center justify-between rounded-xl bg-app-highlight/8 px-3 py-2.5 dark:bg-brand-white/8"
             >
-              <Text className="text-sm font-semibold text-app-highlight dark:text-app-highlightDark">
-                Open Tax Settings
+              <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+                Tax Settings
               </Text>
+              <MaterialCommunityIcons
+                name="chevron-right"
+                size={20}
+                color={
+                  isDarkMode
+                    ? "rgba(255, 255, 255, 0.72)"
+                    : "rgba(20, 10, 38, 0.58)"
+                }
+              />
             </TouchableOpacity>
           </View>
 
@@ -421,8 +440,8 @@ export default function SettingsTabScreen() {
         statusBarTranslucent
         onRequestClose={handleCloseResetModal}
       >
-        <View className="flex-1 items-center justify-center bg-brand-purple/70 px-6">
-          <View className="w-full max-w-md rounded-3xl border border-app-highlight/20 bg-app-bg p-5 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border-app-highlightDark/20 dark:bg-app-bgDark">
+        <View className="flex-1 items-center justify-center bg-black/45 px-6 dark:bg-black/55">
+          <View className="w-full max-w-md rounded-3xl border border-app-highlight/10 bg-brand-white p-5 dark:border-brand-white/10 dark:bg-app-bgDark">
             <Text className="text-sm font-bold uppercase tracking-wide text-brand-red">
               Confirm Reset
             </Text>
@@ -440,7 +459,8 @@ export default function SettingsTabScreen() {
               placeholderTextColor={inputPlaceholderTextColor}
               keyboardType="numeric"
               editable={!isResettingPortfolio}
-              className="mt-4 rounded-xl border border-app-highlight bg-brand-white px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark dark:bg-transparent dark:text-app-textDark"
+              className="mt-4 rounded-xl bg-app-highlight/8 px-3 py-2 text-sm font-semibold text-app-text dark:bg-brand-white/7 dark:text-app-textDark"
+              underlineColorAndroid="transparent"
             />
 
             {resetErrorText ? (
@@ -455,9 +475,9 @@ export default function SettingsTabScreen() {
                   activeOpacity={0.88}
                   disabled={isResettingPortfolio}
                   onPress={handleCloseResetModal}
-                  className="rounded-xl border border-app-highlight px-3 py-2 dark:border-app-highlightDark"
+                  className="rounded-xl bg-app-highlight/8 px-3 py-2 dark:bg-brand-white/7"
                 >
-                  <Text className="text-center text-sm font-semibold text-app-highlight dark:text-app-highlightDark">
+                  <Text className="text-center text-sm font-semibold text-app-text dark:text-app-textDark">
                     Cancel
                   </Text>
                 </TouchableOpacity>

@@ -268,7 +268,14 @@ export default function BrokerSettingsScreen() {
                   placeholder="e.g. 0.15"
                   placeholderTextColor={placeholderTextColor}
                   keyboardType="numeric"
-                  className="mt-1 rounded-xl border border-app-highlight/25 bg-app-highlight/8 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/35 dark:bg-brand-white/5 dark:text-app-textDark"
+                  className={[
+                    "mt-1 rounded-xl px-3 py-2 text-sm font-semibold",
+                    profileMode === "custom"
+                      ? "bg-app-highlight/10 text-app-text dark:bg-brand-white/8 dark:text-app-textDark"
+                      : "bg-brand-white/70 text-app-text/55 dark:bg-brand-white/12 dark:text-app-textDark/55",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                 />
                 {profileMode === "default" ? (
                   <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
@@ -292,7 +299,14 @@ export default function BrokerSettingsScreen() {
                   placeholder="e.g. 0.005"
                   placeholderTextColor={placeholderTextColor}
                   keyboardType="numeric"
-                  className="mt-1 rounded-xl border border-app-highlight/25 bg-app-highlight/8 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/35 dark:bg-brand-white/5 dark:text-app-textDark"
+                  className={[
+                    "mt-1 rounded-xl px-3 py-2 text-sm font-semibold",
+                    profileMode === "custom"
+                      ? "bg-app-highlight/10 text-app-text dark:bg-brand-white/8 dark:text-app-textDark"
+                      : "bg-brand-white/70 text-app-text/55 dark:bg-brand-white/12 dark:text-app-textDark/55",
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
                 />
                 {profileMode === "default" ? (
                   <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">

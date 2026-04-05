@@ -1,19 +1,23 @@
+import AppBackIconButton from "@/components/ui/app-back-icon-button";
+import { AppListScreenSkeleton } from "@/components/ui/app-skeleton";
+import {
+  DpsMarketStatusSnapshot,
+  getCachedDpsMarketStatus,
+  getLatestDpsMarketStatus,
+} from "@/src/features/market/dps-market-status";
 import {
   getCachedMarketSnapshot,
   getLatestMarketSnapshot,
   getMarketIndexDefinitions,
   MarketIndexSnapshot,
 } from "@/src/features/market/market-data";
-import {
-  DpsMarketStatusSnapshot,
-  getCachedDpsMarketStatus,
-  getLatestDpsMarketStatus,
-} from "@/src/features/market/dps-market-status";
 import { useGuardedRouter } from "@/src/lib/navigation";
 import { APP_COLORS } from "@/src/theme/colors";
-import AppBackIconButton from "@/components/ui/app-back-icon-button";
-import { AppListScreenSkeleton } from "@/components/ui/app-skeleton";
 
+import { MaterialCommunityIcons } from "@expo/vector-icons";
+import { useFocusEffect } from "@react-navigation/native";
+import { useLocalSearchParams } from "expo-router";
+import { useColorScheme } from "nativewind";
 import React from "react";
 import {
   Animated,
@@ -26,10 +30,10 @@ import {
   useWindowDimensions,
   View,
 } from "react-native";
-import { useFocusEffect } from "@react-navigation/native";
-import { useLocalSearchParams } from "expo-router";
-import { useColorScheme } from "nativewind";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
 const MARKET_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -171,66 +175,68 @@ export default function MarketTabScreen() {
     () =>
       Math.max(
         5,
-        Math.ceil(Math.max(windowHeight - insets.bottom - 220, 420) / 150)
+        Math.ceil(Math.max(windowHeight - insets.bottom - 220, 420) / 150),
       ),
-    [insets.bottom, windowHeight]
+    [insets.bottom, windowHeight],
   );
   const routeOriginTab = React.useMemo(() => {
     const rawOriginTab = Array.isArray(searchParams.originTab)
       ? searchParams.originTab[0]
       : searchParams.originTab;
-    return typeof rawOriginTab === "string" ? rawOriginTab.trim().toLowerCase() : "";
+    return typeof rawOriginTab === "string"
+      ? rawOriginTab.trim().toLowerCase()
+      : "";
   }, [searchParams.originTab]);
   const shouldShowBackToMore = routeOriginTab === "more";
 
-  const refreshMarket = React.useCallback(async (
-    preferCachedFirst = true,
-    forceLive = false
-  ) => {
-    let cachedDpsStatus: DpsMarketStatusSnapshot | null = null;
-    let hasUsableCachedSnapshot = false;
+  const refreshMarket = React.useCallback(
+    async (preferCachedFirst = true, forceLive = false) => {
+      let cachedDpsStatus: DpsMarketStatusSnapshot | null = null;
+      let hasUsableCachedSnapshot = false;
 
-    if (preferCachedFirst) {
-      const [cachedSnapshot, statusSnapshot] = await Promise.all([
-        getCachedMarketSnapshot(),
-        getCachedDpsMarketStatus(),
-      ]);
-      cachedDpsStatus = statusSnapshot;
-      setIndices(cachedSnapshot);
-      setDpsMarketStatus(statusSnapshot);
-      hasUsableCachedSnapshot = cachedSnapshot.some(
-        (item) =>
-          item.asOf !== null &&
-          Number.isFinite(item.latestPrice) &&
-          item.latestPrice > 0
-      );
-    }
+      if (preferCachedFirst) {
+        const [cachedSnapshot, statusSnapshot] = await Promise.all([
+          getCachedMarketSnapshot(),
+          getCachedDpsMarketStatus(),
+        ]);
+        cachedDpsStatus = statusSnapshot;
+        setIndices(cachedSnapshot);
+        setDpsMarketStatus(statusSnapshot);
+        hasUsableCachedSnapshot = cachedSnapshot.some(
+          (item) =>
+            item.asOf !== null &&
+            Number.isFinite(item.latestPrice) &&
+            item.latestPrice > 0,
+        );
+      }
 
-    if (
-      !forceLive &&
-      cachedDpsStatus?.uiStatus !== "OPEN" &&
-      hasUsableCachedSnapshot
-    ) {
-      void getLatestDpsMarketStatus().then((latestDpsStatus) => {
-        setDpsMarketStatus(latestDpsStatus);
-        if (latestDpsStatus.uiStatus !== "OPEN") {
-          return;
-        }
+      if (
+        !forceLive &&
+        cachedDpsStatus?.uiStatus !== "OPEN" &&
+        hasUsableCachedSnapshot
+      ) {
+        void getLatestDpsMarketStatus().then((latestDpsStatus) => {
+          setDpsMarketStatus(latestDpsStatus);
+          if (latestDpsStatus.uiStatus !== "OPEN") {
+            return;
+          }
 
-        void getLatestMarketSnapshot().then((latestSnapshot) => {
-          setIndices(latestSnapshot);
+          void getLatestMarketSnapshot().then((latestSnapshot) => {
+            setIndices(latestSnapshot);
+          });
         });
-      });
-      return;
-    }
+        return;
+      }
 
-    const [latestSnapshot, latestDpsStatus] = await Promise.all([
-      getLatestMarketSnapshot({ forceLive }),
-      getLatestDpsMarketStatus(),
-    ]);
-    setIndices(latestSnapshot);
-    setDpsMarketStatus(latestDpsStatus);
-  }, []);
+      const [latestSnapshot, latestDpsStatus] = await Promise.all([
+        getLatestMarketSnapshot({ forceLive }),
+        getLatestDpsMarketStatus(),
+      ]);
+      setIndices(latestSnapshot);
+      setDpsMarketStatus(latestDpsStatus);
+    },
+    [],
+  );
 
   React.useEffect(() => {
     let isMounted = true;
@@ -259,15 +265,18 @@ export default function MarketTabScreen() {
   useFocusEffect(
     React.useCallback(() => {
       void refreshMarket(true);
-    }, [refreshMarket])
+    }, [refreshMarket]),
   );
 
   React.useEffect(() => {
-    const appStateSubscription = AppState.addEventListener("change", (nextState) => {
-      if (nextState === "active") {
-        void refreshMarket(true);
-      }
-    });
+    const appStateSubscription = AppState.addEventListener(
+      "change",
+      (nextState) => {
+        if (nextState === "active") {
+          void refreshMarket(true);
+        }
+      },
+    );
 
     return () => {
       appStateSubscription.remove();
@@ -306,14 +315,15 @@ export default function MarketTabScreen() {
 
   const headline = React.useMemo(
     () => marketList.find((indexItem) => indexItem.code === "KSE100") ?? null,
-    [marketList]
+    [marketList],
   );
   const hasLiveData = React.useMemo(
     () =>
       marketList.some(
-        (indexItem) => indexItem.asOf !== null && Number.isFinite(indexItem.latestPrice)
+        (indexItem) =>
+          indexItem.asOf !== null && Number.isFinite(indexItem.latestPrice),
       ),
-    [marketList]
+    [marketList],
   );
   const handleOpenIndexDetail = React.useCallback(
     (code: string) => {
@@ -324,7 +334,7 @@ export default function MarketTabScreen() {
         },
       });
     },
-    [router]
+    [router],
   );
   const handleBackToMore = React.useCallback(() => {
     router.replace("/(tabs)/more");
@@ -350,7 +360,7 @@ export default function MarketTabScreen() {
             easing: Easing.in(Easing.quad),
             useNativeDriver: true,
           }),
-        ])
+        ]),
       );
       animation.start();
     } else {
@@ -392,8 +402,12 @@ export default function MarketTabScreen() {
           <RefreshControl
             refreshing={isRefreshing}
             onRefresh={handlePullToRefresh}
-            tintColor={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
-            colors={[isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple]}
+            tintColor={
+              isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple
+            }
+            colors={[
+              isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple,
+            ]}
             progressBackgroundColor={
               isDarkMode ? APP_COLORS.brand.purple : APP_COLORS.brand.white
             }
@@ -436,12 +450,10 @@ export default function MarketTabScreen() {
                     }}
                   />
                 </View>
-                  <Text
+                <Text
                   className={[
                     "text-sm font-bold uppercase",
-                    isMarketOpen
-                      ? "text-success-green"
-                      : "text-brand-red",
+                    isMarketOpen ? "text-success-green" : "text-brand-red",
                   ]
                     .filter(Boolean)
                     .join(" ")}
@@ -451,6 +463,16 @@ export default function MarketTabScreen() {
               </View>
 
               <Text className="text-xs font-semibold text-app-text dark:text-app-textDark">
+                <MaterialCommunityIcons
+                  name="update"
+                  style={{ transform: [{ rotate: "45deg" }] }}
+                  size={10}
+                  color={
+                    isDarkMode
+                      ? APP_COLORS.brand.white
+                      : APP_COLORS.brand.purple
+                  }
+                />
                 Last update: {formatUpdatedAt(headline?.asOf ?? null)}
               </Text>
             </View>
@@ -477,7 +499,11 @@ export default function MarketTabScreen() {
           </View>
 
           {isBootstrapping && !hasLiveData ? (
-            <View style={{ minHeight: Math.max(windowHeight - insets.bottom - 120, 520) }}>
+            <View
+              style={{
+                minHeight: Math.max(windowHeight - insets.bottom - 120, 520),
+              }}
+            >
               <AppListScreenSkeleton cardCount={marketSkeletonCardCount} />
             </View>
           ) : null}
@@ -530,10 +556,22 @@ export default function MarketTabScreen() {
                 </View>
 
                 <View className="mt-3 flex-row flex-wrap">
-                  <MetricCell label="High" value={formatPoints(indexItem.highPrice)} />
-                  <MetricCell label="Low" value={formatPoints(indexItem.lowPrice)} />
-                  <MetricCell label="Volume" value={formatCompactMetric(indexItem.volume)} />
-                  <MetricCell label="Value" value={formatCompactMetric(indexItem.value)} />
+                  <MetricCell
+                    label="High"
+                    value={formatPoints(indexItem.highPrice)}
+                  />
+                  <MetricCell
+                    label="Low"
+                    value={formatPoints(indexItem.lowPrice)}
+                  />
+                  <MetricCell
+                    label="Volume"
+                    value={formatCompactMetric(indexItem.volume)}
+                  />
+                  <MetricCell
+                    label="Value"
+                    value={formatCompactMetric(indexItem.value)}
+                  />
                 </View>
               </TouchableOpacity>
             ))}

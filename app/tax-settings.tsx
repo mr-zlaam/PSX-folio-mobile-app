@@ -22,7 +22,8 @@ import {
   getCustomDividendTaxRatePreference,
   getDeductTaxFromCgtEnabledPreference,
   getDeductTaxFromDividendEnabledPreference,
-  getDefaultTaxRateByProfile,
+  getDefaultCgtTaxRateByProfile,
+  getDefaultDividendTaxRateByProfile,
   getTaxComputationModePreference,
   getTaxpayerProfilePreference,
   setAutoTaxDeductionEnabledPreference,
@@ -442,8 +443,13 @@ export default function TaxSettingsScreen() {
                     />
                   </View>
                   <Text className="mt-3 text-xs font-semibold text-app-text dark:text-app-textDark">
-                    Default rates: Filer {getDefaultTaxRateByProfile("filer")}%,
-                    Non-Filer {getDefaultTaxRateByProfile("nonFiler")}%.
+                    Default CGT: Filer {getDefaultCgtTaxRateByProfile("filer")}%, Non-Filer{" "}
+                    {getDefaultCgtTaxRateByProfile("nonFiler")}%.
+                  </Text>
+                  <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
+                    Default Dividend Tax: Filer{" "}
+                    {getDefaultDividendTaxRateByProfile("filer")}%, Non-Filer{" "}
+                    {getDefaultDividendTaxRateByProfile("nonFiler")}%.
                   </Text>
                 </View>
               ) : (

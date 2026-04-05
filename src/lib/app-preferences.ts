@@ -65,9 +65,14 @@ const TAX_COMPUTATION_MODE_VALUES: readonly TaxComputationMode[] = [
   "default",
   "custom",
 ];
-const DEFAULT_TAX_RATE_BY_PROFILE: TaxRateByProfile = {
+const DEFAULT_CGT_TAX_RATE_BY_PROFILE: TaxRateByProfile = {
   filer: 15,
   nonFiler: 15,
+};
+
+const DEFAULT_DIVIDEND_TAX_RATE_BY_PROFILE: TaxRateByProfile = {
+  filer: 15,
+  nonFiler: 30,
 };
 
 const DEFAULT_BROKER_SETTINGS: BrokerSettings = {
@@ -519,7 +524,20 @@ export async function setCustomDividendTaxRatePreference(
 export function getDefaultTaxRateByProfile(
   profile: TaxpayerProfile
 ): number {
-  return DEFAULT_TAX_RATE_BY_PROFILE[profile];
+  // Backward-compatible alias for legacy callers expecting one default map.
+  return DEFAULT_CGT_TAX_RATE_BY_PROFILE[profile];
+}
+
+export function getDefaultCgtTaxRateByProfile(
+  profile: TaxpayerProfile
+): number {
+  return DEFAULT_CGT_TAX_RATE_BY_PROFILE[profile];
+}
+
+export function getDefaultDividendTaxRateByProfile(
+  profile: TaxpayerProfile
+): number {
+  return DEFAULT_DIVIDEND_TAX_RATE_BY_PROFILE[profile];
 }
 
 export async function getCustomTaxRatePreference(
@@ -538,7 +556,7 @@ export async function getTaxRateByProfilePreference(
     return customRate;
   }
 
-  return getDefaultTaxRateByProfile(profile);
+  return getDefaultCgtTaxRateByProfile(profile);
 }
 
 export async function getTaxRatesByProfilePreference(): Promise<TaxRateByProfile> {
@@ -581,7 +599,7 @@ export async function getEffectiveCgtTaxRatePreference(): Promise<number> {
     return customRate;
   }
 
-  return getDefaultTaxRateByProfile(profile);
+  return getDefaultCgtTaxRateByProfile(profile);
 }
 
 export async function getEffectiveDividendTaxRatePreference(): Promise<number> {
@@ -595,7 +613,7 @@ export async function getEffectiveDividendTaxRatePreference(): Promise<number> {
     return customRate;
   }
 
-  return getDefaultTaxRateByProfile(profile);
+  return getDefaultDividendTaxRateByProfile(profile);
 }
 
 export async function getBrokerSettings(): Promise<BrokerSettings | null> {
