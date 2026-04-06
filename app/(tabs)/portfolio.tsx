@@ -41,6 +41,7 @@ import {
 import { getCachedDpsMarketStatus } from "@/src/features/market/dps-market-status";
 import { subscribeToTradeMutations } from "@/src/features/trade/trade-events";
 import {
+  formatCompactPKRAmount,
   formatPKRAmount,
   formatSignedPercentage,
 } from "@/src/features/home/home-formatters";
@@ -106,6 +107,14 @@ function formatUnsignedPercentage(value: number): string {
   }
 
   return `${Math.abs(value).toFixed(1)}%`;
+}
+
+function isCompactPkrValue(value: number): boolean {
+  if (!Number.isFinite(value)) {
+    return false;
+  }
+
+  return Math.abs(value) >= 100_000;
 }
 
 function buildSectorAggregates(holdings: PortfolioHolding[]): SectorAggregate[] {
@@ -230,19 +239,56 @@ function CompactHoldingCard({
       : getValueToneClassName(holding.priceDiffPct);
   const investedSharePct =
     totalInvested === 0 ? 0 : (holding.invested / totalInvested) * 100;
+  const isPriceMode = displayMode === "price";
+  const isInvestedCompact = isPriceMode && isCompactPkrValue(holding.invested);
   const investedValueText =
-    displayMode === "price"
-      ? formatPKRAmount(holding.invested)
+    isPriceMode
+      ? isInvestedCompact
+        ? formatCompactPKRAmount(holding.invested, { compactFrom: 100_000 })
+        : formatPKRAmount(holding.invested)
       : formatUnsignedPercentage(investedSharePct);
-  const investedLabel = displayMode === "price" ? "Invested" : "Invested Share";
+  const investedLabel = isPriceMode ? "Invested" : "Invested Share";
   const currentSharePct =
     totalInvested === 0 ? 0 : (holding.marketValue / totalInvested) * 100;
+  const isCurrentCompact = isPriceMode && isCompactPkrValue(holding.marketValue);
   const currentValueText =
-    displayMode === "price"
-      ? formatPKRAmount(holding.marketValue)
+    isPriceMode
+      ? isCurrentCompact
+        ? formatCompactPKRAmount(holding.marketValue, { compactFrom: 100_000 })
+        : formatPKRAmount(holding.marketValue)
       : formatUnsignedPercentage(currentSharePct);
-  const currentLabel = displayMode === "price" ? "Current" : "Current Value";
+  const currentLabel = isPriceMode ? "Current" : "Current Value";
   const currentValueToneClassName = getValueToneClassName(holding.pnl);
+  const [activeMetricTooltipKey, setActiveMetricTooltipKey] = React.useState<
+    "invested" | "current" | null
+  >(null);
+  const metricTooltipTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+
+  React.useEffect(() => {
+    return () => {
+      if (metricTooltipTimeoutRef.current) {
+        clearTimeout(metricTooltipTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const showMetricTooltip = React.useCallback(
+    (metricKey: "invested" | "current") => {
+      setActiveMetricTooltipKey(metricKey);
+      if (metricTooltipTimeoutRef.current) {
+        clearTimeout(metricTooltipTimeoutRef.current);
+      }
+
+      metricTooltipTimeoutRef.current = setTimeout(() => {
+        setActiveMetricTooltipKey((currentValue) =>
+          currentValue === metricKey ? null : currentValue
+        );
+      }, 2000);
+    },
+    []
+  );
 
   return (
     <TouchableOpacity
@@ -323,9 +369,26 @@ function CompactHoldingCard({
           <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
             {investedLabel}
           </Text>
-          <Text className="mt-1 text-sm font-extrabold text-app-text dark:text-app-textDark">
-            {investedValueText}
-          </Text>
+          <View className="relative mt-1 self-start">
+            {isPriceMode &&
+            isInvestedCompact &&
+            activeMetricTooltipKey === "invested" ? (
+              <View className="absolute -top-9 left-0 z-20 rounded-lg bg-app-highlight px-2.5 py-1.5 dark:bg-brand-white/90">
+                <Text className="text-[11px] font-semibold text-brand-white dark:text-brand-purple">
+                  {formatPKRAmount(holding.invested)}
+                </Text>
+              </View>
+            ) : null}
+            <TouchableOpacity
+              activeOpacity={isPriceMode && isInvestedCompact ? 0.82 : 1}
+              disabled={!(isPriceMode && isInvestedCompact)}
+              onPress={() => showMetricTooltip("invested")}
+            >
+              <Text className="text-sm font-extrabold text-app-text dark:text-app-textDark">
+                {investedValueText}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
 
         <View className="h-7 w-px bg-app-highlight/20 dark:bg-brand-white/15" />
@@ -334,16 +397,33 @@ function CompactHoldingCard({
           <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
             {currentLabel}
           </Text>
-          <Text
-            className={[
-              "mt-1 text-sm font-extrabold",
-              currentValueToneClassName,
-            ]
-              .filter(Boolean)
-              .join(" ")}
-          >
-            {currentValueText}
-          </Text>
+          <View className="relative mt-1 self-end">
+            {isPriceMode &&
+            isCurrentCompact &&
+            activeMetricTooltipKey === "current" ? (
+              <View className="absolute -top-9 right-0 z-20 rounded-lg bg-app-highlight px-2.5 py-1.5 dark:bg-brand-white/90">
+                <Text className="text-[11px] font-semibold text-brand-white dark:text-brand-purple">
+                  {formatPKRAmount(holding.marketValue)}
+                </Text>
+              </View>
+            ) : null}
+            <TouchableOpacity
+              activeOpacity={isPriceMode && isCurrentCompact ? 0.82 : 1}
+              disabled={!(isPriceMode && isCurrentCompact)}
+              onPress={() => showMetricTooltip("current")}
+            >
+              <Text
+                className={[
+                  "text-sm font-extrabold",
+                  currentValueToneClassName,
+                ]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
+                {currentValueText}
+              </Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </View>
     </TouchableOpacity>

@@ -153,12 +153,10 @@ function formatRecordDateTime(value: string): string {
     return "-";
   }
 
-  return parsedDate.toLocaleString("en-PK", {
+  return parsedDate.toLocaleDateString("en-PK", {
     year: "numeric",
     month: "short",
     day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
   });
 }
 

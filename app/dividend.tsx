@@ -52,6 +52,10 @@ function formatDateInput(date: Date): string {
   return `${year}-${month}-${day}`;
 }
 
+function normalizeDateOnly(value: Date): Date {
+  return new Date(value.getFullYear(), value.getMonth(), value.getDate());
+}
+
 function formatEditableNumber(value: number): string {
   if (!Number.isFinite(value) || value <= 0) {
     return "";
@@ -135,7 +139,9 @@ export default function DividendScreen() {
   const [sharesInput, setSharesInput] = React.useState("");
   const [dividendPerShareInput, setDividendPerShareInput] = React.useState("");
   const [zakatPctInput, setZakatPctInput] = React.useState("");
-  const [dividendDate, setDividendDate] = React.useState(new Date());
+  const [dividendDate, setDividendDate] = React.useState(
+    normalizeDateOnly(new Date())
+  );
   const [isDatePickerVisible, setIsDatePickerVisible] = React.useState(false);
   const [isSubmitting, setIsSubmitting] = React.useState(false);
   const [shouldGoBackAfterNotice, setShouldGoBackAfterNotice] =
@@ -245,7 +251,9 @@ export default function DividendScreen() {
 
       const parsedDividendDate = new Date(existingRecord.dividendDate);
       setDividendDate(
-        Number.isNaN(parsedDividendDate.getTime()) ? new Date() : parsedDividendDate
+        Number.isNaN(parsedDividendDate.getTime())
+          ? normalizeDateOnly(new Date())
+          : normalizeDateOnly(parsedDividendDate)
       );
     }
 
@@ -326,7 +334,7 @@ export default function DividendScreen() {
         return;
       }
 
-      setDividendDate(selectedDate);
+      setDividendDate(normalizeDateOnly(selectedDate));
       if (Platform.OS === "android") {
         setIsDatePickerVisible(false);
       }
@@ -465,7 +473,7 @@ export default function DividendScreen() {
       } else {
         setDividendPerShareInput("");
         setZakatPctInput("");
-        setDividendDate(new Date());
+        setDividendDate(normalizeDateOnly(new Date()));
       }
     } catch {
       showNotice(
