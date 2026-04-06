@@ -3,6 +3,7 @@ import { getSavedBonusShareRecords } from "@/src/features/bonus-share/bonus-shar
 import { getPositionSnapshotForSymbol } from "@/src/features/portfolio/position-ledger";
 import {
   BrokerFeeType,
+  DEFAULT_BROKER_COMMISSION_PCT,
   normalizeBrokerFeeType,
   resolveBrokerFeeValue,
 } from "@/src/lib/broker-fee";
@@ -62,6 +63,23 @@ function normalizeSymbol(value: string): string {
   return value.trim().toUpperCase();
 }
 
+function resolveBrokerFeeValueWithDefault(input: {
+  brokerFeeValue?: number | null;
+  brokerFeePct?: number | null;
+}): number {
+  const hasExplicitFeeValue =
+    typeof input.brokerFeeValue === "number" &&
+    Number.isFinite(input.brokerFeeValue);
+  const hasExplicitFeePct =
+    typeof input.brokerFeePct === "number" && Number.isFinite(input.brokerFeePct);
+
+  if (hasExplicitFeeValue || hasExplicitFeePct) {
+    return resolveBrokerFeeValue(input);
+  }
+
+  return DEFAULT_BROKER_COMMISSION_PCT;
+}
+
 function getSafeOrdersStore(value: unknown): TradeOrdersStore {
   if (!value || typeof value !== "object" || Array.isArray(value)) {
     return {
@@ -104,7 +122,7 @@ function getSafeOrdersStore(value: unknown): TradeOrdersStore {
       const normalizedBrokerFeeType = normalizeBrokerFeeType(
         typeof order.brokerFeeType === "string" ? order.brokerFeeType : null
       );
-      const normalizedBrokerFeeValue = resolveBrokerFeeValue({
+      const normalizedBrokerFeeValue = resolveBrokerFeeValueWithDefault({
         brokerFeeValue:
           typeof order.brokerFeeValue === "number" &&
           Number.isFinite(order.brokerFeeValue)
@@ -224,7 +242,7 @@ export async function saveTradeOrder(
     brokerMode: orderInput.brokerMode,
     brokerName: orderInput.brokerName,
     brokerFeeType: normalizeBrokerFeeType(orderInput.brokerFeeType),
-    brokerFeeValue: resolveBrokerFeeValue({
+    brokerFeeValue: resolveBrokerFeeValueWithDefault({
       brokerFeeValue: orderInput.brokerFeeValue,
     }),
     brokerCdcChargePerShare:
@@ -325,7 +343,7 @@ export async function updateTradeOrder(
     brokerMode: orderInput.brokerMode,
     brokerName: orderInput.brokerName,
     brokerFeeType: normalizeBrokerFeeType(orderInput.brokerFeeType),
-    brokerFeeValue: resolveBrokerFeeValue({
+    brokerFeeValue: resolveBrokerFeeValueWithDefault({
       brokerFeeValue: orderInput.brokerFeeValue,
     }),
     brokerCdcChargePerShare:

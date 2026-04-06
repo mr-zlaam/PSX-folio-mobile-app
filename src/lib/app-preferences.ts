@@ -240,17 +240,25 @@ function parseBrokerSettings(rawValue: string | null): BrokerSettings | null {
       parsedValue.transactionFeeValue >= 0
         ? parsedValue.transactionFeeValue
         : legacyFeePct;
-    const normalizedFeeValue =
+    const customModeFeeValue =
       parsedFeeValue === null
         ? DEFAULT_BROKER_COMMISSION_PCT
         : normalizedFeeType === "fixed"
           ? DEFAULT_BROKER_COMMISSION_PCT
           : parsedFeeValue;
-    const normalizedCdcChargePerShare =
+    const parsedCdcChargePerShare =
       typeof parsedValue.cdcChargePerShare === "number" &&
       Number.isFinite(parsedValue.cdcChargePerShare) &&
       parsedValue.cdcChargePerShare >= 0
         ? parsedValue.cdcChargePerShare
+        : DEFAULT_BROKER_SETTINGS.cdcChargePerShare;
+    const normalizedFeeValue =
+      normalizedProfileMode === "custom"
+        ? customModeFeeValue
+        : DEFAULT_BROKER_SETTINGS.transactionFeeValue;
+    const normalizedCdcChargePerShare =
+      normalizedProfileMode === "custom"
+        ? parsedCdcChargePerShare
         : DEFAULT_BROKER_SETTINGS.cdcChargePerShare;
 
     return {
@@ -636,8 +644,14 @@ export async function setBrokerSettings(
         ? brokerSettings.brokerName.trim()
         : "Custom Broker"
       : "Default Broker";
-  const normalizedTransactionFeeValue = brokerSettings.transactionFeeValue;
-  const normalizedCdcChargePerShare = brokerSettings.cdcChargePerShare;
+  const normalizedTransactionFeeValue =
+    normalizedProfileMode === "custom"
+      ? brokerSettings.transactionFeeValue
+      : DEFAULT_BROKER_SETTINGS.transactionFeeValue;
+  const normalizedCdcChargePerShare =
+    normalizedProfileMode === "custom"
+      ? brokerSettings.cdcChargePerShare
+      : DEFAULT_BROKER_SETTINGS.cdcChargePerShare;
 
   if (
     !Number.isFinite(normalizedTransactionFeeValue) ||

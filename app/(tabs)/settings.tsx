@@ -42,6 +42,7 @@ import {
 import {
   AppTheme,
   BrokerSettings,
+  getDefaultBrokerSettings,
   getBrokerSettings,
   setThemePreference,
 } from "@/src/lib/app-preferences";
@@ -132,12 +133,13 @@ function SettingSwitchRow({
 }
 
 function formatBrokerSummary(brokerSettings: BrokerSettings | null): string {
-  if (!brokerSettings) {
-    return "Default • 0.15% commission • CDC 0.005/share";
+  const defaultSettings = getDefaultBrokerSettings();
+
+  if (!brokerSettings || brokerSettings.profileMode !== "custom") {
+    return `Default • ${defaultSettings.transactionFeeValue}% commission • CDC ${defaultSettings.cdcChargePerShare}/share`;
   }
 
-  const modeText = brokerSettings.profileMode === "custom" ? "Custom" : "Default";
-  return `${modeText} • ${brokerSettings.transactionFeeValue}% commission • CDC ${brokerSettings.cdcChargePerShare}/share`;
+  return `Custom • ${brokerSettings.transactionFeeValue}% commission • CDC ${brokerSettings.cdcChargePerShare}/share`;
 }
 
 export default function SettingsTabScreen() {
