@@ -235,6 +235,14 @@ function CompactHoldingCard({
       ? formatPKRAmount(holding.invested)
       : formatUnsignedPercentage(investedSharePct);
   const investedLabel = displayMode === "price" ? "Invested" : "Invested Share";
+  const currentSharePct =
+    totalInvested === 0 ? 0 : (holding.marketValue / totalInvested) * 100;
+  const currentValueText =
+    displayMode === "price"
+      ? formatPKRAmount(holding.marketValue)
+      : formatUnsignedPercentage(currentSharePct);
+  const currentLabel = displayMode === "price" ? "Current" : "Current Value";
+  const currentValueToneClassName = getValueToneClassName(holding.pnl);
 
   return (
     <TouchableOpacity
@@ -311,12 +319,32 @@ function CompactHoldingCard({
       </View>
 
       <View className="mt-3 flex-row items-center justify-between rounded-xl bg-app-highlight/5 px-3 py-2 dark:bg-brand-white/5">
-        <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-          {investedLabel}
-        </Text>
-        <Text className="text-sm font-extrabold text-app-text dark:text-app-textDark">
-          {investedValueText}
-        </Text>
+        <View className="flex-1 pr-3">
+          <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+            {investedLabel}
+          </Text>
+          <Text className="mt-1 text-sm font-extrabold text-app-text dark:text-app-textDark">
+            {investedValueText}
+          </Text>
+        </View>
+
+        <View className="h-7 w-px bg-app-highlight/20 dark:bg-brand-white/15" />
+
+        <View className="flex-1 items-end pl-3">
+          <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+            {currentLabel}
+          </Text>
+          <Text
+            className={[
+              "mt-1 text-sm font-extrabold",
+              currentValueToneClassName,
+            ]
+              .filter(Boolean)
+              .join(" ")}
+          >
+            {currentValueText}
+          </Text>
+        </View>
       </View>
     </TouchableOpacity>
   );
