@@ -59,6 +59,7 @@ export default function RootLayout() {
           <Stack.Screen name="notifications" />
           <Stack.Screen name="notification-detail" />
           <Stack.Screen name="tax-settings" />
+          <Stack.Screen name="privacy-policy" />
         </Stack>
       </BottomSheetModalProvider>
     </GestureHandlerRootView>

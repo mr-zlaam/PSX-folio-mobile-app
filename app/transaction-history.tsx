@@ -163,15 +163,18 @@ function formatRecordDateTime(value: string): string {
 function toTradeEntry(order: TradeOrderRecord): TransactionEntry {
   const grossAmount = order.price * order.units;
   const signedAmount = order.side === "buy" ? -grossAmount : grossAmount;
-  const brokerDeductionAmount = calculateBrokerFeeAmount({
-    price: order.price,
-    units: order.units,
-    brokerFeeType: order.brokerFeeType,
-    brokerFeeValue: order.brokerFeeValue,
-    brokerFeePct:
-      typeof order.brokerFeePct === "number" ? order.brokerFeePct : null,
-    cdcChargePerShare: order.brokerCdcChargePerShare,
-  });
+  const brokerDeductionAmount =
+    order.brokerDeductionEnabled === false
+      ? 0
+      : calculateBrokerFeeAmount({
+          price: order.price,
+          units: order.units,
+          brokerFeeType: order.brokerFeeType,
+          brokerFeeValue: order.brokerFeeValue,
+          brokerFeePct:
+            typeof order.brokerFeePct === "number" ? order.brokerFeePct : null,
+          cdcChargePerShare: order.brokerCdcChargePerShare,
+        });
 
   return {
     id: `trade_${order.id}`,

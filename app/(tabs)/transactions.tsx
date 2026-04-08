@@ -902,6 +902,7 @@ export default function TransactionsTabScreen() {
             brokerFeeType: "percentage",
             brokerFeeValue: brokerCommissionPctForTrade,
             brokerCdcChargePerShare: brokerCdcChargePerShareForTrade,
+            brokerDeductionEnabled: isBrokerDeductionEnabled,
           })
         : await saveTradeOrder({
             side: tradeSide,
@@ -914,6 +915,7 @@ export default function TransactionsTabScreen() {
             brokerFeeType: "percentage",
             brokerFeeValue: brokerCommissionPctForTrade,
             brokerCdcChargePerShare: brokerCdcChargePerShareForTrade,
+            brokerDeductionEnabled: isBrokerDeductionEnabled,
           });
 
       if (tradeSide === "sell") {

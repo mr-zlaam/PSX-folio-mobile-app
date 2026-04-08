@@ -113,6 +113,10 @@ function getBrokerFeeForExecutedUnits(
   tradeOrder: TradeOrderRecord,
   executedUnits: number,
 ): number {
+  if (tradeOrder.brokerDeductionEnabled === false) {
+    return 0;
+  }
+
   const safeOrderUnits = toPositiveFiniteNumber(tradeOrder.units);
   const safeExecutedUnits = toPositiveFiniteNumber(executedUnits);
   if (safeOrderUnits === 0 || safeExecutedUnits === 0) {

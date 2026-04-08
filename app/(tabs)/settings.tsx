@@ -1,6 +1,7 @@
 import React from "react";
 import { useGuardedRouter } from "@/src/lib/navigation";
 import { useLocalSearchParams } from "expo-router";
+import Constants from "expo-constants";
 import {
   InteractionManager,
   Modal,
@@ -154,6 +155,17 @@ export default function SettingsTabScreen() {
     ? APP_COLORS.text.placeholderDark
     : APP_COLORS.text.placeholderLight;
   const currentTheme: AppTheme = isDarkMode ? "dark" : "light";
+  const appVersion = React.useMemo(() => {
+    const configuredVersion = Constants.expoConfig?.version;
+    if (
+      typeof configuredVersion === "string" &&
+      configuredVersion.trim().length > 0
+    ) {
+      return configuredVersion.trim();
+    }
+
+    return "Unknown";
+  }, []);
   const routeOriginTab = React.useMemo(() => {
     const rawOriginTab = Array.isArray(searchParams.originTab)
       ? searchParams.originTab[0]
@@ -413,6 +425,42 @@ export default function SettingsTabScreen() {
                 }
               />
             </TouchableOpacity>
+          </View>
+
+          <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
+            <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+              Legal
+            </Text>
+
+            <TouchableOpacity
+              activeOpacity={0.88}
+              onPress={() => router.push("/privacy-policy" as any)}
+              className="mt-3 flex-row items-center justify-between rounded-xl bg-app-highlight/8 px-3 py-2.5 dark:bg-brand-white/8"
+            >
+              <View className="flex-1 pr-3">
+                <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+                  Privacy Policy
+                </Text>
+              </View>
+              <MaterialCommunityIcons
+                name="chevron-right"
+                size={20}
+                color={
+                  isDarkMode
+                    ? "rgba(255, 255, 255, 0.72)"
+                    : "rgba(20, 10, 38, 0.58)"
+                }
+              />
+            </TouchableOpacity>
+
+            <View className="mt-3 flex-row items-center justify-between rounded-xl bg-app-highlight/8 px-3 py-2.5 dark:bg-brand-white/8">
+              <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+                App Version
+              </Text>
+              <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                v{appVersion}
+              </Text>
+            </View>
           </View>
 
           <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">

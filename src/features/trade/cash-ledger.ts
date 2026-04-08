@@ -23,6 +23,10 @@ function toNonNegativeFiniteNumber(value: number): number {
 }
 
 function getBrokerFeeAmount(order: TradeOrderRecord): number {
+  if (order.brokerDeductionEnabled === false) {
+    return 0;
+  }
+
   return calculateBrokerFeeAmount({
     price: order.price,
     units: order.units,

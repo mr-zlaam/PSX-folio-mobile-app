@@ -483,6 +483,10 @@ export default function HomeScreen() {
       );
       setTotalBrokerDeductionAmount(
         savedTradeOrders.reduce((runningTotal, order) => {
+          if (order.brokerDeductionEnabled === false) {
+            return runningTotal;
+          }
+
           const brokerDeduction = calculateBrokerFeeAmount({
             price: order.price,
             units: order.units,

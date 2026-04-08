@@ -26,6 +26,7 @@ export type TradeOrderInput = {
   brokerFeeType: BrokerFeeType;
   brokerFeeValue: number | null;
   brokerCdcChargePerShare?: number | null;
+  brokerDeductionEnabled?: boolean;
 };
 
 export type TradeOrderRecord = TradeOrderInput & {
@@ -113,6 +114,8 @@ function getSafeOrdersStore(value: unknown): TradeOrdersStore {
       (typeof order.brokerCdcChargePerShare === "number" ||
         order.brokerCdcChargePerShare === null ||
         typeof order.brokerCdcChargePerShare === "undefined") &&
+      (typeof order.brokerDeductionEnabled === "boolean" ||
+        typeof order.brokerDeductionEnabled === "undefined") &&
       (typeof order.brokerFeePct === "number" ||
         order.brokerFeePct === null ||
         typeof order.brokerFeePct === "undefined") &&
@@ -139,6 +142,11 @@ function getSafeOrdersStore(value: unknown): TradeOrdersStore {
         order.brokerCdcChargePerShare >= 0
           ? order.brokerCdcChargePerShare
           : null;
+      const normalizedBrokerDeductionEnabled =
+        typeof order.brokerDeductionEnabled === "boolean"
+          ? order.brokerDeductionEnabled
+          : normalizedBrokerFeeValue > 0 ||
+              (normalizedBrokerCdcChargePerShare ?? 0) > 0;
 
       return {
         id: order.id,
@@ -152,6 +160,7 @@ function getSafeOrdersStore(value: unknown): TradeOrdersStore {
         brokerFeeType: normalizedBrokerFeeType,
         brokerFeeValue: normalizedBrokerFeeValue,
         brokerCdcChargePerShare: normalizedBrokerCdcChargePerShare,
+        brokerDeductionEnabled: normalizedBrokerDeductionEnabled,
         createdAt: order.createdAt,
       };
     });
@@ -251,6 +260,15 @@ export async function saveTradeOrder(
       orderInput.brokerCdcChargePerShare >= 0
         ? orderInput.brokerCdcChargePerShare
         : null,
+    brokerDeductionEnabled:
+      typeof orderInput.brokerDeductionEnabled === "boolean"
+        ? orderInput.brokerDeductionEnabled
+        : resolveBrokerFeeValueWithDefault({
+              brokerFeeValue: orderInput.brokerFeeValue,
+            }) > 0 ||
+            (typeof orderInput.brokerCdcChargePerShare === "number" &&
+              Number.isFinite(orderInput.brokerCdcChargePerShare) &&
+              orderInput.brokerCdcChargePerShare > 0),
     createdAt: new Date().toISOString(),
   };
 
@@ -352,6 +370,15 @@ export async function updateTradeOrder(
       orderInput.brokerCdcChargePerShare >= 0
         ? orderInput.brokerCdcChargePerShare
         : null,
+    brokerDeductionEnabled:
+      typeof orderInput.brokerDeductionEnabled === "boolean"
+        ? orderInput.brokerDeductionEnabled
+        : resolveBrokerFeeValueWithDefault({
+              brokerFeeValue: orderInput.brokerFeeValue,
+            }) > 0 ||
+            (typeof orderInput.brokerCdcChargePerShare === "number" &&
+              Number.isFinite(orderInput.brokerCdcChargePerShare) &&
+              orderInput.brokerCdcChargePerShare > 0),
   };
 
   const nextOrders = [...store.orders];
