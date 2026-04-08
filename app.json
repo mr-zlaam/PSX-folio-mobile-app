@@ -2,7 +2,7 @@
   "expo": {
     "name": "PSX Folio",
     "slug": "psx-folio",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "orientation": "portrait",
     "icon": "./assets/images/play_store_512.png",
     "scheme": "psxportfolio",
