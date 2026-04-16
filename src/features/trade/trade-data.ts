@@ -1,4 +1,6 @@
 import * as FileSystem from "expo-file-system/legacy";
+import { getCachedDpsMarketStatus } from "@/src/features/market/dps-market-status";
+import { shouldFetchLiveFromDelayedFeed } from "@/src/features/market/market-status";
 
 export const PSX_SYMBOLS_ENDPOINT = "https://dps.psx.com.pk/symbols";
 export const PSX_INTRADAY_ENDPOINT_BASE = "https://dps.psx.com.pk/timeseries/int";
@@ -488,6 +490,29 @@ async function fetchEodRowsFromApi(symbol: string): Promise<EodRow[]> {
   return rows;
 }
 
+async function shouldUseCachedQuote(options: {
+  asOf: string | null;
+  hasUsableCache: boolean;
+  forceLive?: boolean;
+}): Promise<boolean> {
+  const { asOf, hasUsableCache, forceLive = false } = options;
+  if (forceLive || !hasUsableCache) {
+    return false;
+  }
+
+  try {
+    const cachedMarketStatus = await getCachedDpsMarketStatus();
+    return !shouldFetchLiveFromDelayedFeed({
+      asOf,
+      marketUiStatus: cachedMarketStatus.uiStatus,
+      hasUsableCache,
+      forceLive,
+    });
+  } catch {
+    return false;
+  }
+}
+
 export async function getCachedSymbols(): Promise<PsxSymbol[]> {
   const symbols = await readSymbolsFromCache();
   return symbols ?? [];
@@ -542,12 +567,38 @@ export async function getCachedSymbolQuote(symbol: string): Promise<SymbolQuote 
   return deriveQuoteFromRows(symbol, rows, "cache", previousClose);
 }
 
-export async function getLatestSymbolQuote(symbol: string): Promise<SymbolQuote> {
+export async function getLatestSymbolQuote(
+  symbol: string,
+  options?: {
+    forceLive?: boolean;
+  }
+): Promise<SymbolQuote> {
+  const normalizedSymbol = symbol.trim().toUpperCase();
+  if (normalizedSymbol.length === 0) {
+    return getSymbolQuoteFallback(symbol);
+  }
+
+  const cachedQuote = await getCachedSymbolQuote(normalizedSymbol);
+  const hasUsableCachedQuote = Boolean(
+    cachedQuote &&
+      (cachedQuote.asOf !== null ||
+        cachedQuote.lastPrice > 0 ||
+        cachedQuote.previousClose > 0)
+  );
+  const shouldReturnCachedQuote = await shouldUseCachedQuote({
+    asOf: cachedQuote?.asOf ?? null,
+    hasUsableCache: hasUsableCachedQuote,
+    forceLive: options?.forceLive === true,
+  });
+  if (shouldReturnCachedQuote && cachedQuote) {
+    return cachedQuote;
+  }
+
   try {
     const [liveRows, liveEodRows] = await Promise.all([
-      fetchIntradayRowsFromApi(symbol),
-      fetchEodRowsFromApi(symbol).catch(async () => {
-        const cachedEodRows = await readEodRowsFromCache(symbol);
+      fetchIntradayRowsFromApi(normalizedSymbol),
+      fetchEodRowsFromApi(normalizedSymbol).catch(async () => {
+        const cachedEodRows = await readEodRowsFromCache(normalizedSymbol);
         return cachedEodRows ?? [];
       }),
     ]);
@@ -555,15 +606,19 @@ export async function getLatestSymbolQuote(symbol: string): Promise<SymbolQuote>
       getPreviousCloseFromIntradayRows(liveRows) ??
       getPreviousCloseFromEodRows(liveEodRows, liveRows[0][0]);
 
-    const liveQuote = deriveQuoteFromRows(symbol, liveRows, "live", previousClose);
+    const liveQuote = deriveQuoteFromRows(
+      normalizedSymbol,
+      liveRows,
+      "live",
+      previousClose
+    );
     if (!liveQuote) {
-      throw new Error(`Unable to derive intraday quote for ${symbol}`);
+      throw new Error(`Unable to derive intraday quote for ${normalizedSymbol}`);
     }
 
-    await writeIntradayRowsToCache(symbol, liveRows);
+    await writeIntradayRowsToCache(normalizedSymbol, liveRows);
     return liveQuote;
   } catch {
-    const cachedQuote = await getCachedSymbolQuote(symbol);
     if (cachedQuote) {
       return cachedQuote;
     }

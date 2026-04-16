@@ -1,5 +1,6 @@
 const PAKISTAN_UTC_OFFSET_MINUTES = 5 * 60;
 const STALE_THRESHOLD_MINUTES_DEFAULT = 5;
+export const PSX_DELAYED_FEED_MINUTES = 5;
 
 const FRIDAY_WEEKDAY = 5;
 const SATURDAY_WEEKDAY = 6;
@@ -164,6 +165,91 @@ function getMinutesSinceUpdate(asOf: string | null, nowUtcMs: number): number | 
   return (nowUtcMs - updatedAtMs) / (1000 * 60);
 }
 
+function toValidTimestamp(value: string | null): number | null {
+  if (!value) {
+    return null;
+  }
+
+  const parsedTimestamp = new Date(value).getTime();
+  if (!Number.isFinite(parsedTimestamp)) {
+    return null;
+  }
+
+  return parsedTimestamp;
+}
+
+export function getDelayedFeedRefreshDueAtMs(
+  asOf: string | null,
+  options?: {
+    delayMinutes?: number;
+  }
+): number | null {
+  const timestamp = toValidTimestamp(asOf);
+  if (timestamp === null) {
+    return null;
+  }
+
+  const delayMinutes = options?.delayMinutes ?? PSX_DELAYED_FEED_MINUTES;
+  return timestamp + delayMinutes * 60 * 1000;
+}
+
+export function getDelayedFeedRemainingMs(
+  asOf: string | null,
+  options?: {
+    delayMinutes?: number;
+    nowUtcMs?: number;
+  }
+): number | null {
+  const dueAtMs = getDelayedFeedRefreshDueAtMs(asOf, {
+    delayMinutes: options?.delayMinutes,
+  });
+  if (dueAtMs === null) {
+    return null;
+  }
+
+  const nowUtcMs = options?.nowUtcMs ?? Date.now();
+  return Math.max(0, dueAtMs - nowUtcMs);
+}
+
+export function shouldFetchLiveFromDelayedFeed(options: {
+  asOf: string | null;
+  marketUiStatus: "OPEN" | "CLOSED" | "HALTED";
+  hasUsableCache: boolean;
+  forceLive?: boolean;
+  delayMinutes?: number;
+  nowUtcMs?: number;
+}): boolean {
+  const {
+    asOf,
+    marketUiStatus,
+    hasUsableCache,
+    forceLive = false,
+    delayMinutes = PSX_DELAYED_FEED_MINUTES,
+    nowUtcMs = Date.now(),
+  } = options;
+
+  if (forceLive) {
+    return true;
+  }
+
+  if (!hasUsableCache) {
+    return true;
+  }
+
+  if (marketUiStatus !== "OPEN") {
+    return false;
+  }
+
+  const dueAtMs = getDelayedFeedRefreshDueAtMs(asOf, {
+    delayMinutes,
+  });
+  if (dueAtMs === null) {
+    return true;
+  }
+
+  return nowUtcMs >= dueAtMs;
+}
+
 export function evaluatePsxMarketStatus(
   asOf: string | null,
   options?: {
@@ -197,4 +283,3 @@ export function evaluatePsxMarketStatus(
     dateKeyPakistan: schedule.dateKeyPakistan,
   };
 }
-

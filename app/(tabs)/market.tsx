@@ -1,4 +1,5 @@
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
+import AppBackgroundRefreshIndicator from "@/components/ui/app-background-refresh-indicator";
 import { AppListScreenSkeleton } from "@/components/ui/app-skeleton";
 import {
   DpsMarketStatusSnapshot,
@@ -12,6 +13,7 @@ import {
   MarketIndexSnapshot,
 } from "@/src/features/market/market-data";
 import { useGuardedRouter } from "@/src/lib/navigation";
+import { useBackgroundSyncIndicator } from "@/src/lib/use-background-sync-indicator";
 import { APP_COLORS } from "@/src/theme/colors";
 
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -157,6 +159,11 @@ export default function MarketTabScreen() {
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
   const openPulseAnim = React.useRef(new Animated.Value(0)).current;
+  const {
+    isBackgroundSyncing,
+    beginBackgroundSync,
+    endBackgroundSync,
+  } = useBackgroundSyncIndicator();
 
   const [indices, setIndices] = React.useState<MarketIndexSnapshot[]>([]);
   const [dpsMarketStatus, setDpsMarketStatus] =
@@ -191,7 +198,7 @@ export default function MarketTabScreen() {
 
   const refreshMarket = React.useCallback(
     async (preferCachedFirst = true, forceLive = false) => {
-      let cachedDpsStatus: DpsMarketStatusSnapshot | null = null;
+      let didStartBackgroundSync = false;
       let hasUsableCachedSnapshot = false;
 
       if (preferCachedFirst) {
@@ -199,7 +206,6 @@ export default function MarketTabScreen() {
           getCachedMarketSnapshot(),
           getCachedDpsMarketStatus(),
         ]);
-        cachedDpsStatus = statusSnapshot;
         setIndices(cachedSnapshot);
         setDpsMarketStatus(statusSnapshot);
         hasUsableCachedSnapshot = cachedSnapshot.some(
@@ -210,32 +216,25 @@ export default function MarketTabScreen() {
         );
       }
 
-      if (
-        !forceLive &&
-        cachedDpsStatus?.uiStatus !== "OPEN" &&
-        hasUsableCachedSnapshot
-      ) {
-        void getLatestDpsMarketStatus().then((latestDpsStatus) => {
-          setDpsMarketStatus(latestDpsStatus);
-          if (latestDpsStatus.uiStatus !== "OPEN") {
-            return;
-          }
-
-          void getLatestMarketSnapshot().then((latestSnapshot) => {
-            setIndices(latestSnapshot);
-          });
-        });
-        return;
+      if (preferCachedFirst && hasUsableCachedSnapshot && !forceLive) {
+        beginBackgroundSync();
+        didStartBackgroundSync = true;
       }
 
-      const [latestSnapshot, latestDpsStatus] = await Promise.all([
-        getLatestMarketSnapshot({ forceLive }),
-        getLatestDpsMarketStatus(),
-      ]);
-      setIndices(latestSnapshot);
-      setDpsMarketStatus(latestDpsStatus);
+      try {
+        const [latestSnapshot, latestDpsStatus] = await Promise.all([
+          getLatestMarketSnapshot({ forceLive }),
+          getLatestDpsMarketStatus(),
+        ]);
+        setIndices(latestSnapshot);
+        setDpsMarketStatus(latestDpsStatus);
+      } finally {
+        if (didStartBackgroundSync) {
+          endBackgroundSync();
+        }
+      }
     },
-    [],
+    [beginBackgroundSync, endBackgroundSync],
   );
 
   React.useEffect(() => {
@@ -475,6 +474,12 @@ export default function MarketTabScreen() {
                 />
                 Last update: {formatUpdatedAt(headline?.asOf ?? null)}
               </Text>
+            </View>
+            <View className="mt-1">
+              <AppBackgroundRefreshIndicator
+                visible={isBackgroundSyncing}
+                label="Syncing"
+              />
             </View>
 
             <View className="mt-2 flex-row items-baseline">

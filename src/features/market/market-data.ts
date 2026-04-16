@@ -1,5 +1,6 @@
 import * as FileSystem from "expo-file-system/legacy";
 import { getCachedDpsMarketStatus } from "@/src/features/market/dps-market-status";
+import { shouldFetchLiveFromDelayedFeed } from "@/src/features/market/market-status";
 
 export type MarketEndpointType = "int" | "eod";
 type MarketSource = "live" | "cache" | "fallback";
@@ -862,8 +863,9 @@ function buildMarketIndexDetail(
 async function shouldPreferCachedMarketData(options: {
   forceLive: boolean;
   hasUsableCache: boolean;
+  cacheAsOfValues?: (string | null)[];
 }): Promise<boolean> {
-  const { forceLive, hasUsableCache } = options;
+  const { forceLive, hasUsableCache, cacheAsOfValues = [] } = options;
   if (forceLive) {
     return false;
   }
@@ -874,7 +876,23 @@ async function shouldPreferCachedMarketData(options: {
 
   try {
     const cachedStatus = await getCachedDpsMarketStatus();
-    return cachedStatus.uiStatus !== "OPEN";
+    if (cachedStatus.uiStatus !== "OPEN") {
+      return true;
+    }
+
+    if (cacheAsOfValues.length === 0) {
+      return false;
+    }
+
+    return cacheAsOfValues.every(
+      (asOfValue) =>
+        !shouldFetchLiveFromDelayedFeed({
+          asOf: asOfValue,
+          marketUiStatus: "OPEN",
+          hasUsableCache: true,
+          forceLive: false,
+        })
+    );
   } catch {
     return false;
   }
@@ -918,6 +936,7 @@ export async function getLatestMarketSnapshot(options?: {
   const shouldUseCache = await shouldPreferCachedMarketData({
     forceLive: options?.forceLive === true,
     hasUsableCache,
+    cacheAsOfValues: cachedItems.map((item) => item.asOf),
   });
   if (shouldUseCache) {
     return cachedItems;
@@ -996,6 +1015,7 @@ export async function getLatestMarketIndexDetail(
   const shouldUseCache = await shouldPreferCachedMarketData({
     forceLive: options?.forceLive === true,
     hasUsableCache,
+    cacheAsOfValues: [cachedDetail?.snapshot.asOf ?? null],
   });
   if (shouldUseCache) {
     return cachedDetail;
@@ -1077,6 +1097,7 @@ export async function getLatestMarketIndexConstituents(
   const shouldUseCache = await shouldPreferCachedMarketData({
     forceLive: options?.forceLive === true,
     hasUsableCache,
+    cacheAsOfValues: [cachedSnapshot.asOf],
   });
   if (shouldUseCache) {
     return cachedSnapshot;

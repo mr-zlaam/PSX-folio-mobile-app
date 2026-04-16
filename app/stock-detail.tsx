@@ -1,5 +1,6 @@
 import StockLineChart from "@/components/charts/stock-line-chart";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
+import AppBackgroundRefreshIndicator from "@/components/ui/app-background-refresh-indicator";
 import {
   AppChartSkeleton,
   AppDetailScreenSkeleton,
@@ -18,8 +19,8 @@ import {
   formatPKRAmount,
   formatSignedPercentage,
 } from "@/src/features/home/home-formatters";
-import { getCachedDpsMarketStatus } from "@/src/features/market/dps-market-status";
 import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
+import { useBackgroundSyncIndicator } from "@/src/lib/use-background-sync-indicator";
 import {
   getCachedSymbols,
   getLatestSymbols,
@@ -826,6 +827,11 @@ export default function StockDetailScreen() {
   const chartRequestIdRef = React.useRef(0);
   const yearChartRequestIdRef = React.useRef(0);
   const companyDetailRequestIdRef = React.useRef(0);
+  const {
+    isBackgroundSyncing,
+    beginBackgroundSync,
+    endBackgroundSync,
+  } = useBackgroundSyncIndicator();
   const companyDetailPagerRef = React.useRef<ScrollView>(null);
   const fundamentalsFilterSheetRef = React.useRef<BottomSheetModal>(null);
   const fundamentalsFilterSheetSnapPoints = React.useMemo(() => ["40%"], []);
@@ -859,6 +865,7 @@ export default function StockDetailScreen() {
 
   const refreshQuote = React.useCallback(
     async (showLoader = false, forceLive = false) => {
+      let didStartBackgroundSync = false;
       if (showLoader) {
         setIsInitialLoading(true);
       }
@@ -883,36 +890,32 @@ export default function StockDetailScreen() {
           }
         }
 
-        let shouldFetchLive = forceLive || !hasUsableCachedQuote;
-        if (!forceLive) {
-          try {
-            const cachedMarketStatus = await getCachedDpsMarketStatus();
-            shouldFetchLive =
-              cachedMarketStatus.uiStatus === "OPEN" || !hasUsableCachedQuote;
-          } catch {
-            shouldFetchLive = true;
-          }
+        if (hasUsableCachedQuote && !showLoader && !forceLive) {
+          beginBackgroundSync();
+          didStartBackgroundSync = true;
         }
 
-        if (!shouldFetchLive) {
-          return;
-        }
-
-        const latestQuote = await getLatestSymbolQuote(normalizedSymbol);
+        const latestQuote = await getLatestSymbolQuote(normalizedSymbol, {
+          forceLive,
+        });
         setQuote(latestQuote);
       } finally {
+        if (didStartBackgroundSync) {
+          endBackgroundSync();
+        }
         if (showLoader) {
           setIsInitialLoading(false);
         }
       }
     },
-    [normalizedSymbol]
+    [beginBackgroundSync, endBackgroundSync, normalizedSymbol]
   );
 
   const refreshChart = React.useCallback(
     async (range: StockChartRange, showLoader = false, forceLive = false) => {
       const requestId = chartRequestIdRef.current + 1;
       chartRequestIdRef.current = requestId;
+      let didStartBackgroundSync = false;
 
       if (showLoader) {
         setIsChartLoading(true);
@@ -935,38 +938,34 @@ export default function StockDetailScreen() {
           }
         }
 
-        let shouldFetchLive = forceLive || !hasUsableCachedSeries;
-        if (!forceLive) {
-          try {
-            const cachedMarketStatus = await getCachedDpsMarketStatus();
-            shouldFetchLive =
-              cachedMarketStatus.uiStatus === "OPEN" || !hasUsableCachedSeries;
-          } catch {
-            shouldFetchLive = true;
-          }
+        if (hasUsableCachedSeries && !showLoader && !forceLive) {
+          beginBackgroundSync();
+          didStartBackgroundSync = true;
         }
 
-        if (!shouldFetchLive) {
-          return;
-        }
-
-        const latestSeries = await getLatestStockChartSeries(normalizedSymbol, range);
+        const latestSeries = await getLatestStockChartSeries(normalizedSymbol, range, {
+          forceLive,
+        });
         if (requestId === chartRequestIdRef.current) {
           setChartSeries(latestSeries);
         }
       } finally {
+        if (didStartBackgroundSync) {
+          endBackgroundSync();
+        }
         if (showLoader && requestId === chartRequestIdRef.current) {
           setIsChartLoading(false);
         }
       }
     },
-    [normalizedSymbol]
+    [beginBackgroundSync, endBackgroundSync, normalizedSymbol]
   );
 
   const refreshYearChart = React.useCallback(
     async (forceLive = false) => {
       const requestId = yearChartRequestIdRef.current + 1;
       yearChartRequestIdRef.current = requestId;
+      let didStartBackgroundSync = false;
 
       if (normalizedSymbol.length === 0) {
         if (requestId === yearChartRequestIdRef.current) {
@@ -981,33 +980,32 @@ export default function StockDetailScreen() {
         setYearChartSeries(cachedSeries);
       }
 
-      let shouldFetchLive = forceLive || !hasUsableCachedSeries;
-      if (!forceLive) {
-        try {
-          const cachedMarketStatus = await getCachedDpsMarketStatus();
-          shouldFetchLive =
-            cachedMarketStatus.uiStatus === "OPEN" || !hasUsableCachedSeries;
-        } catch {
-          shouldFetchLive = true;
+      if (hasUsableCachedSeries && !forceLive) {
+        beginBackgroundSync();
+        didStartBackgroundSync = true;
+      }
+
+      try {
+        const latestSeries = await getLatestStockChartSeries(normalizedSymbol, "1Y", {
+          forceLive,
+        });
+        if (requestId === yearChartRequestIdRef.current) {
+          setYearChartSeries(latestSeries);
+        }
+      } finally {
+        if (didStartBackgroundSync) {
+          endBackgroundSync();
         }
       }
-
-      if (!shouldFetchLive) {
-        return;
-      }
-
-      const latestSeries = await getLatestStockChartSeries(normalizedSymbol, "1Y");
-      if (requestId === yearChartRequestIdRef.current) {
-        setYearChartSeries(latestSeries);
-      }
     },
-    [normalizedSymbol]
+    [beginBackgroundSync, endBackgroundSync, normalizedSymbol]
   );
 
   const refreshCompanyDetail = React.useCallback(
     async (showLoader = false) => {
       const requestId = companyDetailRequestIdRef.current + 1;
       companyDetailRequestIdRef.current = requestId;
+      let didStartBackgroundSync = false;
 
       if (!shouldLoadCompanyDetail || normalizedSymbol.length === 0) {
         if (requestId === companyDetailRequestIdRef.current) {
@@ -1027,17 +1025,30 @@ export default function StockDetailScreen() {
           setCompanyDetail(cachedDetail);
         }
 
+        if (cachedDetail && !showLoader) {
+          beginBackgroundSync();
+          didStartBackgroundSync = true;
+        }
+
         const latestDetail = await getLatestCompanyDetail(normalizedSymbol);
         if (latestDetail && requestId === companyDetailRequestIdRef.current) {
           setCompanyDetail(latestDetail);
         }
       } finally {
+        if (didStartBackgroundSync) {
+          endBackgroundSync();
+        }
         if (showLoader && requestId === companyDetailRequestIdRef.current) {
           setIsCompanyDetailLoading(false);
         }
       }
     },
-    [normalizedSymbol, shouldLoadCompanyDetail]
+    [
+      beginBackgroundSync,
+      endBackgroundSync,
+      normalizedSymbol,
+      shouldLoadCompanyDetail,
+    ]
   );
 
   React.useEffect(() => {
@@ -1426,11 +1437,17 @@ export default function StockDetailScreen() {
                   <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                     Performance
                   </Text>
-                  <Text className="text-xs font-semibold text-app-text dark:text-app-textDark">
-                    {activePoint
-                      ? formatPointTimestamp(activePoint.timestamp, chartRange)
-                      : "--"}
-                  </Text>
+                  <View className="items-end gap-1">
+                    <Text className="text-xs font-semibold text-app-text dark:text-app-textDark">
+                      {activePoint
+                        ? formatPointTimestamp(activePoint.timestamp, chartRange)
+                        : "--"}
+                    </Text>
+                    <AppBackgroundRefreshIndicator
+                      visible={isBackgroundSyncing}
+                      label="Syncing"
+                    />
+                  </View>
                 </View>
 
                 <Text className="mt-2 text-lg font-extrabold text-app-text dark:text-app-textDark">

@@ -13,6 +13,7 @@ import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context"
 import { useColorScheme } from "nativewind";
 import AppButton from "@/components/ui/app-button";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
+import AppBackgroundRefreshIndicator from "@/components/ui/app-background-refresh-indicator";
 import {
   AppChartSkeleton,
   AppDetailScreenSkeleton,
@@ -37,7 +38,7 @@ import {
   StockChartRange,
   StockChartSeries,
 } from "@/src/features/trade/stock-chart-data";
-import { getCachedDpsMarketStatus } from "@/src/features/market/dps-market-status";
+import { useBackgroundSyncIndicator } from "@/src/lib/use-background-sync-indicator";
 import { APP_COLORS } from "@/src/theme/colors";
 
 const POSITION_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
@@ -164,9 +165,15 @@ export default function PortfolioPositionScreen() {
   const [selectedChartPoint, setSelectedChartPoint] =
     React.useState<StockChartPoint | null>(null);
   const chartRequestIdRef = React.useRef(0);
+  const {
+    isBackgroundSyncing,
+    beginBackgroundSync,
+    endBackgroundSync,
+  } = useBackgroundSyncIndicator();
 
   const refreshPosition = React.useCallback(
     async (showLoader = false, forceLive = false) => {
+      let didStartBackgroundSync = false;
       if (showLoader) {
         setIsInitialLoading(true);
       }
@@ -193,19 +200,9 @@ export default function PortfolioPositionScreen() {
           }
         }
 
-        let shouldFetchLive = forceLive || !hasUsableCachedHolding;
-        if (!forceLive) {
-          try {
-            const cachedMarketStatus = await getCachedDpsMarketStatus();
-            shouldFetchLive =
-              cachedMarketStatus.uiStatus === "OPEN" || !hasUsableCachedHolding;
-          } catch {
-            shouldFetchLive = true;
-          }
-        }
-
-        if (!shouldFetchLive) {
-          return;
+        if (hasUsableCachedHolding && !showLoader && !forceLive) {
+          beginBackgroundSync();
+          didStartBackgroundSync = true;
         }
 
         const latestHoldings = await getPortfolioHoldingsWithLatestQuotes();
@@ -213,12 +210,15 @@ export default function PortfolioPositionScreen() {
           latestHoldings.find((item) => item.symbol === normalizedSymbol) ?? null;
         setHolding(nextHolding);
       } finally {
+        if (didStartBackgroundSync) {
+          endBackgroundSync();
+        }
         if (showLoader) {
           setIsInitialLoading(false);
         }
       }
     },
-    [normalizedSymbol]
+    [beginBackgroundSync, endBackgroundSync, normalizedSymbol]
   );
 
   const handleTradeAction = React.useCallback(
@@ -243,6 +243,7 @@ export default function PortfolioPositionScreen() {
     async (range: StockChartRange, showLoader = false, forceLive = false) => {
       const requestId = chartRequestIdRef.current + 1;
       chartRequestIdRef.current = requestId;
+      let didStartBackgroundSync = false;
 
       if (showLoader) {
         setIsChartLoading(true);
@@ -265,32 +266,27 @@ export default function PortfolioPositionScreen() {
           }
         }
 
-        let shouldFetchLive = forceLive || !hasUsableCachedSeries;
-        if (!forceLive) {
-          try {
-            const cachedMarketStatus = await getCachedDpsMarketStatus();
-            shouldFetchLive =
-              cachedMarketStatus.uiStatus === "OPEN" || !hasUsableCachedSeries;
-          } catch {
-            shouldFetchLive = true;
-          }
+        if (hasUsableCachedSeries && !showLoader && !forceLive) {
+          beginBackgroundSync();
+          didStartBackgroundSync = true;
         }
 
-        if (!shouldFetchLive) {
-          return;
-        }
-
-        const latestSeries = await getLatestStockChartSeries(normalizedSymbol, range);
+        const latestSeries = await getLatestStockChartSeries(normalizedSymbol, range, {
+          forceLive,
+        });
         if (requestId === chartRequestIdRef.current) {
           setChartSeries(latestSeries);
         }
       } finally {
+        if (didStartBackgroundSync) {
+          endBackgroundSync();
+        }
         if (showLoader && requestId === chartRequestIdRef.current) {
           setIsChartLoading(false);
         }
       }
     },
-    [normalizedSymbol]
+    [beginBackgroundSync, endBackgroundSync, normalizedSymbol]
   );
 
   const handlePullToRefresh = React.useCallback(async () => {
@@ -541,9 +537,15 @@ export default function PortfolioPositionScreen() {
               </View>
 
               <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
-                <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                  Performance
-                </Text>
+                <View className="flex-row items-center justify-between">
+                  <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                    Performance
+                  </Text>
+                  <AppBackgroundRefreshIndicator
+                    visible={isBackgroundSyncing}
+                    label="Syncing"
+                  />
+                </View>
 
                 <View className="mt-3 flex-row flex-wrap gap-2">
                   {CHART_RANGE_OPTIONS.map((rangeOption) => (

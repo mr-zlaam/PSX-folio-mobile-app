@@ -17,6 +17,8 @@ import {
   formatPKRAmount,
   formatSignedPercentage,
 } from "@/src/features/home/home-formatters";
+import AppBackgroundRefreshIndicator from "@/components/ui/app-background-refresh-indicator";
+import { useBackgroundSyncIndicator } from "@/src/lib/use-background-sync-indicator";
 import { subscribeToTradeMutations } from "@/src/features/trade/trade-events";
 import { APP_COLORS } from "@/src/theme/colors";
 import { useFocusEffect } from "expo-router";
@@ -336,14 +338,30 @@ export default function AnalyticsScreen() {
   const [allocationView, setAllocationView] =
     React.useState<AllocationViewMode>("companies");
   const [selectedPointValue, setSelectedPointValue] = React.useState<number | null>(null);
+  const {
+    isBackgroundSyncing,
+    beginBackgroundSync,
+    endBackgroundSync,
+  } = useBackgroundSyncIndicator();
 
-  const refreshAnalytics = React.useCallback(async () => {
+  const refreshAnalytics = React.useCallback(async (showBackgroundSync = true) => {
+    let didStartBackgroundSync = false;
     const cachedSnapshot = await getCachedAnalyticsSnapshot();
     setSnapshot(cachedSnapshot);
+    if (showBackgroundSync && cachedSnapshot.trend.length > 0) {
+      beginBackgroundSync();
+      didStartBackgroundSync = true;
+    }
 
-    const latestSnapshot = await getLatestAnalyticsSnapshot();
-    setSnapshot(latestSnapshot);
-  }, []);
+    try {
+      const latestSnapshot = await getLatestAnalyticsSnapshot();
+      setSnapshot(latestSnapshot);
+    } finally {
+      if (didStartBackgroundSync) {
+        endBackgroundSync();
+      }
+    }
+  }, [beginBackgroundSync, endBackgroundSync]);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -386,7 +404,7 @@ export default function AnalyticsScreen() {
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
-      await refreshAnalytics();
+      await refreshAnalytics(false);
     } finally {
       setIsRefreshing(false);
     }
@@ -550,9 +568,15 @@ export default function AnalyticsScreen() {
                   {`Dividends ${formatPKRAmount(snapshot.overview.totalDividends)}`}
                 </Text>
 
-                <Text className="mt-3 text-[11px] font-semibold text-text-placeholderLight dark:text-text-placeholderDark">
-                  Updated {formatUpdatedAt(snapshot.asOf)}
-                </Text>
+                <View className="mt-3 flex-row items-center justify-between gap-3">
+                  <Text className="text-[11px] font-semibold text-text-placeholderLight dark:text-text-placeholderDark">
+                    Updated {formatUpdatedAt(snapshot.asOf)}
+                  </Text>
+                  <AppBackgroundRefreshIndicator
+                    visible={isBackgroundSyncing}
+                    label="Syncing"
+                  />
+                </View>
               </View>
 
               <View className="rounded-3xl bg-brand-white px-4 py-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
@@ -560,9 +584,15 @@ export default function AnalyticsScreen() {
                   <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                     Equity Trend
                   </Text>
-                  <Text className="text-sm font-extrabold text-app-text dark:text-app-textDark">
-                    {formatPKRAmount(chartLatestValue)}
-                  </Text>
+                  <View className="items-end gap-1">
+                    <Text className="text-sm font-extrabold text-app-text dark:text-app-textDark">
+                      {formatPKRAmount(chartLatestValue)}
+                    </Text>
+                    <AppBackgroundRefreshIndicator
+                      visible={isBackgroundSyncing}
+                      label="Syncing"
+                    />
+                  </View>
                 </View>
 
                 <View className="mt-3 flex-row flex-wrap gap-2">

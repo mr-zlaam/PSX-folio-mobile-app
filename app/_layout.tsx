@@ -40,27 +40,7 @@ export default function RootLayout() {
               backgroundColor: stackBackgroundColor,
             },
           }}
-        >
-          <Stack.Screen name="index" />
-          <Stack.Screen name="(tabs)" />
-          <Stack.Screen name="portfolio-position" />
-          <Stack.Screen name="portfolio-sector" />
-          <Stack.Screen name="broker-settings" />
-          <Stack.Screen name="dividend" />
-          <Stack.Screen name="deposit" />
-          <Stack.Screen name="bonus-share" />
-          <Stack.Screen name="transaction-history" />
-          <Stack.Screen name="market-index" />
-          <Stack.Screen name="market-index-stocks" />
-          <Stack.Screen name="stock-detail" />
-          <Stack.Screen name="pdf-viewer" />
-          <Stack.Screen name="analytics" />
-          <Stack.Screen name="announcements" />
-          <Stack.Screen name="notifications" />
-          <Stack.Screen name="notification-detail" />
-          <Stack.Screen name="tax-settings" />
-          <Stack.Screen name="privacy-policy" />
-        </Stack>
+        />
       </BottomSheetModalProvider>
     </GestureHandlerRootView>
   );

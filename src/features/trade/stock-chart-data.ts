@@ -1,4 +1,6 @@
 import * as FileSystem from "expo-file-system/legacy";
+import { getCachedDpsMarketStatus } from "@/src/features/market/dps-market-status";
+import { shouldFetchLiveFromDelayedFeed } from "@/src/features/market/market-status";
 
 const PSX_INTRADAY_ENDPOINT_BASE = "https://dps.psx.com.pk/timeseries/int";
 const PSX_EOD_ENDPOINT_BASE = "https://dps.psx.com.pk/timeseries/eod";
@@ -216,6 +218,29 @@ async function getLatestEodRows(symbol: string): Promise<EodRow[]> {
   return rows;
 }
 
+async function shouldUseCachedChartSeries(options: {
+  asOf: string | null;
+  hasUsableCache: boolean;
+  forceLive?: boolean;
+}): Promise<boolean> {
+  const { asOf, hasUsableCache, forceLive = false } = options;
+  if (forceLive || !hasUsableCache) {
+    return false;
+  }
+
+  try {
+    const cachedMarketStatus = await getCachedDpsMarketStatus();
+    return !shouldFetchLiveFromDelayedFeed({
+      asOf,
+      marketUiStatus: cachedMarketStatus.uiStatus,
+      hasUsableCache,
+      forceLive,
+    });
+  } catch {
+    return false;
+  }
+}
+
 function downsamplePoints(points: StockChartPoint[], maxPoints = 180): StockChartPoint[] {
   if (points.length <= maxPoints) {
     return points;
@@ -375,8 +400,22 @@ export async function getCachedStockChartSeries(
 
 export async function getLatestStockChartSeries(
   symbol: string,
-  range: StockChartRange
+  range: StockChartRange,
+  options?: {
+    forceLive?: boolean;
+  }
 ): Promise<StockChartSeries> {
+  const cachedSeries = await getCachedStockChartSeries(symbol, range);
+  const hasUsableCachedSeries = cachedSeries.points.length > 0;
+  const shouldReturnCachedSeries = await shouldUseCachedChartSeries({
+    asOf: cachedSeries.asOf,
+    hasUsableCache: hasUsableCachedSeries,
+    forceLive: options?.forceLive === true,
+  });
+  if (shouldReturnCachedSeries) {
+    return cachedSeries;
+  }
+
   try {
     if (range === "1D") {
       const [latestIntradayRows, latestEodRows] = await Promise.all([
@@ -399,7 +438,6 @@ export async function getLatestStockChartSeries(
     // Continue to cached fallback below.
   }
 
-  const cachedSeries = await getCachedStockChartSeries(symbol, range);
   return cachedSeries.points.length > 0
     ? cachedSeries
     : getStockChartSeriesFallback(range);

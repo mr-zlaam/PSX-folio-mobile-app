@@ -5,6 +5,7 @@ import {
 } from "@/components/ui/app-skeleton";
 import { useGuardedRouter } from "@/src/lib/navigation";
 import {
+  IN_APP_NOTIFICATIONS_REVALIDATE_INTERVAL_MS,
   getInAppNotifications,
   InAppNotification,
   markAllInAppNotificationsRead,
@@ -26,7 +27,8 @@ import {
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
-const NOTIFICATIONS_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
+const NOTIFICATIONS_REFRESH_INTERVAL_MS =
+  IN_APP_NOTIFICATIONS_REVALIDATE_INTERVAL_MS;
 const NOTIFICATIONS_PAGE_SIZE = 20;
 
 function formatTimestamp(value: string | null): string {
@@ -84,6 +86,7 @@ export default function NotificationsScreen() {
   const loadNotifications = React.useCallback(async () => {
     const storedNotifications = await getInAppNotifications();
     setNotifications(storedNotifications);
+    return storedNotifications;
   }, []);
 
   const syncNotifications = React.useCallback(
@@ -101,6 +104,17 @@ export default function NotificationsScreen() {
       try {
         setVisibleUnreadCount(NOTIFICATIONS_PAGE_SIZE);
         setVisibleReadCount(NOTIFICATIONS_PAGE_SIZE);
+        const cachedNotifications = await loadNotifications();
+        if (!isMounted) {
+          return;
+        }
+
+        if (cachedNotifications.length > 0) {
+          setIsInitialLoading(false);
+          void syncNotifications(false);
+          return;
+        }
+
         await syncNotifications(true);
       } finally {
         if (isMounted) {

@@ -1,11 +1,11 @@
 import StockLineChart from "@/components/charts/stock-line-chart";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
+import AppBackgroundRefreshIndicator from "@/components/ui/app-background-refresh-indicator";
 import {
   AppChartSkeleton,
   AppDetailScreenSkeleton,
 } from "@/components/ui/app-skeleton";
 import {
-  formatPKRAmount,
   formatSignedPercentage,
 } from "@/src/features/home/home-formatters";
 import {
@@ -14,7 +14,7 @@ import {
   getMarketIndexDefinitionByCode,
   MarketIndexDetailSnapshot,
 } from "@/src/features/market/market-data";
-import { getCachedDpsMarketStatus } from "@/src/features/market/dps-market-status";
+import { useBackgroundSyncIndicator } from "@/src/lib/use-background-sync-indicator";
 import {
   getCachedStockChartSeries,
   getLatestStockChartSeries,
@@ -253,9 +253,15 @@ export default function MarketIndexScreen() {
   const [selectedChartPoint, setSelectedChartPoint] =
     React.useState<StockChartPoint | null>(null);
   const chartRequestIdRef = React.useRef(0);
+  const {
+    isBackgroundSyncing,
+    beginBackgroundSync,
+    endBackgroundSync,
+  } = useBackgroundSyncIndicator();
 
   const refreshDetail = React.useCallback(
     async (showLoader = false, forceLive = false) => {
+      let didStartBackgroundSync = false;
       if (showLoader) {
         setIsInitialLoading(true);
       }
@@ -280,6 +286,13 @@ export default function MarketIndexScreen() {
           }
         }
 
+        const shouldShowBackgroundSync =
+          hasUsableCachedDetail && !showLoader && !forceLive;
+        if (shouldShowBackgroundSync) {
+          beginBackgroundSync();
+          didStartBackgroundSync = true;
+        }
+
         const latestDetail = await getLatestMarketIndexDetail(normalizedCode, {
           forceLive,
         });
@@ -287,18 +300,22 @@ export default function MarketIndexScreen() {
           setDetail(latestDetail);
         }
       } finally {
+        if (didStartBackgroundSync) {
+          endBackgroundSync();
+        }
         if (showLoader) {
           setIsInitialLoading(false);
         }
       }
     },
-    [normalizedCode]
+    [beginBackgroundSync, endBackgroundSync, normalizedCode]
   );
 
   const refreshChart = React.useCallback(
     async (range: StockChartRange, showLoader = false, forceLive = false) => {
       const requestId = chartRequestIdRef.current + 1;
       chartRequestIdRef.current = requestId;
+      let didStartBackgroundSync = false;
 
       if (showLoader) {
         setIsChartLoading(true);
@@ -321,32 +338,29 @@ export default function MarketIndexScreen() {
           }
         }
 
-        let shouldUseCachedOnly = false;
-        if (!forceLive) {
-          try {
-            const cachedDpsStatus = await getCachedDpsMarketStatus();
-            shouldUseCachedOnly =
-              cachedDpsStatus.uiStatus !== "OPEN" && hasUsableCachedSeries;
-          } catch {
-            shouldUseCachedOnly = false;
-          }
+        const shouldShowBackgroundSync =
+          hasUsableCachedSeries && !showLoader && !forceLive;
+        if (shouldShowBackgroundSync) {
+          beginBackgroundSync();
+          didStartBackgroundSync = true;
         }
 
-        if (shouldUseCachedOnly) {
-          return;
-        }
-
-        const latestSeries = await getLatestStockChartSeries(normalizedCode, range);
+        const latestSeries = await getLatestStockChartSeries(normalizedCode, range, {
+          forceLive,
+        });
         if (requestId === chartRequestIdRef.current) {
           setChartSeries(latestSeries);
         }
       } finally {
+        if (didStartBackgroundSync) {
+          endBackgroundSync();
+        }
         if (showLoader && requestId === chartRequestIdRef.current) {
           setIsChartLoading(false);
         }
       }
     },
-    [normalizedCode]
+    [beginBackgroundSync, endBackgroundSync, normalizedCode]
   );
 
   React.useEffect(() => {
@@ -506,9 +520,15 @@ export default function MarketIndexScreen() {
           ) : (
             <>
               <View className="rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
-                <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                  {detail.snapshot.displayCode}
-                </Text>
+                <View className="flex-row items-center justify-between gap-3">
+                  <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                    {detail.snapshot.displayCode}
+                  </Text>
+                  <AppBackgroundRefreshIndicator
+                    visible={isBackgroundSyncing}
+                    label="Syncing"
+                  />
+                </View>
                 <Text className="mt-2 text-4xl font-extrabold text-app-text dark:text-app-textDark">
                   {formatPoints(detail.snapshot.latestPrice)}
                 </Text>
@@ -552,7 +572,7 @@ export default function MarketIndexScreen() {
                         Selected Point
                       </Text>
                       <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
-                        {formatPKRAmount(selectedChartPoint.price)}
+                        {formatPoints(selectedChartPoint.price)}
                       </Text>
                     </View>
                     <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">

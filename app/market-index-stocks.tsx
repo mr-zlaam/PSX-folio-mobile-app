@@ -1,4 +1,5 @@
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
+import AppBackgroundRefreshIndicator from "@/components/ui/app-background-refresh-indicator";
 import { AppListScreenSkeleton } from "@/components/ui/app-skeleton";
 import ShariahChip from "@/components/ui/shariah-chip";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -13,6 +14,7 @@ import { formatSignedPercentage } from "@/src/features/home/home-formatters";
 import { APP_COLORS } from "@/src/theme/colors";
 import { useLocalSearchParams } from "expo-router";
 import { useGuardedRouter } from "@/src/lib/navigation";
+import { useBackgroundSyncIndicator } from "@/src/lib/use-background-sync-indicator";
 import { useColorScheme } from "nativewind";
 import React from "react";
 import {
@@ -192,6 +194,11 @@ export default function MarketIndexStocksScreen() {
     React.useState<MarketIndexConstituentSnapshot | null>(null);
   const [isInitialLoading, setIsInitialLoading] = React.useState(true);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const {
+    isBackgroundSyncing,
+    beginBackgroundSync,
+    endBackgroundSync,
+  } = useBackgroundSyncIndicator();
   const filterSheetRef = React.useRef<BottomSheetModal>(null);
   const filterSheetSnapPoints = React.useMemo(() => ["44%"], []);
   const skeletonCardCount = React.useMemo(
@@ -205,6 +212,7 @@ export default function MarketIndexStocksScreen() {
 
   const refreshConstituents = React.useCallback(
     async (showLoader = false, forceLive = false) => {
+      let didStartBackgroundSync = false;
       if (showLoader) {
         setIsInitialLoading(true);
       }
@@ -227,6 +235,11 @@ export default function MarketIndexStocksScreen() {
           }
         }
 
+        if (hasUsableCachedSnapshot && !showLoader && !forceLive) {
+          beginBackgroundSync();
+          didStartBackgroundSync = true;
+        }
+
         const latestSnapshot =
           await getLatestMarketIndexConstituents(normalizedCode, {
             forceLive,
@@ -235,12 +248,15 @@ export default function MarketIndexStocksScreen() {
           setConstituents(latestSnapshot);
         }
       } finally {
+        if (didStartBackgroundSync) {
+          endBackgroundSync();
+        }
         if (showLoader) {
           setIsInitialLoading(false);
         }
       }
     },
-    [normalizedCode]
+    [beginBackgroundSync, endBackgroundSync, normalizedCode]
   );
 
   React.useEffect(() => {
@@ -394,6 +410,12 @@ export default function MarketIndexStocksScreen() {
               Source: {constituents?.endpointCode ?? "--"} | Updated:{" "}
               {formatUpdatedAt(constituents?.asOf ?? null)}
             </Text>
+            <View className="mt-1">
+              <AppBackgroundRefreshIndicator
+                visible={isBackgroundSyncing}
+                label="Syncing"
+              />
+            </View>
 
             {(constituents?.items.length ?? 0) > 0 ? (
               <>

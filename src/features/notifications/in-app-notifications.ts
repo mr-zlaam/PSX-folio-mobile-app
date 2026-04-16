@@ -7,8 +7,7 @@ import {
 } from "@/src/features/announcements/announcements-data";
 
 const NOTIFICATION_STORAGE_KEY = "@psx-portfolio/in-app-notifications";
-const NOTIFICATION_SYNC_INTERVAL_MS = 5 * 60 * 1000;
-const MAX_STORED_NOTIFICATIONS = 500;
+export const IN_APP_NOTIFICATIONS_REVALIDATE_INTERVAL_MS = 15 * 60 * 1000;
 
 type NotificationStore = {
   version: 1;
@@ -316,8 +315,20 @@ function normalizeNotifications(
       }
 
       return secondTime - firstTime;
-    })
-    .slice(0, MAX_STORED_NOTIFICATIONS);
+    });
+}
+
+function getStoreSyncTimestamp(lastSyncedAt: string | null): number {
+  if (!lastSyncedAt || lastSyncedAt.trim().length === 0) {
+    return 0;
+  }
+
+  const parsed = new Date(lastSyncedAt).getTime();
+  if (!Number.isFinite(parsed) || Number.isNaN(parsed)) {
+    return 0;
+  }
+
+  return parsed;
 }
 
 function buildNotificationMessage(item: PsxAnnouncementItem): string {
@@ -659,16 +670,24 @@ export async function registerAnnouncementItemsAsNotifications(
 export async function syncPsxAnnouncementsToInAppNotifications(options?: {
   force?: boolean;
 }): Promise<number> {
-  const now = Date.now();
-  if (
-    !options?.force &&
-    now - lastSyncTimestamp < NOTIFICATION_SYNC_INTERVAL_MS
-  ) {
-    return 0;
-  }
-
   if (inFlightSyncPromise) {
     return inFlightSyncPromise;
+  }
+
+  const now = Date.now();
+  if (!options?.force) {
+    const store = await readStore();
+    const storeSyncTimestamp = getStoreSyncTimestamp(store.lastSyncedAt);
+    const isStoreFresh =
+      storeSyncTimestamp > 0 &&
+      now - storeSyncTimestamp < IN_APP_NOTIFICATIONS_REVALIDATE_INTERVAL_MS;
+    const isMemoryFresh =
+      lastSyncTimestamp > 0 &&
+      now - lastSyncTimestamp < IN_APP_NOTIFICATIONS_REVALIDATE_INTERVAL_MS;
+
+    if (isStoreFresh || isMemoryFresh) {
+      return 0;
+    }
   }
 
   lastSyncTimestamp = now;
