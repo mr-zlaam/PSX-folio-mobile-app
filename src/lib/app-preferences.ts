@@ -1,8 +1,12 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import * as FileSystem from "expo-file-system/legacy";
 import {
+  BrokerCommissionModel,
+  BrokerCommissionRule,
   BrokerFeeType,
   DEFAULT_BROKER_COMMISSION_PCT,
+  normalizeBrokerCommissionModel,
+  normalizeBrokerCommissionRules,
   normalizeBrokerFeeType,
 } from "@/src/lib/broker-fee";
 
@@ -20,6 +24,8 @@ export type BrokerSettings = {
   transactionFeeValue: number;
   profileMode: BrokerProfileMode;
   cdcChargePerShare: number;
+  commissionModel: BrokerCommissionModel;
+  commissionRules: BrokerCommissionRule[];
 };
 
 const STORAGE_KEYS = {
@@ -81,6 +87,8 @@ const DEFAULT_BROKER_SETTINGS: BrokerSettings = {
   transactionFeeValue: DEFAULT_BROKER_COMMISSION_PCT,
   profileMode: "default",
   cdcChargePerShare: 0.005,
+  commissionModel: "flat",
+  commissionRules: [],
 };
 
 type PreferencesStore = Record<string, string>;
@@ -234,6 +242,18 @@ function parseBrokerSettings(rawValue: string | null): BrokerSettings | null {
         : normalizedProfileMode === "custom"
           ? "Custom Broker"
           : "Default Broker";
+    const requestedCommissionModel = normalizeBrokerCommissionModel(
+      typeof parsedValue.commissionModel === "string"
+        ? parsedValue.commissionModel
+        : null
+    );
+    const normalizedCommissionRules = normalizeBrokerCommissionRules(
+      parsedValue.commissionRules
+    );
+    const shouldUseSlabs =
+      normalizedProfileMode === "custom" &&
+      requestedCommissionModel === "slabs" &&
+      normalizedCommissionRules.length > 0;
     const parsedFeeValue =
       typeof parsedValue.transactionFeeValue === "number" &&
       Number.isFinite(parsedValue.transactionFeeValue) &&
@@ -267,6 +287,8 @@ function parseBrokerSettings(rawValue: string | null): BrokerSettings | null {
       transactionFeeValue: normalizedFeeValue,
       profileMode: normalizedProfileMode,
       cdcChargePerShare: normalizedCdcChargePerShare,
+      commissionModel: shouldUseSlabs ? "slabs" : "flat",
+      commissionRules: shouldUseSlabs ? normalizedCommissionRules : [],
     };
   } catch {
     return null;
@@ -630,7 +652,10 @@ export async function getBrokerSettings(): Promise<BrokerSettings | null> {
 }
 
 export function getDefaultBrokerSettings(): BrokerSettings {
-  return { ...DEFAULT_BROKER_SETTINGS };
+  return {
+    ...DEFAULT_BROKER_SETTINGS,
+    commissionRules: [...DEFAULT_BROKER_SETTINGS.commissionRules],
+  };
 }
 
 export async function setBrokerSettings(
@@ -652,12 +677,29 @@ export async function setBrokerSettings(
     normalizedProfileMode === "custom"
       ? brokerSettings.cdcChargePerShare
       : DEFAULT_BROKER_SETTINGS.cdcChargePerShare;
+  const requestedCommissionModel =
+    normalizedProfileMode === "custom"
+      ? normalizeBrokerCommissionModel(brokerSettings.commissionModel)
+      : "flat";
+  const normalizedCommissionRules =
+    normalizedProfileMode === "custom" && requestedCommissionModel === "slabs"
+      ? normalizeBrokerCommissionRules(brokerSettings.commissionRules)
+      : [];
+  const normalizedCommissionModel: BrokerCommissionModel =
+    normalizedProfileMode === "custom" &&
+    requestedCommissionModel === "slabs" &&
+    normalizedCommissionRules.length > 0
+      ? "slabs"
+      : "flat";
 
   if (
     !Number.isFinite(normalizedTransactionFeeValue) ||
     normalizedTransactionFeeValue < 0 ||
     !Number.isFinite(normalizedCdcChargePerShare) ||
-    normalizedCdcChargePerShare < 0
+    normalizedCdcChargePerShare < 0 ||
+    (requestedCommissionModel === "slabs" &&
+      normalizedProfileMode === "custom" &&
+      normalizedCommissionRules.length === 0)
   ) {
     throw new Error("Invalid broker settings");
   }
@@ -670,6 +712,8 @@ export async function setBrokerSettings(
       transactionFeeValue: normalizedTransactionFeeValue,
       profileMode: normalizedProfileMode,
       cdcChargePerShare: normalizedCdcChargePerShare,
+      commissionModel: normalizedCommissionModel,
+      commissionRules: normalizedCommissionRules,
     })
   );
 }

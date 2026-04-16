@@ -496,6 +496,8 @@ export default function HomeScreen() {
               typeof order.brokerFeePct === "number"
                 ? order.brokerFeePct
                 : null,
+            brokerCommissionModel: order.brokerCommissionModel,
+            brokerCommissionRules: order.brokerCommissionRules,
             cdcChargePerShare: order.brokerCdcChargePerShare,
           });
           return runningTotal + brokerDeduction;

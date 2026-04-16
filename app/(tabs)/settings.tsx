@@ -140,6 +140,13 @@ function formatBrokerSummary(brokerSettings: BrokerSettings | null): string {
     return `Default • ${defaultSettings.transactionFeeValue}% commission • CDC ${defaultSettings.cdcChargePerShare}/share`;
   }
 
+  if (
+    brokerSettings.commissionModel === "slabs" &&
+    brokerSettings.commissionRules.length > 0
+  ) {
+    return `Custom • ${brokerSettings.commissionRules.length} slab rules • CDC ${brokerSettings.cdcChargePerShare}/share`;
+  }
+
   return `Custom • ${brokerSettings.transactionFeeValue}% commission • CDC ${brokerSettings.cdcChargePerShare}/share`;
 }
 

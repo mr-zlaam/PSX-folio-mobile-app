@@ -48,6 +48,8 @@ import {
   calculateBrokerFeeAmount,
   DEFAULT_BROKER_COMMISSION_PCT,
   DEFAULT_CDC_CHARGE_PER_SHARE,
+  normalizeBrokerCommissionModel,
+  normalizeBrokerCommissionRules,
 } from "@/src/lib/broker-fee";
 import { useGuardedRouter } from "@/src/lib/navigation";
 import { APP_COLORS } from "@/src/theme/colors";
@@ -626,6 +628,29 @@ export default function TransactionsTabScreen() {
     return Math.max(0, savedCommission);
   }, [savedBrokerSettings?.transactionFeeValue]);
 
+  const effectiveBrokerCommissionModel = React.useMemo(() => {
+    if (!savedBrokerSettings || savedBrokerSettings.profileMode !== "custom") {
+      return "flat";
+    }
+
+    return normalizeBrokerCommissionModel(savedBrokerSettings.commissionModel);
+  }, [savedBrokerSettings]);
+
+  const effectiveBrokerCommissionRules = React.useMemo(() => {
+    if (effectiveBrokerCommissionModel !== "slabs") {
+      return [];
+    }
+
+    return normalizeBrokerCommissionRules(savedBrokerSettings?.commissionRules);
+  }, [effectiveBrokerCommissionModel, savedBrokerSettings?.commissionRules]);
+
+  const shouldUseSlabRules = React.useMemo(
+    () =>
+      effectiveBrokerCommissionModel === "slabs" &&
+      effectiveBrokerCommissionRules.length > 0,
+    [effectiveBrokerCommissionModel, effectiveBrokerCommissionRules.length],
+  );
+
   const effectiveCdcChargePerShare = React.useMemo(() => {
     const savedCdcChargePerShare = savedBrokerSettings?.cdcChargePerShare;
     if (
@@ -656,8 +681,16 @@ export default function TransactionsTabScreen() {
       units: parsedUnits,
       brokerFeeType: "percentage",
       brokerFeeValue: isBrokerDeductionEnabled
-        ? effectiveBrokerCommissionPct
+        ? shouldUseSlabRules
+          ? 0
+          : effectiveBrokerCommissionPct
         : 0,
+      brokerCommissionModel:
+        isBrokerDeductionEnabled && shouldUseSlabRules ? "slabs" : "flat",
+      brokerCommissionRules:
+        isBrokerDeductionEnabled && shouldUseSlabRules
+          ? effectiveBrokerCommissionRules
+          : [],
       cdcChargePerShare: isBrokerDeductionEnabled
         ? effectiveCdcChargePerShare
         : 0,
@@ -665,10 +698,12 @@ export default function TransactionsTabScreen() {
   }, [
     effectiveCdcChargePerShare,
     effectiveBrokerCommissionPct,
+    effectiveBrokerCommissionRules,
     hasTradeInputs,
     isBrokerDeductionEnabled,
     parsedPrice,
     parsedUnits,
+    shouldUseSlabRules,
   ]);
 
   const estimatedBrokerDeductionBreakdown = React.useMemo(
@@ -678,8 +713,16 @@ export default function TransactionsTabScreen() {
         units: parsedUnits,
         brokerFeeType: "percentage",
         brokerFeeValue: isBrokerDeductionEnabled
-          ? effectiveBrokerCommissionPct
+          ? shouldUseSlabRules
+            ? 0
+            : effectiveBrokerCommissionPct
           : 0,
+        brokerCommissionModel:
+          isBrokerDeductionEnabled && shouldUseSlabRules ? "slabs" : "flat",
+        brokerCommissionRules:
+          isBrokerDeductionEnabled && shouldUseSlabRules
+            ? effectiveBrokerCommissionRules
+            : [],
         cdcChargePerShare: isBrokerDeductionEnabled
           ? effectiveCdcChargePerShare
           : 0,
@@ -687,9 +730,11 @@ export default function TransactionsTabScreen() {
     [
       effectiveCdcChargePerShare,
       effectiveBrokerCommissionPct,
+      effectiveBrokerCommissionRules,
       isBrokerDeductionEnabled,
       parsedPrice,
       parsedUnits,
+      shouldUseSlabRules,
     ],
   );
 
@@ -861,8 +906,21 @@ export default function TransactionsTabScreen() {
       savedBrokerSettings ?? getDefaultBrokerSettings();
     const brokerModeForTrade =
       effectiveBrokerSettings.profileMode === "custom" ? "custom" : "saved";
+    const normalizedBrokerCommissionModel =
+      effectiveBrokerSettings.profileMode === "custom"
+        ? normalizeBrokerCommissionModel(effectiveBrokerSettings.commissionModel)
+        : "flat";
+    const normalizedBrokerCommissionRules =
+      normalizedBrokerCommissionModel === "slabs"
+        ? normalizeBrokerCommissionRules(effectiveBrokerSettings.commissionRules)
+        : [];
+    const shouldUseSlabRulesForTrade =
+      normalizedBrokerCommissionModel === "slabs" &&
+      normalizedBrokerCommissionRules.length > 0;
     const brokerCommissionPctForTrade = isBrokerDeductionEnabled
-      ? Math.max(0, effectiveBrokerSettings.transactionFeeValue)
+      ? shouldUseSlabRulesForTrade
+        ? 0
+        : Math.max(0, effectiveBrokerSettings.transactionFeeValue)
       : 0;
     const brokerCdcChargePerShareForTrade = isBrokerDeductionEnabled
       ? Math.max(0, effectiveBrokerSettings.cdcChargePerShare)
@@ -939,6 +997,12 @@ export default function TransactionsTabScreen() {
             brokerFeeValue: brokerCommissionPctForTrade,
             brokerCdcChargePerShare: brokerCdcChargePerShareForTrade,
             brokerDeductionEnabled: isBrokerDeductionEnabled,
+            brokerCommissionModel: shouldUseSlabRulesForTrade
+              ? "slabs"
+              : "flat",
+            brokerCommissionRules: shouldUseSlabRulesForTrade
+              ? normalizedBrokerCommissionRules
+              : [],
           })
         : await saveTradeOrder({
             side: tradeSide,
@@ -952,6 +1016,12 @@ export default function TransactionsTabScreen() {
             brokerFeeValue: brokerCommissionPctForTrade,
             brokerCdcChargePerShare: brokerCdcChargePerShareForTrade,
             brokerDeductionEnabled: isBrokerDeductionEnabled,
+            brokerCommissionModel: shouldUseSlabRulesForTrade
+              ? "slabs"
+              : "flat",
+            brokerCommissionRules: shouldUseSlabRulesForTrade
+              ? normalizedBrokerCommissionRules
+              : [],
           });
 
       if (tradeSide === "sell") {

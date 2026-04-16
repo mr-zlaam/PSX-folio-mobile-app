@@ -15,9 +15,13 @@ import {
   setBrokerSettings,
 } from "@/src/lib/app-preferences";
 import {
+  BrokerCommissionModel,
+  BrokerCommissionRule,
+  BrokerCommissionRuleType,
   DEFAULT_BROKER_COMMISSION_PCT,
   DEFAULT_CDC_CHARGE_PER_SHARE,
   DEFAULT_SST_RATE_PCT,
+  normalizeBrokerCommissionRuleType,
 } from "@/src/lib/broker-fee";
 import { APP_COLORS } from "@/src/theme/colors";
 
@@ -26,6 +30,48 @@ type BrokerSettingsNotice = {
   message: string;
   tone: AppFeedbackModalTone;
 };
+
+type RuleDraft = {
+  id: string;
+  minSharePriceInput: string;
+  maxSharePriceInput: string;
+  type: BrokerCommissionRuleType;
+  percentageRateInput: string;
+  perShareChargeInput: string;
+  fixedChargeInput: string;
+};
+
+function createRuleDraft(rule?: BrokerCommissionRule): RuleDraft {
+  const randomSuffix = Math.random().toString(36).slice(2, 8);
+  const ruleId =
+    typeof rule?.id === "string" && rule.id.trim().length > 0
+      ? rule.id
+      : `rule_${Date.now()}_${randomSuffix}`;
+  return {
+    id: ruleId,
+    minSharePriceInput:
+      typeof rule?.minSharePrice === "number" && Number.isFinite(rule.minSharePrice)
+        ? String(rule.minSharePrice)
+        : "0",
+    maxSharePriceInput:
+      typeof rule?.maxSharePrice === "number" && Number.isFinite(rule.maxSharePrice)
+        ? String(rule.maxSharePrice)
+        : "",
+    type: rule ? normalizeBrokerCommissionRuleType(rule.type) : "percentage",
+    percentageRateInput:
+      typeof rule?.percentageRate === "number" && Number.isFinite(rule.percentageRate)
+        ? String(rule.percentageRate)
+        : "",
+    perShareChargeInput:
+      typeof rule?.perShareCharge === "number" && Number.isFinite(rule.perShareCharge)
+        ? String(rule.perShareCharge)
+        : "",
+    fixedChargeInput:
+      typeof rule?.fixedCharge === "number" && Number.isFinite(rule.fixedCharge)
+        ? String(rule.fixedCharge)
+        : "",
+  };
+}
 
 function ModeChip({
   label,
@@ -65,8 +111,126 @@ function ModeChip({
   );
 }
 
+function parseNonNegativeInput(value: string): number | null {
+  const normalized = value.trim().replace(/,/g, "");
+  if (normalized.length === 0) {
+    return null;
+  }
+
+  const parsed = Number(normalized);
+  if (!Number.isFinite(parsed) || parsed < 0) {
+    return null;
+  }
+
+  return parsed;
+}
+
 function formatPkrValue(value: number): string {
-  return Number.isFinite(value) ? value.toFixed(3).replace(/0+$/, "").replace(/\.$/, "") : "0";
+  return Number.isFinite(value)
+    ? value.toFixed(3).replace(/0+$/, "").replace(/\.$/, "")
+    : "0";
+}
+
+function buildRulesFromDrafts(ruleDrafts: RuleDraft[]): {
+  rules: BrokerCommissionRule[];
+  errorMessage: string | null;
+} {
+  const parsedRulesWithIndex: {
+    rule: BrokerCommissionRule;
+    index: number;
+  }[] = [];
+
+  for (let index = 0; index < ruleDrafts.length; index += 1) {
+    const draft = ruleDrafts[index];
+    const ruleLabel = `Rule ${index + 1}`;
+    const minSharePrice = parseNonNegativeInput(draft.minSharePriceInput);
+    if (minSharePrice === null) {
+      return {
+        rules: [],
+        errorMessage: `${ruleLabel}: enter a valid "From Price" (0 or above).`,
+      };
+    }
+
+    const maxInput = draft.maxSharePriceInput.trim().replace(/,/g, "");
+    let maxSharePrice: number | null = null;
+    if (maxInput.length > 0) {
+      const parsedMax = Number(maxInput);
+      if (!Number.isFinite(parsedMax) || parsedMax < minSharePrice) {
+        return {
+          rules: [],
+          errorMessage: `${ruleLabel}: "To Price" must be empty or greater than/equal to "From Price".`,
+        };
+      }
+      maxSharePrice = parsedMax;
+    }
+
+    const normalizedType = normalizeBrokerCommissionRuleType(draft.type);
+    const percentageRate = parseNonNegativeInput(draft.percentageRateInput);
+    const perShareCharge = parseNonNegativeInput(draft.perShareChargeInput);
+    const fixedCharge = parseNonNegativeInput(draft.fixedChargeInput);
+
+    if (normalizedType === "percentage" && percentageRate === null) {
+      return {
+        rules: [],
+        errorMessage: `${ruleLabel}: enter a valid commission percentage.`,
+      };
+    }
+    if (normalizedType === "perShare" && perShareCharge === null) {
+      return {
+        rules: [],
+        errorMessage: `${ruleLabel}: enter a valid per-share charge.`,
+      };
+    }
+    if (normalizedType === "fixedOrder" && fixedCharge === null) {
+      return {
+        rules: [],
+        errorMessage: `${ruleLabel}: enter a valid fixed charge.`,
+      };
+    }
+    if (
+      normalizedType === "maxPercentageOrPerShare" &&
+      (percentageRate === null || perShareCharge === null)
+    ) {
+      return {
+        rules: [],
+        errorMessage: `${ruleLabel}: enter both percentage and per-share values.`,
+      };
+    }
+
+    parsedRulesWithIndex.push({
+      index,
+      rule: {
+        id: draft.id,
+        minSharePrice,
+        maxSharePrice,
+        type: normalizedType,
+        percentageRate,
+        perShareCharge,
+        fixedCharge,
+      },
+    });
+  }
+
+  const sortedRules = [...parsedRulesWithIndex].sort(
+    (firstRule, secondRule) => firstRule.rule.minSharePrice - secondRule.rule.minSharePrice
+  );
+
+  for (let index = 1; index < sortedRules.length; index += 1) {
+    const previousRule = sortedRules[index - 1];
+    const currentRule = sortedRules[index];
+    const previousMax = previousRule.rule.maxSharePrice ?? Number.POSITIVE_INFINITY;
+    if (currentRule.rule.minSharePrice <= previousMax) {
+      return {
+        rules: [],
+        errorMessage: `Rule ${previousRule.index + 1} overlaps with Rule ${currentRule.index + 1}. Adjust price ranges.`,
+      };
+    }
+  }
+
+  return {
+    rules: parsedRulesWithIndex.map((entry) => entry.rule),
+    errorMessage: null,
+  };
 }
 
 export default function BrokerSettingsScreen() {
@@ -79,12 +243,17 @@ export default function BrokerSettingsScreen() {
     : APP_COLORS.text.placeholderLight;
 
   const [profileMode, setProfileMode] = React.useState<BrokerProfileMode>("default");
+  const [commissionModel, setCommissionModel] =
+    React.useState<BrokerCommissionModel>("flat");
   const [brokerCommissionInput, setBrokerCommissionInput] = React.useState(
     String(DEFAULT_BROKER_COMMISSION_PCT)
   );
   const [cdcChargeInput, setCdcChargeInput] = React.useState(
     String(DEFAULT_CDC_CHARGE_PER_SHARE)
   );
+  const [ruleDrafts, setRuleDrafts] = React.useState<RuleDraft[]>([
+    createRuleDraft(),
+  ]);
   const [isSaving, setIsSaving] = React.useState(false);
   const [notice, setNotice] = React.useState<BrokerSettingsNotice | null>(null);
 
@@ -101,6 +270,16 @@ export default function BrokerSettingsScreen() {
       setProfileMode(effectiveSettings.profileMode);
       setBrokerCommissionInput(String(effectiveSettings.transactionFeeValue));
       setCdcChargeInput(String(effectiveSettings.cdcChargePerShare));
+      const shouldUseSlabs =
+        effectiveSettings.profileMode === "custom" &&
+        effectiveSettings.commissionModel === "slabs" &&
+        effectiveSettings.commissionRules.length > 0;
+      setCommissionModel(shouldUseSlabs ? "slabs" : "flat");
+      setRuleDrafts(
+        shouldUseSlabs
+          ? effectiveSettings.commissionRules.map((rule) => createRuleDraft(rule))
+          : [createRuleDraft()]
+      );
     }
 
     void hydrateBrokerSettings();
@@ -147,23 +326,37 @@ export default function BrokerSettingsScreen() {
     return parsedValue;
   }, [cdcChargeInput, profileMode]);
 
+  const updateRuleDraft = React.useCallback(
+    (ruleId: string, patch: Partial<RuleDraft>) => {
+      setRuleDrafts((previousRules) =>
+        previousRules.map((ruleDraft) =>
+          ruleDraft.id === ruleId ? { ...ruleDraft, ...patch } : ruleDraft
+        )
+      );
+    },
+    []
+  );
+
+  const handleAddRule = React.useCallback(() => {
+    setRuleDrafts((previousRules) => [...previousRules, createRuleDraft()]);
+  }, []);
+
+  const handleRemoveRule = React.useCallback((ruleId: string) => {
+    setRuleDrafts((previousRules) => {
+      if (previousRules.length <= 1) {
+        return previousRules;
+      }
+      return previousRules.filter((ruleDraft) => ruleDraft.id !== ruleId);
+    });
+  }, []);
+
   const handleSaveBrokerSettings = React.useCallback(async () => {
     let normalizedCommissionPct = DEFAULT_BROKER_COMMISSION_PCT;
     let normalizedCdcChargePerShare = DEFAULT_CDC_CHARGE_PER_SHARE;
-    if (profileMode === "custom") {
-      const parsedCommissionPct = Number(
-        brokerCommissionInput.trim().replace(/,/g, "")
-      );
-      if (!Number.isFinite(parsedCommissionPct) || parsedCommissionPct < 0) {
-        showNotice(
-          "Invalid Broker Charges",
-          "Enter a valid broker commission percentage (0 or above).",
-          "error"
-        );
-        return;
-      }
-      normalizedCommissionPct = parsedCommissionPct;
+    let normalizedCommissionModel: BrokerCommissionModel = "flat";
+    let normalizedCommissionRules: BrokerCommissionRule[] = [];
 
+    if (profileMode === "custom") {
       const parsedCdcChargePerShare = Number(cdcChargeInput.trim().replace(/,/g, ""));
       if (!Number.isFinite(parsedCdcChargePerShare) || parsedCdcChargePerShare < 0) {
         showNotice(
@@ -174,6 +367,29 @@ export default function BrokerSettingsScreen() {
         return;
       }
       normalizedCdcChargePerShare = parsedCdcChargePerShare;
+
+      if (commissionModel === "slabs") {
+        const builtRules = buildRulesFromDrafts(ruleDrafts);
+        if (builtRules.errorMessage) {
+          showNotice("Invalid Slab Rules", builtRules.errorMessage, "error");
+          return;
+        }
+        normalizedCommissionModel = "slabs";
+        normalizedCommissionRules = builtRules.rules;
+      } else {
+        const parsedCommissionPct = Number(
+          brokerCommissionInput.trim().replace(/,/g, "")
+        );
+        if (!Number.isFinite(parsedCommissionPct) || parsedCommissionPct < 0) {
+          showNotice(
+            "Invalid Broker Charges",
+            "Enter a valid broker commission percentage (0 or above).",
+            "error"
+          );
+          return;
+        }
+        normalizedCommissionPct = parsedCommissionPct;
+      }
     }
 
     setIsSaving(true);
@@ -184,10 +400,12 @@ export default function BrokerSettingsScreen() {
         transactionFeeType: "percentage",
         transactionFeeValue: normalizedCommissionPct,
         cdcChargePerShare: normalizedCdcChargePerShare,
+        commissionModel: normalizedCommissionModel,
+        commissionRules: normalizedCommissionRules,
       });
       showNotice(
         "Broker Settings Saved",
-        "Trade screen will now use this broker profile for commission, SST, and CDC deductions.",
+        "Broker fee rules are now active for all new trades.",
         "success"
       );
     } catch {
@@ -199,7 +417,14 @@ export default function BrokerSettingsScreen() {
     } finally {
       setIsSaving(false);
     }
-  }, [brokerCommissionInput, cdcChargeInput, profileMode, showNotice]);
+  }, [
+    brokerCommissionInput,
+    cdcChargeInput,
+    commissionModel,
+    profileMode,
+    ruleDrafts,
+    showNotice,
+  ]);
 
   return (
     <SafeAreaView
@@ -231,7 +456,7 @@ export default function BrokerSettingsScreen() {
               Broker Profile
             </Text>
             <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
-              Choose Default or set your own custom broker commission percentage.
+              Configure exactly how commission, SST, and CDC should be applied.
             </Text>
 
             <View className="mt-4 gap-3">
@@ -253,36 +478,228 @@ export default function BrokerSettingsScreen() {
                 </View>
               </View>
 
-              <View>
-                <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                  Broker Commission %
-                </Text>
-                <TextInput
-                  value={
-                    profileMode === "default"
-                      ? String(DEFAULT_BROKER_COMMISSION_PCT)
-                      : brokerCommissionInput
-                  }
-                  onChangeText={setBrokerCommissionInput}
-                  editable={profileMode === "custom"}
-                  placeholder="e.g. 0.15"
-                  placeholderTextColor={placeholderTextColor}
-                  keyboardType="numeric"
-                  className={[
-                    "mt-1 rounded-xl px-3 py-2 text-sm font-semibold",
-                    profileMode === "custom"
-                      ? "bg-app-highlight/10 text-app-text dark:bg-brand-white/8 dark:text-app-textDark"
-                      : "bg-brand-white/70 text-app-text/55 dark:bg-brand-white/12 dark:text-app-textDark/55",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                />
-                {profileMode === "default" ? (
-                  <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
-                    Default mode locks commission at {DEFAULT_BROKER_COMMISSION_PCT}%.
+              {profileMode === "custom" ? (
+                <View>
+                  <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                    Commission Mode
                   </Text>
-                ) : null}
-              </View>
+                  <View className="mt-1 flex-row gap-2">
+                    <ModeChip
+                      label="Flat %"
+                      selected={commissionModel === "flat"}
+                      onPress={() => setCommissionModel("flat")}
+                    />
+                    <ModeChip
+                      label="Slabs"
+                      selected={commissionModel === "slabs"}
+                      onPress={() => setCommissionModel("slabs")}
+                    />
+                  </View>
+                </View>
+              ) : null}
+
+              {profileMode === "custom" && commissionModel === "flat" ? (
+                <View>
+                  <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                    Broker Commission %
+                  </Text>
+                  <TextInput
+                    value={brokerCommissionInput}
+                    onChangeText={setBrokerCommissionInput}
+                    editable={profileMode === "custom"}
+                    placeholder="e.g. 0.15"
+                    placeholderTextColor={placeholderTextColor}
+                    keyboardType="numeric"
+                    className="mt-1 rounded-xl bg-app-highlight/10 px-3 py-2 text-sm font-semibold text-app-text dark:bg-brand-white/8 dark:text-app-textDark"
+                  />
+                </View>
+              ) : null}
+
+              {profileMode === "custom" && commissionModel === "slabs" ? (
+                <View className="gap-3">
+                  <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                    Slab Rules (per share price)
+                  </Text>
+
+                  {ruleDrafts.map((ruleDraft, ruleIndex) => (
+                    <View
+                      key={ruleDraft.id}
+                      className="rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5"
+                    >
+                      <View className="flex-row items-center justify-between">
+                        <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                          Rule {ruleIndex + 1}
+                        </Text>
+                        {ruleDrafts.length > 1 ? (
+                          <TouchableOpacity
+                            activeOpacity={0.88}
+                            onPress={() => handleRemoveRule(ruleDraft.id)}
+                            className="rounded-lg bg-brand-red/15 px-2 py-1"
+                          >
+                            <Text className="text-xs font-bold text-brand-red">
+                              Remove
+                            </Text>
+                          </TouchableOpacity>
+                        ) : null}
+                      </View>
+
+                      <View className="mt-3 flex-row gap-2">
+                        <View className="flex-1">
+                          <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                            From Price
+                          </Text>
+                          <TextInput
+                            value={ruleDraft.minSharePriceInput}
+                            onChangeText={(nextValue) =>
+                              updateRuleDraft(ruleDraft.id, {
+                                minSharePriceInput: nextValue,
+                              })
+                            }
+                            keyboardType="numeric"
+                            placeholder="0"
+                            placeholderTextColor={placeholderTextColor}
+                            className="mt-1 rounded-xl bg-app-highlight/10 px-3 py-2 text-sm font-semibold text-app-text dark:bg-brand-white/8 dark:text-app-textDark"
+                          />
+                        </View>
+
+                        <View className="flex-1">
+                          <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                            To Price
+                          </Text>
+                          <TextInput
+                            value={ruleDraft.maxSharePriceInput}
+                            onChangeText={(nextValue) =>
+                              updateRuleDraft(ruleDraft.id, {
+                                maxSharePriceInput: nextValue,
+                              })
+                            }
+                            keyboardType="numeric"
+                            placeholder="Leave empty for open-ended"
+                            placeholderTextColor={placeholderTextColor}
+                            className="mt-1 rounded-xl bg-app-highlight/10 px-3 py-2 text-sm font-semibold text-app-text dark:bg-brand-white/8 dark:text-app-textDark"
+                          />
+                        </View>
+                      </View>
+
+                      <View className="mt-3">
+                        <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                          Rule Type
+                        </Text>
+                        <View className="mt-1 flex-row flex-wrap gap-2">
+                          <ModeChip
+                            label="% Value"
+                            selected={ruleDraft.type === "percentage"}
+                            onPress={() =>
+                              updateRuleDraft(ruleDraft.id, {
+                                type: "percentage",
+                              })
+                            }
+                          />
+                          <ModeChip
+                            label="/ Share"
+                            selected={ruleDraft.type === "perShare"}
+                            onPress={() =>
+                              updateRuleDraft(ruleDraft.id, {
+                                type: "perShare",
+                              })
+                            }
+                          />
+                          <ModeChip
+                            label="Fixed"
+                            selected={ruleDraft.type === "fixedOrder"}
+                            onPress={() =>
+                              updateRuleDraft(ruleDraft.id, {
+                                type: "fixedOrder",
+                              })
+                            }
+                          />
+                          <ModeChip
+                            label="Max(% vs /share)"
+                            selected={ruleDraft.type === "maxPercentageOrPerShare"}
+                            onPress={() =>
+                              updateRuleDraft(ruleDraft.id, {
+                                type: "maxPercentageOrPerShare",
+                              })
+                            }
+                          />
+                        </View>
+                      </View>
+
+                      {ruleDraft.type === "percentage" ||
+                      ruleDraft.type === "maxPercentageOrPerShare" ? (
+                        <View className="mt-3">
+                          <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                            Percentage %
+                          </Text>
+                          <TextInput
+                            value={ruleDraft.percentageRateInput}
+                            onChangeText={(nextValue) =>
+                              updateRuleDraft(ruleDraft.id, {
+                                percentageRateInput: nextValue,
+                              })
+                            }
+                            keyboardType="numeric"
+                            placeholder="e.g. 0.15"
+                            placeholderTextColor={placeholderTextColor}
+                            className="mt-1 rounded-xl bg-app-highlight/10 px-3 py-2 text-sm font-semibold text-app-text dark:bg-brand-white/8 dark:text-app-textDark"
+                          />
+                        </View>
+                      ) : null}
+
+                      {ruleDraft.type === "perShare" ||
+                      ruleDraft.type === "maxPercentageOrPerShare" ? (
+                        <View className="mt-3">
+                          <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                            Charge / Share (PKR)
+                          </Text>
+                          <TextInput
+                            value={ruleDraft.perShareChargeInput}
+                            onChangeText={(nextValue) =>
+                              updateRuleDraft(ruleDraft.id, {
+                                perShareChargeInput: nextValue,
+                              })
+                            }
+                            keyboardType="numeric"
+                            placeholder="e.g. 0.05"
+                            placeholderTextColor={placeholderTextColor}
+                            className="mt-1 rounded-xl bg-app-highlight/10 px-3 py-2 text-sm font-semibold text-app-text dark:bg-brand-white/8 dark:text-app-textDark"
+                          />
+                        </View>
+                      ) : null}
+
+                      {ruleDraft.type === "fixedOrder" ? (
+                        <View className="mt-3">
+                          <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                            Fixed Charge (PKR)
+                          </Text>
+                          <TextInput
+                            value={ruleDraft.fixedChargeInput}
+                            onChangeText={(nextValue) =>
+                              updateRuleDraft(ruleDraft.id, {
+                                fixedChargeInput: nextValue,
+                              })
+                            }
+                            keyboardType="numeric"
+                            placeholder="e.g. 50"
+                            placeholderTextColor={placeholderTextColor}
+                            className="mt-1 rounded-xl bg-app-highlight/10 px-3 py-2 text-sm font-semibold text-app-text dark:bg-brand-white/8 dark:text-app-textDark"
+                          />
+                        </View>
+                      ) : null}
+                    </View>
+                  ))}
+
+                  <TouchableOpacity
+                    activeOpacity={0.88}
+                    onPress={handleAddRule}
+                    className="rounded-xl bg-app-highlight/12 px-3 py-3 dark:bg-brand-white/8"
+                  >
+                    <Text className="text-center text-sm font-bold text-app-highlight dark:text-app-highlightDark">
+                      + Add Slab Rule
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+              ) : null}
 
               <View>
                 <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
@@ -308,26 +725,35 @@ export default function BrokerSettingsScreen() {
                     .filter(Boolean)
                     .join(" ")}
                 />
-                {profileMode === "default" ? (
-                  <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
-                    Default mode locks CDC at PKR {formatPkrValue(DEFAULT_CDC_CHARGE_PER_SHARE)} per share.
-                  </Text>
-                ) : null}
               </View>
 
               <View className="rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5">
                 <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                  Charge Rules
+                  Effective Rules
                 </Text>
                 <View className="mt-2 gap-2">
                   <View className="flex-row items-center justify-between">
                     <Text className="text-xs font-semibold text-app-text dark:text-app-textDark">
-                      Broker Commission
+                      Commission Mode
                     </Text>
                     <Text className="text-xs font-bold text-app-text dark:text-app-textDark">
-                      {effectiveBrokerCommissionPct}%
+                      {profileMode === "default"
+                        ? "Default Flat %"
+                        : commissionModel === "slabs"
+                          ? `${ruleDrafts.length} Slab Rule(s)`
+                          : "Flat %"}
                     </Text>
                   </View>
+                  {profileMode !== "default" && commissionModel === "flat" ? (
+                    <View className="flex-row items-center justify-between">
+                      <Text className="text-xs font-semibold text-app-text dark:text-app-textDark">
+                        Broker Commission
+                      </Text>
+                      <Text className="text-xs font-bold text-app-text dark:text-app-textDark">
+                        {effectiveBrokerCommissionPct}%
+                      </Text>
+                    </View>
+                  ) : null}
                   <View className="flex-row items-center justify-between">
                     <Text className="text-xs font-semibold text-app-text dark:text-app-textDark">
                       SST on Commission

@@ -173,6 +173,8 @@ function toTradeEntry(order: TradeOrderRecord): TransactionEntry {
           brokerFeeValue: order.brokerFeeValue,
           brokerFeePct:
             typeof order.brokerFeePct === "number" ? order.brokerFeePct : null,
+          brokerCommissionModel: order.brokerCommissionModel,
+          brokerCommissionRules: order.brokerCommissionRules,
           cdcChargePerShare: order.brokerCdcChargePerShare,
         });
 

@@ -48,6 +48,7 @@ import {
 import {
   DEFAULT_BROKER_COMMISSION_PCT,
   DEFAULT_CDC_CHARGE_PER_SHARE,
+  normalizeBrokerCommissionRules,
 } from "@/src/lib/broker-fee";
 
 type CsvEntity =
@@ -263,6 +264,10 @@ async function readBackupSnapshot(): Promise<BackupSnapshot> {
     preferences.brokerFeeType = brokerSettings.transactionFeeType;
     preferences.brokerFeeValue = String(brokerSettings.transactionFeeValue);
     preferences.brokerCdcChargePerShare = String(brokerSettings.cdcChargePerShare);
+    preferences.brokerCommissionModel = brokerSettings.commissionModel;
+    preferences.brokerCommissionRules = JSON.stringify(
+      brokerSettings.commissionRules
+    );
     if (brokerSettings.transactionFeeType === "percentage") {
       preferences.brokerFeePct = String(brokerSettings.transactionFeeValue);
     }
@@ -676,6 +681,16 @@ async function applyPreferences(preferences: Record<string, string>): Promise<vo
   const brokerCdcChargePerShare = parseFiniteNumber(
     preferences.brokerCdcChargePerShare ?? ""
   );
+  const brokerCommissionModel = (preferences.brokerCommissionModel ?? "").trim();
+  let brokerCommissionRules: unknown[] = [];
+  try {
+    const parsedRules = JSON.parse(preferences.brokerCommissionRules ?? "[]");
+    if (Array.isArray(parsedRules)) {
+      brokerCommissionRules = parsedRules;
+    }
+  } catch {
+    brokerCommissionRules = [];
+  }
   const resolvedBrokerFeeValue =
     brokerFeeValue === null ? brokerFeePct : brokerFeeValue;
   if (
@@ -696,6 +711,8 @@ async function applyPreferences(preferences: Record<string, string>): Promise<vo
         brokerCdcChargePerShare !== null && brokerCdcChargePerShare >= 0
           ? brokerCdcChargePerShare
           : DEFAULT_CDC_CHARGE_PER_SHARE,
+      commissionModel: brokerCommissionModel === "slabs" ? "slabs" : "flat",
+      commissionRules: normalizeBrokerCommissionRules(brokerCommissionRules),
     });
   } else {
     await clearBrokerSettings();

@@ -2,7 +2,11 @@ import * as FileSystem from "expo-file-system/legacy";
 import { getSavedBonusShareRecords } from "@/src/features/bonus-share/bonus-share-records";
 import { getPositionSnapshotForSymbol } from "@/src/features/portfolio/position-ledger";
 import {
+  BrokerCommissionModel,
+  BrokerCommissionRule,
   BrokerFeeType,
+  normalizeBrokerCommissionModel,
+  normalizeBrokerCommissionRules,
   normalizeBrokerFeeType,
   resolveBrokerFeeValue,
 } from "@/src/lib/broker-fee";
@@ -26,6 +30,8 @@ export type TradeOrderInput = {
   brokerFeeValue: number | null;
   brokerCdcChargePerShare?: number | null;
   brokerDeductionEnabled?: boolean;
+  brokerCommissionModel?: BrokerCommissionModel | null;
+  brokerCommissionRules?: BrokerCommissionRule[] | null;
 };
 
 export type TradeOrderRecord = TradeOrderInput & {
@@ -118,6 +124,12 @@ function getSafeOrdersStore(value: unknown): TradeOrdersStore {
       (typeof order.brokerFeePct === "number" ||
         order.brokerFeePct === null ||
         typeof order.brokerFeePct === "undefined") &&
+      (typeof order.brokerCommissionModel === "string" ||
+        order.brokerCommissionModel === null ||
+        typeof order.brokerCommissionModel === "undefined") &&
+      (Array.isArray(order.brokerCommissionRules) ||
+        order.brokerCommissionRules === null ||
+        typeof order.brokerCommissionRules === "undefined") &&
       typeof order.createdAt === "string"
     )
     .map((order) => {
@@ -141,6 +153,17 @@ function getSafeOrdersStore(value: unknown): TradeOrdersStore {
         order.brokerCdcChargePerShare >= 0
           ? order.brokerCdcChargePerShare
           : null;
+      const normalizedBrokerCommissionModel = normalizeBrokerCommissionModel(
+        typeof order.brokerCommissionModel === "string"
+          ? order.brokerCommissionModel
+          : null
+      );
+      const normalizedBrokerCommissionRules = normalizeBrokerCommissionRules(
+        order.brokerCommissionRules
+      );
+      const shouldUseSlabRules =
+        normalizedBrokerCommissionModel === "slabs" &&
+        normalizedBrokerCommissionRules.length > 0;
       const inferredBrokerDeductionEnabled =
         normalizedBrokerFeeValue > 0 ||
         (normalizedBrokerCdcChargePerShare ?? 0) > 0;
@@ -168,8 +191,12 @@ function getSafeOrdersStore(value: unknown): TradeOrdersStore {
         brokerFeeValue: effectiveBrokerFeeValue,
         brokerCdcChargePerShare: effectiveBrokerCdcChargePerShare,
         brokerDeductionEnabled: normalizedBrokerDeductionEnabled,
+        brokerCommissionModel: shouldUseSlabRules ? "slabs" : "flat",
+        brokerCommissionRules: shouldUseSlabRules
+          ? normalizedBrokerCommissionRules
+          : [],
         createdAt: order.createdAt,
-      };
+      } satisfies TradeOrderRecord;
     });
 
   return {
@@ -248,6 +275,16 @@ export async function saveTradeOrder(
     }
   }
 
+  const normalizedBrokerCommissionModel = normalizeBrokerCommissionModel(
+    orderInput.brokerCommissionModel
+  );
+  const normalizedBrokerCommissionRules = normalizeBrokerCommissionRules(
+    orderInput.brokerCommissionRules
+  );
+  const shouldUseSlabRules =
+    normalizedBrokerCommissionModel === "slabs" &&
+    normalizedBrokerCommissionRules.length > 0;
+
   const record: TradeOrderRecord = {
     id: buildTradeOrderId(),
     side: orderInput.side,
@@ -276,6 +313,10 @@ export async function saveTradeOrder(
             (typeof orderInput.brokerCdcChargePerShare === "number" &&
               Number.isFinite(orderInput.brokerCdcChargePerShare) &&
               orderInput.brokerCdcChargePerShare > 0),
+    brokerCommissionModel: shouldUseSlabRules ? "slabs" : "flat",
+    brokerCommissionRules: shouldUseSlabRules
+      ? normalizedBrokerCommissionRules
+      : [],
     createdAt: new Date().toISOString(),
   };
   if (record.brokerDeductionEnabled === false) {
@@ -360,6 +401,16 @@ export async function updateTradeOrder(
     }
   }
 
+  const normalizedBrokerCommissionModel = normalizeBrokerCommissionModel(
+    orderInput.brokerCommissionModel
+  );
+  const normalizedBrokerCommissionRules = normalizeBrokerCommissionRules(
+    orderInput.brokerCommissionRules
+  );
+  const shouldUseSlabRules =
+    normalizedBrokerCommissionModel === "slabs" &&
+    normalizedBrokerCommissionRules.length > 0;
+
   const existingOrder = store.orders[existingOrderIndex];
   const updatedOrder: TradeOrderRecord = {
     id: existingOrder.id,
@@ -390,6 +441,10 @@ export async function updateTradeOrder(
             (typeof orderInput.brokerCdcChargePerShare === "number" &&
               Number.isFinite(orderInput.brokerCdcChargePerShare) &&
               orderInput.brokerCdcChargePerShare > 0),
+    brokerCommissionModel: shouldUseSlabRules ? "slabs" : "flat",
+    brokerCommissionRules: shouldUseSlabRules
+      ? normalizedBrokerCommissionRules
+      : [],
   };
   if (updatedOrder.brokerDeductionEnabled === false) {
     updatedOrder.brokerFeeValue = 0;

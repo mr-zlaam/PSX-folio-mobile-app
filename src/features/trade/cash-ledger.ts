@@ -33,6 +33,8 @@ function getBrokerFeeAmount(order: TradeOrderRecord): number {
     brokerFeeType: order.brokerFeeType,
     brokerFeeValue: order.brokerFeeValue,
     brokerFeePct: order.brokerFeePct,
+    brokerCommissionModel: order.brokerCommissionModel,
+    brokerCommissionRules: order.brokerCommissionRules,
     cdcChargePerShare: order.brokerCdcChargePerShare,
   });
 }
