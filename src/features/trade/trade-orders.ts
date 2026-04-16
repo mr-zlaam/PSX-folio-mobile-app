@@ -3,7 +3,6 @@ import { getSavedBonusShareRecords } from "@/src/features/bonus-share/bonus-shar
 import { getPositionSnapshotForSymbol } from "@/src/features/portfolio/position-ledger";
 import {
   BrokerFeeType,
-  DEFAULT_BROKER_COMMISSION_PCT,
   normalizeBrokerFeeType,
   resolveBrokerFeeValue,
 } from "@/src/lib/broker-fee";
@@ -78,7 +77,7 @@ function resolveBrokerFeeValueWithDefault(input: {
     return resolveBrokerFeeValue(input);
   }
 
-  return DEFAULT_BROKER_COMMISSION_PCT;
+  return 0;
 }
 
 function getSafeOrdersStore(value: unknown): TradeOrdersStore {
@@ -142,11 +141,19 @@ function getSafeOrdersStore(value: unknown): TradeOrdersStore {
         order.brokerCdcChargePerShare >= 0
           ? order.brokerCdcChargePerShare
           : null;
+      const inferredBrokerDeductionEnabled =
+        normalizedBrokerFeeValue > 0 ||
+        (normalizedBrokerCdcChargePerShare ?? 0) > 0;
       const normalizedBrokerDeductionEnabled =
         typeof order.brokerDeductionEnabled === "boolean"
           ? order.brokerDeductionEnabled
-          : normalizedBrokerFeeValue > 0 ||
-              (normalizedBrokerCdcChargePerShare ?? 0) > 0;
+          : inferredBrokerDeductionEnabled;
+      const effectiveBrokerFeeValue = normalizedBrokerDeductionEnabled
+        ? normalizedBrokerFeeValue
+        : 0;
+      const effectiveBrokerCdcChargePerShare = normalizedBrokerDeductionEnabled
+        ? normalizedBrokerCdcChargePerShare
+        : 0;
 
       return {
         id: order.id,
@@ -158,8 +165,8 @@ function getSafeOrdersStore(value: unknown): TradeOrdersStore {
         brokerMode: order.brokerMode,
         brokerName: order.brokerName,
         brokerFeeType: normalizedBrokerFeeType,
-        brokerFeeValue: normalizedBrokerFeeValue,
-        brokerCdcChargePerShare: normalizedBrokerCdcChargePerShare,
+        brokerFeeValue: effectiveBrokerFeeValue,
+        brokerCdcChargePerShare: effectiveBrokerCdcChargePerShare,
         brokerDeductionEnabled: normalizedBrokerDeductionEnabled,
         createdAt: order.createdAt,
       };
@@ -271,6 +278,10 @@ export async function saveTradeOrder(
               orderInput.brokerCdcChargePerShare > 0),
     createdAt: new Date().toISOString(),
   };
+  if (record.brokerDeductionEnabled === false) {
+    record.brokerFeeValue = 0;
+    record.brokerCdcChargePerShare = 0;
+  }
 
   const nextStore: TradeOrdersStore = {
     version: 1,
@@ -380,6 +391,10 @@ export async function updateTradeOrder(
               Number.isFinite(orderInput.brokerCdcChargePerShare) &&
               orderInput.brokerCdcChargePerShare > 0),
   };
+  if (updatedOrder.brokerDeductionEnabled === false) {
+    updatedOrder.brokerFeeValue = 0;
+    updatedOrder.brokerCdcChargePerShare = 0;
+  }
 
   const nextOrders = [...store.orders];
   nextOrders[existingOrderIndex] = updatedOrder;

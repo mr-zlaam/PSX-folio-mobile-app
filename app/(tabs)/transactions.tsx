@@ -1,3 +1,62 @@
+import AppBackIconButton from "@/components/ui/app-back-icon-button";
+import AppButton from "@/components/ui/app-button";
+import AppFeedbackModal, {
+  AppFeedbackModalTone,
+} from "@/components/ui/app-feedback-modal";
+import ShariahChip from "@/components/ui/shariah-chip";
+import { getSavedBonusShareRecords } from "@/src/features/bonus-share/bonus-share-records";
+import {
+  formatPKRAmount,
+  formatSignedPercentage,
+} from "@/src/features/home/home-formatters";
+import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
+import { getPositionSnapshotForSymbol } from "@/src/features/portfolio/position-ledger";
+import {
+  getCachedSymbolQuote,
+  getCachedSymbols,
+  getLatestSymbolQuote,
+  getLatestSymbols,
+  getSymbolQuoteFallback,
+  PsxSymbol,
+  SymbolQuote,
+} from "@/src/features/trade/trade-data";
+import {
+  getSavedTradeOrders,
+  getTradeOrderById,
+  InsufficientUnitsError,
+  saveTradeOrder,
+  updateTradeOrder,
+} from "@/src/features/trade/trade-orders";
+import {
+  BrokerSettings,
+  getAutoTaxDeductionEnabledPreference,
+  getBrokerSettings,
+  getDeductTaxFromCgtEnabledPreference,
+  getDefaultBrokerSettings,
+  getEffectiveCgtTaxRatePreference,
+  getSellScreenCgtDeductionEnabledPreference,
+  getTaxComputationModePreference,
+  getTaxpayerProfilePreference,
+  getTradeScreenBrokerDeductionEnabledPreference,
+  setSellScreenCgtDeductionEnabledPreference,
+  setTradeScreenBrokerDeductionEnabledPreference,
+  TaxComputationMode,
+  TaxpayerProfile,
+} from "@/src/lib/app-preferences";
+import {
+  calculateBrokerDeductionBreakdown,
+  calculateBrokerFeeAmount,
+  DEFAULT_BROKER_COMMISSION_PCT,
+  DEFAULT_CDC_CHARGE_PER_SHARE,
+} from "@/src/lib/broker-fee";
+import { useGuardedRouter } from "@/src/lib/navigation";
+import { APP_COLORS } from "@/src/theme/colors";
+import DateTimePicker, {
+  DateTimePickerEvent,
+} from "@react-native-community/datetimepicker";
+import { useFocusEffect } from "@react-navigation/native";
+import { useLocalSearchParams } from "expo-router";
+import { useColorScheme } from "nativewind";
 import React from "react";
 import {
   KeyboardAvoidingView,
@@ -10,68 +69,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import { useLocalSearchParams } from "expo-router";
-import { useGuardedRouter } from "@/src/lib/navigation";
-import { useFocusEffect } from "@react-navigation/native";
-import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
-import { useColorScheme } from "nativewind";
-import DateTimePicker, {
-  DateTimePickerEvent,
-} from "@react-native-community/datetimepicker";
-import AppButton from "@/components/ui/app-button";
-import AppBackIconButton from "@/components/ui/app-back-icon-button";
-import AppFeedbackModal, {
-  AppFeedbackModalTone,
-} from "@/components/ui/app-feedback-modal";
-import ShariahChip from "@/components/ui/shariah-chip";
 import {
-  getCachedSymbolQuote,
-  getCachedSymbols,
-  getLatestSymbolQuote,
-  getLatestSymbols,
-  getSymbolQuoteFallback,
-  PsxSymbol,
-  SymbolQuote,
-} from "@/src/features/trade/trade-data";
-import {
-  formatPKRAmount,
-  formatSignedPercentage,
-} from "@/src/features/home/home-formatters";
-import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
-import {
-  getAutoTaxDeductionEnabledPreference,
-  BrokerSettings,
-  getDefaultBrokerSettings,
-  getDeductTaxFromCgtEnabledPreference,
-  getEffectiveCgtTaxRatePreference,
-  getBrokerSettings,
-  getSellScreenCgtDeductionEnabledPreference,
-  getTradeScreenBrokerDeductionEnabledPreference,
-  getTaxComputationModePreference,
-  getTaxpayerProfilePreference,
-  setTradeScreenBrokerDeductionEnabledPreference,
-  setSellScreenCgtDeductionEnabledPreference,
-  TaxComputationMode,
-  TaxpayerProfile,
-} from "@/src/lib/app-preferences";
-import {
-  calculateBrokerDeductionBreakdown,
-  calculateBrokerFeeAmount,
-  DEFAULT_BROKER_COMMISSION_PCT,
-  DEFAULT_CDC_CHARGE_PER_SHARE,
-} from "@/src/lib/broker-fee";
-import { APP_COLORS } from "@/src/theme/colors";
-import {
-  getSavedBonusShareRecords,
-} from "@/src/features/bonus-share/bonus-share-records";
-import {
-  InsufficientUnitsError,
-  getTradeOrderById,
-  getSavedTradeOrders,
-  saveTradeOrder,
-  updateTradeOrder,
-} from "@/src/features/trade/trade-orders";
-import { getPositionSnapshotForSymbol } from "@/src/features/portfolio/position-ledger";
+  SafeAreaView,
+  useSafeAreaInsets,
+} from "react-native-safe-area-context";
 
 const TRADE_QUOTE_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 
@@ -242,7 +243,7 @@ export default function TransactionsTabScreen() {
   const [symbolSearchQuery, setSymbolSearchQuery] = React.useState("");
   const [selectedSymbol, setSelectedSymbol] = React.useState("");
   const [symbolQuote, setSymbolQuote] = React.useState<SymbolQuote>(
-    getSymbolQuoteFallback("")
+    getSymbolQuoteFallback(""),
   );
 
   const [priceInput, setPriceInput] = React.useState("");
@@ -257,7 +258,7 @@ export default function TransactionsTabScreen() {
   const [taxComputationMode, setTaxComputationMode] =
     React.useState<TaxComputationMode>("default");
   const [effectiveCgtTaxRatePct, setEffectiveCgtTaxRatePct] = React.useState(
-    DEFAULT_CGT_TAX_RATE_PCT
+    DEFAULT_CGT_TAX_RATE_PCT,
   );
   const [autoTaxDeductionEnabled, setAutoTaxDeductionEnabled] =
     React.useState(true);
@@ -268,7 +269,9 @@ export default function TransactionsTabScreen() {
   const [hasEditedPrice, setHasEditedPrice] = React.useState(false);
   const [isSubmittingOrder, setIsSubmittingOrder] = React.useState(false);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
-  const [tradeNotice, setTradeNotice] = React.useState<TradeNoticeState | null>(null);
+  const [tradeNotice, setTradeNotice] = React.useState<TradeNoticeState | null>(
+    null,
+  );
   const [shouldGoBackAfterNotice, setShouldGoBackAfterNotice] =
     React.useState(false);
   const [sellPositionSnapshot, setSellPositionSnapshot] = React.useState<{
@@ -328,8 +331,12 @@ export default function TransactionsTabScreen() {
 
     return symbols
       .filter((symbolItem) => {
-        const symbolMatch = symbolItem.symbol.toLowerCase().includes(normalizedQuery);
-        const nameMatch = symbolItem.name.toLowerCase().includes(normalizedQuery);
+        const symbolMatch = symbolItem.symbol
+          .toLowerCase()
+          .includes(normalizedQuery);
+        const nameMatch = symbolItem.name
+          .toLowerCase()
+          .includes(normalizedQuery);
         return symbolMatch || nameMatch;
       })
       .slice(0, 8);
@@ -399,7 +406,7 @@ export default function TransactionsTabScreen() {
         // Keep current UI selection even if persistence fails.
       }
     },
-    []
+    [],
   );
 
   const handleBrokerDeductionToggle = React.useCallback(
@@ -411,7 +418,7 @@ export default function TransactionsTabScreen() {
         // Keep current UI selection even if persistence fails.
       }
     },
-    []
+    [],
   );
 
   const loadSavedBrokerSettings = React.useCallback(async () => {
@@ -462,7 +469,7 @@ export default function TransactionsTabScreen() {
     React.useCallback(() => {
       void loadSavedBrokerSettings();
       void loadTaxpayerProfile();
-    }, [loadSavedBrokerSettings, loadTaxpayerProfile])
+    }, [loadSavedBrokerSettings, loadTaxpayerProfile]),
   );
 
   React.useEffect(() => {
@@ -497,7 +504,7 @@ export default function TransactionsTabScreen() {
 
       const parsedTradeDate = new Date(existingTrade.tradedAt);
       setTradeDateTime(
-        Number.isNaN(parsedTradeDate.getTime()) ? new Date() : parsedTradeDate
+        Number.isNaN(parsedTradeDate.getTime()) ? new Date() : parsedTradeDate,
       );
     }
 
@@ -578,7 +585,7 @@ export default function TransactionsTabScreen() {
       const positionSnapshot = getPositionSnapshotForSymbol(
         effectiveOrders,
         bonusShareRecords,
-        normalizedSymbol
+        normalizedSymbol,
       );
 
       if (isMounted) {
@@ -594,20 +601,25 @@ export default function TransactionsTabScreen() {
 
   const parsedPrice = React.useMemo(
     () => parseNumericInput(priceInput),
-    [priceInput]
+    [priceInput],
   );
   const parsedUnits = React.useMemo(
     () => parseNumericInput(unitsInput),
-    [unitsInput]
+    [unitsInput],
   );
   const hasValidPrice = Number.isFinite(parsedPrice) && parsedPrice > 0;
   const hasValidUnits =
-    Number.isFinite(parsedUnits) && parsedUnits > 0 && Number.isInteger(parsedUnits);
+    Number.isFinite(parsedUnits) &&
+    parsedUnits > 0 &&
+    Number.isInteger(parsedUnits);
   const hasTradeInputs = hasValidPrice && hasValidUnits;
 
   const effectiveBrokerCommissionPct = React.useMemo(() => {
     const savedCommission = savedBrokerSettings?.transactionFeeValue;
-    if (typeof savedCommission !== "number" || !Number.isFinite(savedCommission)) {
+    if (
+      typeof savedCommission !== "number" ||
+      !Number.isFinite(savedCommission)
+    ) {
       return DEFAULT_BROKER_COMMISSION_PCT;
     }
 
@@ -643,8 +655,12 @@ export default function TransactionsTabScreen() {
       price: parsedPrice,
       units: parsedUnits,
       brokerFeeType: "percentage",
-      brokerFeeValue: isBrokerDeductionEnabled ? effectiveBrokerCommissionPct : 0,
-      cdcChargePerShare: isBrokerDeductionEnabled ? effectiveCdcChargePerShare : 0,
+      brokerFeeValue: isBrokerDeductionEnabled
+        ? effectiveBrokerCommissionPct
+        : 0,
+      cdcChargePerShare: isBrokerDeductionEnabled
+        ? effectiveCdcChargePerShare
+        : 0,
     });
   }, [
     effectiveCdcChargePerShare,
@@ -661,8 +677,12 @@ export default function TransactionsTabScreen() {
         price: parsedPrice,
         units: parsedUnits,
         brokerFeeType: "percentage",
-        brokerFeeValue: isBrokerDeductionEnabled ? effectiveBrokerCommissionPct : 0,
-        cdcChargePerShare: isBrokerDeductionEnabled ? effectiveCdcChargePerShare : 0,
+        brokerFeeValue: isBrokerDeductionEnabled
+          ? effectiveBrokerCommissionPct
+          : 0,
+        cdcChargePerShare: isBrokerDeductionEnabled
+          ? effectiveCdcChargePerShare
+          : 0,
       }),
     [
       effectiveCdcChargePerShare,
@@ -670,7 +690,7 @@ export default function TransactionsTabScreen() {
       isBrokerDeductionEnabled,
       parsedPrice,
       parsedUnits,
-    ]
+    ],
   );
 
   const estimatedTradeFinalAmount = React.useMemo(() => {
@@ -699,7 +719,13 @@ export default function TransactionsTabScreen() {
     }
 
     return (parsedPrice - sellPositionSnapshot.averageBuyPrice) * parsedUnits;
-  }, [hasTradeInputs, parsedPrice, parsedUnits, sellPositionSnapshot, tradeSide]);
+  }, [
+    hasTradeInputs,
+    parsedPrice,
+    parsedUnits,
+    sellPositionSnapshot,
+    tradeSide,
+  ]);
 
   const estimatedSellCgtTaxAmount = React.useMemo(() => {
     if (
@@ -752,7 +778,7 @@ export default function TransactionsTabScreen() {
         tone,
       });
     },
-    []
+    [],
   );
 
   const handleBackFromTrade = React.useCallback(() => {
@@ -801,14 +827,18 @@ export default function TransactionsTabScreen() {
       showTradeNotice(
         "Symbol Required",
         "Please select a symbol before creating order.",
-        "error"
+        "error",
       );
       return;
     }
 
     const parsedPrice = parseNumericInput(priceInput);
     if (!Number.isFinite(parsedPrice) || parsedPrice <= 0) {
-      showTradeNotice("Invalid Price", "Enter a valid price greater than 0.", "error");
+      showTradeNotice(
+        "Invalid Price",
+        "Enter a valid price greater than 0.",
+        "error",
+      );
       return;
     }
 
@@ -819,11 +849,16 @@ export default function TransactionsTabScreen() {
     }
 
     if (!Number.isInteger(parsedUnits)) {
-      showTradeNotice("Invalid Units", "Units must be a whole number.", "error");
+      showTradeNotice(
+        "Invalid Units",
+        "Units must be a whole number.",
+        "error",
+      );
       return;
     }
 
-    const effectiveBrokerSettings = savedBrokerSettings ?? getDefaultBrokerSettings();
+    const effectiveBrokerSettings =
+      savedBrokerSettings ?? getDefaultBrokerSettings();
     const brokerModeForTrade =
       effectiveBrokerSettings.profileMode === "custom" ? "custom" : "saved";
     const brokerCommissionPctForTrade = isBrokerDeductionEnabled
@@ -850,14 +885,14 @@ export default function TransactionsTabScreen() {
       const positionSnapshot = getPositionSnapshotForSymbol(
         effectiveOrders,
         bonusShareRecords,
-        normalizedSymbol
+        normalizedSymbol,
       );
 
       if (positionSnapshot.units <= 0) {
         showTradeNotice(
           "No Position Found",
           `You do not have an active holding for ${normalizedSymbol}.`,
-          "error"
+          "error",
         );
         return;
       }
@@ -866,12 +901,13 @@ export default function TransactionsTabScreen() {
         showTradeNotice(
           "Units Exceed Holding",
           `You can sell up to ${positionSnapshot.units} shares for ${normalizedSymbol}.`,
-          "error"
+          "error",
         );
         return;
       }
 
-      sellGrossProfit = (parsedPrice - positionSnapshot.averageBuyPrice) * parsedUnits;
+      sellGrossProfit =
+        (parsedPrice - positionSnapshot.averageBuyPrice) * parsedUnits;
       sellNetProfit = sellGrossProfit;
       const taxableGain = Math.max(0, sellGrossProfit);
 
@@ -934,26 +970,36 @@ export default function TransactionsTabScreen() {
               taxComputationMode === "custom"
                 ? `CGT (${sellCgtRatePct}%)`
                 : `CGT (${getTaxpayerProfileLabel(
-                    taxpayerProfile
+                    taxpayerProfile,
                   )} ${sellCgtRatePct}%)`;
             messageLines.push(
-              `${cgtLabel}: ${formatPKRAmount(-sellCgtTaxAmount)}.`
+              `${cgtLabel}: ${formatPKRAmount(-sellCgtTaxAmount)}.`,
             );
-            messageLines.push(`Estimated Net P/L: ${formatPKRAmount(sellNetProfit)}.`);
+            messageLines.push(
+              `Estimated Net P/L: ${formatPKRAmount(sellNetProfit)}.`,
+            );
           } else {
-            messageLines.push("CGT not applied because this sell is not in profit.");
+            messageLines.push(
+              "CGT not applied because this sell is not in profit.",
+            );
           }
         } else if (!autoTaxDeductionEnabled) {
-          messageLines.push("CGT deduction is off because Auto Tax Deduction is disabled in Tax Settings.");
+          messageLines.push(
+            "CGT deduction is off because Auto Tax Deduction is disabled in Tax Settings.",
+          );
         } else if (!deductTaxFromCgtEnabled) {
-          messageLines.push("CGT deduction toggle is disabled in Tax Settings.");
+          messageLines.push(
+            "CGT deduction toggle is disabled in Tax Settings.",
+          );
         } else {
-          messageLines.push("CGT deduction is off for this sell from the trade-screen toggle.");
+          messageLines.push(
+            "CGT deduction is off for this sell from the trade-screen toggle.",
+          );
         }
         showTradeNotice(
           isEditingTrade ? "Trade Updated" : "Sold Successfully",
           messageLines.join("\n"),
-          "success"
+          "success",
         );
         if (isEditingTrade) {
           setShouldGoBackAfterNotice(true);
@@ -974,9 +1020,9 @@ export default function TransactionsTabScreen() {
         `You have ${getTradeSideActionText(tradeSide)} ${
           savedOrder.units
         } shares of ${savedOrder.symbol} at ${formatPKRAmount(
-          savedOrder.price
+          savedOrder.price,
         )} per share.`,
-        "success"
+        "success",
       );
       if (isEditingTrade) {
         setShouldGoBackAfterNotice(true);
@@ -994,7 +1040,7 @@ export default function TransactionsTabScreen() {
         showTradeNotice(
           "Units Exceed Holding",
           `You can sell up to ${error.availableUnits} shares for ${error.symbol}.`,
-          "error"
+          "error",
         );
         return;
       }
@@ -1004,7 +1050,7 @@ export default function TransactionsTabScreen() {
         isEditingTrade
           ? "Could not update this trade locally. Please try again."
           : "Could not save this trade locally. Please try again.",
-        "error"
+        "error",
       );
     } finally {
       setIsSubmittingOrder(false);
@@ -1044,7 +1090,7 @@ export default function TransactionsTabScreen() {
 
       setIsTradeDateTimePickerVisible(false);
     },
-    []
+    [],
   );
 
   return (
@@ -1061,7 +1107,9 @@ export default function TransactionsTabScreen() {
           className="flex-1"
           automaticallyAdjustKeyboardInsets={Platform.OS === "ios"}
           keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+          keyboardDismissMode={
+            Platform.OS === "ios" ? "interactive" : "on-drag"
+          }
           contentContainerStyle={{
             paddingTop: 14,
             paddingHorizontal: 20,
@@ -1072,8 +1120,12 @@ export default function TransactionsTabScreen() {
             <RefreshControl
               refreshing={isRefreshing}
               onRefresh={handlePullToRefresh}
-              tintColor={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
-              colors={[isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple]}
+              tintColor={
+                isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple
+              }
+              colors={[
+                isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple,
+              ]}
               progressBackgroundColor={
                 isDarkMode ? APP_COLORS.brand.purple : APP_COLORS.brand.white
               }
@@ -1092,372 +1144,377 @@ export default function TransactionsTabScreen() {
             </View>
 
             <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
-            <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-              Symbol Search
-            </Text>
-
-            <TextInput
-              value={symbolSearchQuery}
-              onChangeText={setSymbolSearchQuery}
-              placeholder="Search symbol or company"
-              placeholderTextColor={inputPlaceholderTextColor}
-              editable={!isSymbolLocked}
-              className="mt-3 rounded-xl border border-app-highlight/25 bg-app-highlight/8 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/35 dark:bg-brand-white/5 dark:text-app-textDark"
-            />
-
-            {isSymbolLocked ? (
-              <Text className="mt-2 text-xs font-semibold text-app-highlight dark:text-app-highlightDark">
-                Symbol is locked from portfolio action.
+              <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                Symbol Search
               </Text>
-            ) : null}
 
-            <View className="mt-3 gap-2">
-              {filteredSymbols.map((symbolItem) => (
-                <TouchableOpacity
-                  key={symbolItem.symbol}
-                  activeOpacity={0.88}
-                  disabled={isSymbolLocked}
-                  onPress={() => handleSelectSymbol(symbolItem.symbol)}
-                  className={[
-                    "rounded-xl px-3 py-2",
-                    selectedSymbol === symbolItem.symbol
-                      ? "bg-app-highlight dark:bg-app-highlightDark"
-                      : "bg-brand-white/70 dark:bg-brand-white/5",
-                    isSymbolLocked ? "opacity-60" : "",
-                  ]
-                    .filter(Boolean)
-                    .join(" ")}
-                >
-                  <View className="flex-row items-center gap-2">
+              <TextInput
+                value={symbolSearchQuery}
+                onChangeText={setSymbolSearchQuery}
+                placeholder="Search symbol or company"
+                placeholderTextColor={inputPlaceholderTextColor}
+                editable={!isSymbolLocked}
+                className="mt-3 rounded-xl border border-app-highlight/25 bg-app-highlight/8 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/35 dark:bg-brand-white/5 dark:text-app-textDark"
+              />
+
+              {isSymbolLocked ? (
+                <Text className="mt-2 text-xs font-semibold text-app-highlight dark:text-app-highlightDark">
+                  Symbol is locked from portfolio action.
+                </Text>
+              ) : null}
+
+              <View className="mt-3 gap-2">
+                {filteredSymbols.map((symbolItem) => (
+                  <TouchableOpacity
+                    key={symbolItem.symbol}
+                    activeOpacity={0.88}
+                    disabled={isSymbolLocked}
+                    onPress={() => handleSelectSymbol(symbolItem.symbol)}
+                    className={[
+                      "rounded-xl px-3 py-2",
+                      selectedSymbol === symbolItem.symbol
+                        ? "bg-app-highlight dark:bg-app-highlightDark"
+                        : "bg-brand-white/70 dark:bg-brand-white/5",
+                      isSymbolLocked ? "opacity-60" : "",
+                    ]
+                      .filter(Boolean)
+                      .join(" ")}
+                  >
+                    <View className="flex-row items-center gap-2">
+                      <Text
+                        className={[
+                          "text-sm font-bold",
+                          selectedSymbol === symbolItem.symbol
+                            ? "text-brand-white dark:text-brand-purple"
+                            : "text-app-text dark:text-app-textDark",
+                        ]
+                          .filter(Boolean)
+                          .join(" ")}
+                      >
+                        {symbolItem.symbol}
+                      </Text>
+                      {isShariahCompliantSymbol(symbolItem.symbol) ? (
+                        <ShariahChip compact />
+                      ) : null}
+                    </View>
                     <Text
                       className={[
-                        "text-sm font-bold",
+                        "mt-1 text-xs",
                         selectedSymbol === symbolItem.symbol
                           ? "text-brand-white dark:text-brand-purple"
                           : "text-app-text dark:text-app-textDark",
                       ]
                         .filter(Boolean)
                         .join(" ")}
+                      numberOfLines={1}
                     >
-                      {symbolItem.symbol}
+                      {symbolItem.name}
                     </Text>
-                    {isShariahCompliantSymbol(symbolItem.symbol) ? (
-                      <ShariahChip compact />
-                    ) : null}
-                  </View>
-                  <Text
-                    className={[
-                      "mt-1 text-xs",
-                      selectedSymbol === symbolItem.symbol
-                        ? "text-brand-white dark:text-brand-purple"
-                        : "text-app-text dark:text-app-textDark",
-                    ]
-                      .filter(Boolean)
-                      .join(" ")}
-                    numberOfLines={1}
-                  >
-                    {symbolItem.name}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                  </TouchableOpacity>
+                ))}
 
-              {filteredSymbols.length === 0 ? (
-                symbolSearchQuery.trim().length > 0 ? (
-                  <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
-                    No symbols found.
-                  </Text>
-                ) : null
-              ) : null}
-            </View>
+                {filteredSymbols.length === 0 ? (
+                  symbolSearchQuery.trim().length > 0 ? (
+                    <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+                      No symbols found.
+                    </Text>
+                  ) : null
+                ) : null}
+              </View>
 
-            <View className="mt-3 rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5">
-              <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                Last Price / Change
-              </Text>
-              <Text className="mt-1 text-base font-bold text-app-text dark:text-app-textDark">
-                {formatPKRAmount(symbolQuote.lastPrice)}
-              </Text>
-              <Text
-                className={[
-                  "mt-1 text-sm font-semibold",
-                  getChangeTextClassName(symbolQuote.change),
-                ]
-                  .filter(Boolean)
-                  .join(" ")}
-              >
-                {`${formatPKRAmount(symbolQuote.change)} (${formatSignedPercentage(symbolQuote.changePct)})`}
-              </Text>
+              <View className="mt-3 rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5">
+                <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                  Last Price / Change
+                </Text>
+                <Text className="mt-1 text-base font-bold text-app-text dark:text-app-textDark">
+                  {formatPKRAmount(symbolQuote.lastPrice)}
+                </Text>
+                <Text
+                  className={[
+                    "mt-1 text-sm font-semibold",
+                    getChangeTextClassName(symbolQuote.change),
+                  ]
+                    .filter(Boolean)
+                    .join(" ")}
+                >
+                  {`${formatPKRAmount(symbolQuote.change)} (${formatSignedPercentage(symbolQuote.changePct)})`}
+                </Text>
+              </View>
             </View>
-          </View>
 
             <View className="rounded-3xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10">
-            <View className="flex-row items-center justify-between">
-              <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                Trade Form
-              </Text>
-
-              <View className="flex-row items-center gap-2">
-                <ToggleChip
-                  label="Buy"
-                  selected={tradeSide === "buy"}
-                  onPress={() => setTradeSide("buy")}
-                />
-                <ToggleChip
-                  label="Sell"
-                  selected={tradeSide === "sell"}
-                  selectedTone="danger"
-                  onPress={() => setTradeSide("sell")}
-                />
-              </View>
-            </View>
-
-            <View className="mt-4 gap-3">
-              <View className="flex-row gap-3">
-                <FieldInput
-                  label="Price"
-                  value={priceInput}
-                  onChangeText={(nextValue) => {
-                    setHasEditedPrice(true);
-                    setPriceInput(nextValue);
-                  }}
-                  placeholderTextColor={inputPlaceholderTextColor}
-                  keyboardType="numeric"
-                  placeholder="Auto from last price"
-                />
-                <FieldInput
-                  label="Units"
-                  value={unitsInput}
-                  onChangeText={setUnitsInput}
-                  placeholderTextColor={inputPlaceholderTextColor}
-                  keyboardType="numeric"
-                  placeholder="Shares"
-                />
-              </View>
-
-              <View>
-                <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                  Trade Date
+              <View className="flex-row items-center justify-between">
+                <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                  Trade Form
                 </Text>
-                <TouchableOpacity
-                  activeOpacity={0.88}
-                  onPress={handleStartTradeDateSelection}
-                  className="mt-1 rounded-xl border border-app-highlight/25 bg-app-highlight/8 px-3 py-2 dark:border-app-highlightDark/35 dark:bg-brand-white/5"
-                >
-                  <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
-                    {formatDateInput(tradeDateTime)}
-                  </Text>
-                </TouchableOpacity>
-              </View>
 
-              <View className="flex-row items-center justify-between rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5">
-                <View className="mr-3 flex-1">
-                  <Text className="text-xs font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                    Deduct Broker Charges
-                  </Text>
-                  <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
-                    This toggle is saved until you change it.
-                  </Text>
+                <View className="flex-row items-center gap-2">
+                  <ToggleChip
+                    label="Buy"
+                    selected={tradeSide === "buy"}
+                    onPress={() => setTradeSide("buy")}
+                  />
+                  <ToggleChip
+                    label="Sell"
+                    selected={tradeSide === "sell"}
+                    selectedTone="danger"
+                    onPress={() => setTradeSide("sell")}
+                  />
                 </View>
-                <Switch
-                  value={isBrokerDeductionEnabled}
-                  onValueChange={(nextValue) => {
-                    void handleBrokerDeductionToggle(nextValue);
-                  }}
-                  thumbColor={APP_COLORS.brand.white}
-                  ios_backgroundColor={switchTrackOffColor}
-                  trackColor={{
-                    true: switchTrackOnColor,
-                    false: switchTrackOffColor,
-                  }}
-                />
               </View>
 
-              {tradeSide === "sell" ? (
+              <View className="mt-4 gap-3">
+                <View className="flex-row gap-3">
+                  <FieldInput
+                    label="Price"
+                    value={priceInput}
+                    onChangeText={(nextValue) => {
+                      setHasEditedPrice(true);
+                      setPriceInput(nextValue);
+                    }}
+                    placeholderTextColor={inputPlaceholderTextColor}
+                    keyboardType="numeric"
+                    placeholder="Auto from last price"
+                  />
+                  <FieldInput
+                    label="Units"
+                    value={unitsInput}
+                    onChangeText={setUnitsInput}
+                    placeholderTextColor={inputPlaceholderTextColor}
+                    keyboardType="numeric"
+                    placeholder="Shares"
+                  />
+                </View>
+
+                <View>
+                  <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                    Trade Date
+                  </Text>
+                  <TouchableOpacity
+                    activeOpacity={0.88}
+                    onPress={handleStartTradeDateSelection}
+                    className="mt-1 rounded-xl border border-app-highlight/25 bg-app-highlight/8 px-3 py-2 dark:border-app-highlightDark/35 dark:bg-brand-white/5"
+                  >
+                    <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+                      {formatDateInput(tradeDateTime)}
+                    </Text>
+                  </TouchableOpacity>
+                </View>
+
+                <View className="flex-row items-center justify-between rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5">
+                  <View className="mr-3 flex-1">
+                    <Text className="text-xs font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                      Deduct Broker Charges
+                    </Text>
+                  </View>
+                  <Switch
+                    value={isBrokerDeductionEnabled}
+                    onValueChange={(nextValue) => {
+                      void handleBrokerDeductionToggle(nextValue);
+                    }}
+                    thumbColor={APP_COLORS.brand.white}
+                    ios_backgroundColor={switchTrackOffColor}
+                    trackColor={{
+                      true: switchTrackOnColor,
+                      false: switchTrackOffColor,
+                    }}
+                  />
+                </View>
+
+                {tradeSide === "sell" ? (
+                  <View className="rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5">
+                    <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                      CGT Tax
+                    </Text>
+                    <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
+                      {taxComputationMode === "custom"
+                        ? `Mode: Custom (${effectiveCgtTaxRatePct}% on profit)`
+                        : `Mode: Default • ${getTaxpayerProfileLabel(taxpayerProfile)} (${effectiveCgtTaxRatePct}% on profit)`}
+                    </Text>
+                    <Text className="mt-2 text-xs font-semibold text-app-text dark:text-app-textDark">
+                      {!autoTaxDeductionEnabled
+                        ? "Auto tax deduction is disabled in Tax Settings."
+                        : !deductTaxFromCgtEnabled
+                          ? "CGT deduction toggle is disabled in Tax Settings."
+                          : !sellScreenCgtDeductionEnabled
+                            ? "CGT deduction is off for this sell from the toggle below."
+                            : "CGT will be deducted only when this sell is in profit."}
+                    </Text>
+
+                    <View className="mt-3 flex-row items-center justify-between rounded-xl bg-brand-white/70 px-3 py-2 dark:bg-brand-white/10">
+                      <View className="mr-3 flex-1">
+                        <Text className="text-xs font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                          Deduct CGT for Sell
+                        </Text>
+                        <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
+                          This preference is saved until you change it.
+                        </Text>
+                      </View>
+                      <Switch
+                        value={sellScreenCgtDeductionEnabled}
+                        onValueChange={(nextValue) => {
+                          void handleSellScreenCgtDeductionToggle(nextValue);
+                        }}
+                        thumbColor={APP_COLORS.brand.white}
+                        ios_backgroundColor={switchTrackOffColor}
+                        trackColor={{
+                          true: switchTrackOnColor,
+                          false: switchTrackOffColor,
+                        }}
+                      />
+                    </View>
+                  </View>
+                ) : null}
+
                 <View className="rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5">
                   <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                    CGT Tax
-                  </Text>
-                  <Text className="mt-1 text-sm font-semibold text-app-text dark:text-app-textDark">
-                    {taxComputationMode === "custom"
-                      ? `Mode: Custom (${effectiveCgtTaxRatePct}% on profit)`
-                      : `Mode: Default • ${getTaxpayerProfileLabel(taxpayerProfile)} (${effectiveCgtTaxRatePct}% on profit)`}
-                  </Text>
-                  <Text className="mt-2 text-xs font-semibold text-app-text dark:text-app-textDark">
-                    {!autoTaxDeductionEnabled
-                      ? "Auto tax deduction is disabled in Tax Settings."
-                      : !deductTaxFromCgtEnabled
-                        ? "CGT deduction toggle is disabled in Tax Settings."
-                        : !sellScreenCgtDeductionEnabled
-                          ? "CGT deduction is off for this sell from the toggle below."
-                          : "CGT will be deducted only when this sell is in profit."}
+                    Final Amount Preview
                   </Text>
 
-                  <View className="mt-3 flex-row items-center justify-between rounded-xl bg-brand-white/70 px-3 py-2 dark:bg-brand-white/10">
-                    <View className="mr-3 flex-1">
-                      <Text className="text-xs font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                        Deduct CGT for Sell
-                      </Text>
-                      <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
-                        This preference is saved until you change it.
-                      </Text>
+                  {hasTradeInputs ? (
+                    <View className="mt-2 gap-1">
+                      <View className="flex-row items-center justify-between">
+                        <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                          Gross
+                        </Text>
+                        <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                          {formatPKRAmount(estimatedGrossTradeAmount)}
+                        </Text>
+                      </View>
+
+                      <View className="flex-row items-center justify-between">
+                        <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                          Broker Commission
+                        </Text>
+                        <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                          {formatPKRAmount(
+                            estimatedBrokerDeductionBreakdown.brokerCommissionAmount,
+                          )}
+                        </Text>
+                      </View>
+
+                      <View className="flex-row items-center justify-between">
+                        <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                          SST
+                        </Text>
+                        <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                          {formatPKRAmount(
+                            estimatedBrokerDeductionBreakdown.sstAmount,
+                          )}
+                        </Text>
+                      </View>
+
+                      <View className="flex-row items-center justify-between">
+                        <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                          CDC
+                        </Text>
+                        <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                          {formatPKRAmount(
+                            estimatedBrokerDeductionBreakdown.cdcAmount,
+                          )}
+                        </Text>
+                      </View>
+
+                      <View className="flex-row items-center justify-between">
+                        <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                          Total Broker Deduction
+                        </Text>
+                        <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                          {formatPKRAmount(estimatedBrokerFeeAmount)}
+                        </Text>
+                      </View>
+
+                      <View className="mt-1 h-px bg-app-highlight/20 dark:bg-app-highlightDark/25" />
+
+                      <View className="flex-row items-center justify-between">
+                        <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                          {tradeSide === "buy"
+                            ? "Final Payable"
+                            : "Final Receivable"}
+                        </Text>
+                        <Text className="text-base font-extrabold text-app-text dark:text-app-textDark">
+                          {formatPKRAmount(
+                            tradeSide === "buy"
+                              ? estimatedTradeFinalAmount
+                              : estimatedSellNetReceivable,
+                          )}
+                        </Text>
+                      </View>
+
+                      {tradeSide === "sell" ? (
+                        <>
+                          <View className="flex-row items-center justify-between">
+                            <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                              Est. CGT
+                            </Text>
+                            <Text className="text-sm font-bold text-brand-red">
+                              {formatPKRAmount(-estimatedSellCgtTaxAmount)}
+                            </Text>
+                          </View>
+
+                          <View className="flex-row items-center justify-between">
+                            <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                              Est. Net P/L
+                            </Text>
+                            <Text
+                              className={[
+                                "text-sm font-bold",
+                                getChangeTextClassName(
+                                  estimatedSellGrossProfit -
+                                    estimatedSellCgtTaxAmount,
+                                ),
+                              ]
+                                .filter(Boolean)
+                                .join(" ")}
+                            >
+                              {formatPKRAmount(
+                                estimatedSellGrossProfit -
+                                  estimatedSellCgtTaxAmount,
+                              )}
+                            </Text>
+                          </View>
+                        </>
+                      ) : null}
                     </View>
-                    <Switch
-                      value={sellScreenCgtDeductionEnabled}
-                      onValueChange={(nextValue) => {
-                        void handleSellScreenCgtDeductionToggle(nextValue);
-                      }}
-                      thumbColor={APP_COLORS.brand.white}
-                      ios_backgroundColor={switchTrackOffColor}
-                      trackColor={{
-                        true: switchTrackOnColor,
-                        false: switchTrackOffColor,
-                      }}
-                    />
-                  </View>
+                  ) : (
+                    <Text className="mt-2 text-xs font-semibold text-app-text dark:text-app-textDark">
+                      Enter valid price and units to see final buy/sell amount.
+                    </Text>
+                  )}
                 </View>
-              ) : null}
-
-              <View className="rounded-2xl bg-brand-white/70 px-3 py-3 dark:bg-brand-white/5">
-                <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                  Final Amount Preview
-                </Text>
-
-                {hasTradeInputs ? (
-                  <View className="mt-2 gap-1">
-                    <View className="flex-row items-center justify-between">
-                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                        Gross
-                      </Text>
-                      <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
-                        {formatPKRAmount(estimatedGrossTradeAmount)}
-                      </Text>
-                    </View>
-
-                    <View className="flex-row items-center justify-between">
-                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                        Broker Commission
-                      </Text>
-                      <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
-                        {formatPKRAmount(
-                          estimatedBrokerDeductionBreakdown.brokerCommissionAmount
-                        )}
-                      </Text>
-                    </View>
-
-                    <View className="flex-row items-center justify-between">
-                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                        SST
-                      </Text>
-                      <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
-                        {formatPKRAmount(estimatedBrokerDeductionBreakdown.sstAmount)}
-                      </Text>
-                    </View>
-
-                    <View className="flex-row items-center justify-between">
-                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                        CDC
-                      </Text>
-                      <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
-                        {formatPKRAmount(estimatedBrokerDeductionBreakdown.cdcAmount)}
-                      </Text>
-                    </View>
-
-                    <View className="flex-row items-center justify-between">
-                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                        Total Broker Deduction
-                      </Text>
-                      <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
-                        {formatPKRAmount(estimatedBrokerFeeAmount)}
-                      </Text>
-                    </View>
-
-                    <View className="mt-1 h-px bg-app-highlight/20 dark:bg-app-highlightDark/25" />
-
-                    <View className="flex-row items-center justify-between">
-                      <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                        {tradeSide === "buy" ? "Final Payable" : "Final Receivable"}
-                      </Text>
-                      <Text className="text-base font-extrabold text-app-text dark:text-app-textDark">
-                        {formatPKRAmount(
-                          tradeSide === "buy"
-                            ? estimatedTradeFinalAmount
-                            : estimatedSellNetReceivable
-                        )}
-                      </Text>
-                    </View>
-
-                    {tradeSide === "sell" ? (
-                      <>
-                        <View className="flex-row items-center justify-between">
-                          <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                            Est. CGT
-                          </Text>
-                          <Text className="text-sm font-bold text-brand-red">
-                            {formatPKRAmount(-estimatedSellCgtTaxAmount)}
-                          </Text>
-                        </View>
-
-                        <View className="flex-row items-center justify-between">
-                          <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                            Est. Net P/L
-                          </Text>
-                          <Text
-                            className={[
-                              "text-sm font-bold",
-                              getChangeTextClassName(
-                                estimatedSellGrossProfit - estimatedSellCgtTaxAmount
-                              ),
-                            ]
-                              .filter(Boolean)
-                              .join(" ")}
-                          >
-                            {formatPKRAmount(
-                              estimatedSellGrossProfit - estimatedSellCgtTaxAmount
-                            )}
-                          </Text>
-                        </View>
-                      </>
-                    ) : null}
-                  </View>
-                ) : (
-                  <Text className="mt-2 text-xs font-semibold text-app-text dark:text-app-textDark">
-                    Enter valid price and units to see final buy/sell amount.
-                  </Text>
-                )}
               </View>
-            </View>
 
-            <View className="mt-5">
-              <AppButton
-                label={
-                  tradeSide === "buy"
-                    ? isEditingTrade
-                      ? "Update Buy Order"
-                      : "Create Buy Order"
-                    : isEditingTrade
-                      ? "Update Sell Order"
-                      : "Create Sell Order"
-                }
-                variant={tradeSide === "buy" ? "primary" : "danger"}
-                loading={isSubmittingOrder}
-                onPress={handleCreateOrder}
-              />
-            </View>
-
-            {isTradeDateTimePickerVisible ? (
-              <View className="mt-4 rounded-2xl bg-brand-white/70 p-2 dark:bg-brand-white/5">
-                <Text className="px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                  Pick Date
-                </Text>
-                <DateTimePicker
-                  value={tradeDateTime}
-                  mode="date"
-                  display="default"
-                  themeVariant={isDarkMode ? "dark" : "light"}
-                  onChange={handleTradeDateChange}
+              <View className="mt-5">
+                <AppButton
+                  label={
+                    tradeSide === "buy"
+                      ? isEditingTrade
+                        ? "Update Buy Order"
+                        : "Create Buy Order"
+                      : isEditingTrade
+                        ? "Update Sell Order"
+                        : "Create Sell Order"
+                  }
+                  variant={tradeSide === "buy" ? "primary" : "danger"}
+                  loading={isSubmittingOrder}
+                  onPress={handleCreateOrder}
                 />
               </View>
-            ) : null}
+
+              {isTradeDateTimePickerVisible ? (
+                <View className="mt-4 rounded-2xl bg-brand-white/70 p-2 dark:bg-brand-white/5">
+                  <Text className="px-2 pb-2 text-xs font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                    Pick Date
+                  </Text>
+                  <DateTimePicker
+                    value={tradeDateTime}
+                    mode="date"
+                    display="default"
+                    themeVariant={isDarkMode ? "dark" : "light"}
+                    onChange={handleTradeDateChange}
+                  />
+                </View>
+              ) : null}
             </View>
           </View>
         </ScrollView>
