@@ -12,6 +12,7 @@ import { useGuardedRouter } from "@/src/lib/navigation";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
+import AppBackgroundRefreshIndicator from "@/components/ui/app-background-refresh-indicator";
 import { AppListScreenSkeleton } from "@/components/ui/app-skeleton";
 import ShariahChip from "@/components/ui/shariah-chip";
 import { useShariahSymbols } from "@/src/features/market/shariah-symbols";
@@ -21,6 +22,7 @@ import {
   PortfolioHolding,
 } from "@/src/features/portfolio/portfolio-data";
 import {
+  formatCompactPKRAmount,
   formatPKRAmount,
   formatSignedPercentage,
 } from "@/src/features/home/home-formatters";
@@ -28,6 +30,7 @@ import {
   getPortfolioDisplayModePreference,
   setPortfolioDisplayModePreference,
 } from "@/src/lib/app-preferences";
+import { useBackgroundSyncIndicator } from "@/src/lib/use-background-sync-indicator";
 import { getCachedDpsMarketStatus } from "@/src/features/market/dps-market-status";
 import { APP_COLORS } from "@/src/theme/colors";
 
@@ -53,6 +56,31 @@ function formatUnsignedPercentage(value: number): string {
   }
 
   return `${Math.abs(value).toFixed(1)}%`;
+}
+
+function formatCompactNumber(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "0";
+  }
+
+  return Math.round(value).toLocaleString("en-PK");
+}
+
+function formatSignedPriceDelta(value: number): string {
+  if (!Number.isFinite(value)) {
+    return "0.00";
+  }
+
+  const signPrefix = value > 0 ? "+" : "";
+  return `${signPrefix}${value.toFixed(2)}`;
+}
+
+function isCompactPkrValue(value: number): boolean {
+  if (!Number.isFinite(value)) {
+    return false;
+  }
+
+  return Math.abs(value) >= 100_000;
 }
 
 function getHoldingSectorName(holding: PortfolioHolding): string {
@@ -102,33 +130,86 @@ function FilterChip({
 function SectorCompanyCard({
   holding,
   displayMode,
-  portfolioTotalValue,
+  portfolioTotalInvested,
   isShariahCompliant,
   onPress,
 }: {
   holding: PortfolioHolding;
   displayMode: PortfolioDisplayMode;
-  portfolioTotalValue: number;
+  portfolioTotalInvested: number;
   isShariahCompliant: boolean;
   onPress: () => void;
 }) {
-  const sharePct =
-    portfolioTotalValue === 0 ? 0 : (holding.marketValue / portfolioTotalValue) * 100;
-  const headlineValue =
+  const changeValueText =
     displayMode === "price"
-      ? formatPKRAmount(holding.marketValue)
-      : formatUnsignedPercentage(sharePct);
-  const pnlValue =
+      ? formatSignedPriceDelta(holding.priceDiff)
+      : formatSignedPercentage(holding.priceDiffPct);
+  const changeToneClassName =
     displayMode === "price"
-      ? formatPKRAmount(holding.pnl)
-      : formatSignedPercentage(holding.pnlPct);
-  const pnlTone = displayMode === "price" ? holding.pnl : holding.pnlPct;
+      ? getValueToneClassName(holding.priceDiff)
+      : getValueToneClassName(holding.priceDiffPct);
+  const investedSharePct =
+    portfolioTotalInvested === 0
+      ? 0
+      : (holding.invested / portfolioTotalInvested) * 100;
+  const isPriceMode = displayMode === "price";
+  const isInvestedCompact = isPriceMode && isCompactPkrValue(holding.invested);
+  const investedValueText =
+    isPriceMode
+      ? isInvestedCompact
+        ? formatCompactPKRAmount(holding.invested, { compactFrom: 100_000 })
+        : formatPKRAmount(holding.invested)
+      : formatUnsignedPercentage(investedSharePct);
+  const investedLabel = isPriceMode ? "Invested" : "Invested Share";
+  const currentSharePct =
+    portfolioTotalInvested === 0
+      ? 0
+      : (holding.marketValue / portfolioTotalInvested) * 100;
+  const isCurrentCompact = isPriceMode && isCompactPkrValue(holding.marketValue);
+  const currentValueText =
+    isPriceMode
+      ? isCurrentCompact
+        ? formatCompactPKRAmount(holding.marketValue, { compactFrom: 100_000 })
+        : formatPKRAmount(holding.marketValue)
+      : formatUnsignedPercentage(currentSharePct);
+  const currentLabel = isPriceMode ? "Current" : "Current Value";
+  const currentValueToneClassName = getValueToneClassName(holding.pnl);
+  const [activeMetricTooltipKey, setActiveMetricTooltipKey] = React.useState<
+    "invested" | "current" | null
+  >(null);
+  const metricTooltipTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(
+    null
+  );
+
+  React.useEffect(() => {
+    return () => {
+      if (metricTooltipTimeoutRef.current) {
+        clearTimeout(metricTooltipTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const showMetricTooltip = React.useCallback(
+    (metricKey: "invested" | "current") => {
+      setActiveMetricTooltipKey(metricKey);
+      if (metricTooltipTimeoutRef.current) {
+        clearTimeout(metricTooltipTimeoutRef.current);
+      }
+
+      metricTooltipTimeoutRef.current = setTimeout(() => {
+        setActiveMetricTooltipKey((currentValue) =>
+          currentValue === metricKey ? null : currentValue
+        );
+      }, 2000);
+    },
+    []
+  );
 
   return (
     <TouchableOpacity
       activeOpacity={0.9}
       onPress={onPress}
-      className="rounded-2xl bg-brand-white/95 px-3 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-brand-white/10"
+      className="rounded-2xl bg-brand-white px-3 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10"
     >
       <View className="flex-row items-start justify-between">
         <View className="mr-2 flex-1">
@@ -147,35 +228,115 @@ function SectorCompanyCard({
         </View>
 
         <View className="items-end">
-          <Text className="text-base font-extrabold text-app-text dark:text-app-textDark">
-            {headlineValue}
+          <Text className="text-2xl font-extrabold text-app-text dark:text-app-textDark">
+            {holding.currentPrice.toFixed(2)}
           </Text>
-          <Text className="mt-1 text-xs font-semibold text-app-text dark:text-app-textDark">
-            {displayMode === "price" ? "Market Value" : "Portfolio Share"}
+          <Text
+            className={["mt-1 text-base font-extrabold", changeToneClassName]
+              .filter(Boolean)
+              .join(" ")}
+          >
+            {changeValueText}
           </Text>
         </View>
       </View>
 
-      <View className="mt-3 flex-row items-center justify-between">
-        <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-          Invested
-        </Text>
-        <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
-          {formatPKRAmount(holding.invested)}
-        </Text>
+      <View className="mt-3 flex-row items-start justify-between">
+        <View>
+          <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+            High
+          </Text>
+          <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+            {holding.highPrice.toFixed(2)}
+          </Text>
+        </View>
+
+        <View>
+          <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+            Low
+          </Text>
+          <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+            {holding.lowPrice.toFixed(2)}
+          </Text>
+        </View>
+
+        <View>
+          <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+            Volume
+          </Text>
+          <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+            {formatCompactNumber(holding.lastVolume)}
+          </Text>
+        </View>
+
+        <View>
+          <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+            LDC
+          </Text>
+          <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+            {holding.previousClose.toFixed(2)}
+          </Text>
+        </View>
       </View>
 
-      <View className="mt-1 flex-row items-center justify-between">
-        <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
-          Profit / Loss
-        </Text>
-        <Text
-          className={["text-sm font-extrabold", getValueToneClassName(pnlTone)]
-            .filter(Boolean)
-            .join(" ")}
-        >
-          {pnlValue}
-        </Text>
+      <View className="mt-3 flex-row items-center justify-between rounded-xl bg-app-highlight/5 px-3 py-2 dark:bg-brand-white/5">
+        <View className="flex-1 pr-3">
+          <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+            {investedLabel}
+          </Text>
+          <View className="relative mt-1 self-start">
+            {isPriceMode &&
+            isInvestedCompact &&
+            activeMetricTooltipKey === "invested" ? (
+              <View className="absolute -top-9 left-0 z-20 rounded-lg bg-app-highlight px-2.5 py-1.5 dark:bg-brand-white/90">
+                <Text className="text-[11px] font-semibold text-brand-white dark:text-brand-purple">
+                  {formatPKRAmount(holding.invested)}
+                </Text>
+              </View>
+            ) : null}
+            <TouchableOpacity
+              activeOpacity={isPriceMode && isInvestedCompact ? 0.82 : 1}
+              disabled={!(isPriceMode && isInvestedCompact)}
+              onPress={() => showMetricTooltip("invested")}
+            >
+              <Text className="text-sm font-extrabold text-app-text dark:text-app-textDark">
+                {investedValueText}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        <View className="h-7 w-px bg-app-highlight/20 dark:bg-brand-white/15" />
+
+        <View className="flex-1 items-end pl-3">
+          <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
+            {currentLabel}
+          </Text>
+          <View className="relative mt-1 self-end">
+            {isPriceMode &&
+            isCurrentCompact &&
+            activeMetricTooltipKey === "current" ? (
+              <View className="absolute -top-9 right-0 z-20 rounded-lg bg-app-highlight px-2.5 py-1.5 dark:bg-brand-white/90">
+                <Text className="text-[11px] font-semibold text-brand-white dark:text-brand-purple">
+                  {formatPKRAmount(holding.marketValue)}
+                </Text>
+              </View>
+            ) : null}
+            <TouchableOpacity
+              activeOpacity={isPriceMode && isCurrentCompact ? 0.82 : 1}
+              disabled={!(isPriceMode && isCurrentCompact)}
+              onPress={() => showMetricTooltip("current")}
+            >
+              <Text
+                className={["text-sm font-extrabold", currentValueToneClassName]
+                  .filter(Boolean)
+                  .join(" ")}
+              >
+                {currentValueText}
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
       </View>
     </TouchableOpacity>
   );
@@ -213,9 +374,14 @@ export default function PortfolioSectorScreen() {
   const [displayMode, setDisplayMode] = React.useState<PortfolioDisplayMode>("percentage");
   const [hasHydratedDisplayMode, setHasHydratedDisplayMode] = React.useState(false);
   const [holdings, setHoldings] = React.useState<PortfolioHolding[]>([]);
-  const [portfolioTotalValue, setPortfolioTotalValue] = React.useState(0);
+  const [portfolioTotalInvested, setPortfolioTotalInvested] = React.useState(0);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [isInitialLoading, setIsInitialLoading] = React.useState(true);
+  const {
+    isBackgroundSyncing,
+    beginBackgroundSync,
+    endBackgroundSync,
+  } = useBackgroundSyncIndicator();
   const sectorSkeletonCardCount = React.useMemo(
     () =>
       Math.max(
@@ -261,8 +427,8 @@ export default function PortfolioSectorScreen() {
 
   const applySectorHoldings = React.useCallback(
     (allHoldings: PortfolioHolding[]) => {
-      const nextPortfolioTotalValue = allHoldings.reduce(
-        (sum, holding) => sum + holding.marketValue,
+      const nextPortfolioTotalInvested = allHoldings.reduce(
+        (sum, holding) => sum + holding.invested,
         0
       );
       const nextSectorHoldings = allHoldings
@@ -271,7 +437,7 @@ export default function PortfolioSectorScreen() {
           secondHolding.marketValue - firstHolding.marketValue
         );
 
-      setPortfolioTotalValue(nextPortfolioTotalValue);
+      setPortfolioTotalInvested(nextPortfolioTotalInvested);
       setHoldings(nextSectorHoldings);
     },
     [normalizedSectorName]
@@ -279,13 +445,14 @@ export default function PortfolioSectorScreen() {
 
   const refreshSector = React.useCallback(
     async (showLoader = false, forceLive = false) => {
+      let didStartBackgroundSync = false;
       if (showLoader) {
         setIsInitialLoading(true);
       }
 
       try {
         if (normalizedSectorName.length === 0) {
-          setPortfolioTotalValue(0);
+          setPortfolioTotalInvested(0);
           setHoldings([]);
           return;
         }
@@ -320,15 +487,23 @@ export default function PortfolioSectorScreen() {
           return;
         }
 
+        if (!showLoader && hasUsableCachedHoldings) {
+          beginBackgroundSync();
+          didStartBackgroundSync = true;
+        }
+
         const latestHoldings = await getPortfolioHoldingsWithLatestQuotes();
         applySectorHoldings(latestHoldings);
       } finally {
+        if (didStartBackgroundSync) {
+          endBackgroundSync();
+        }
         if (showLoader) {
           setIsInitialLoading(false);
         }
       }
     },
-    [applySectorHoldings, normalizedSectorName]
+    [applySectorHoldings, beginBackgroundSync, endBackgroundSync, normalizedSectorName]
   );
 
   const handlePullToRefresh = React.useCallback(async () => {
@@ -420,6 +595,13 @@ export default function PortfolioSectorScreen() {
             </View>
           </View>
 
+          <View className="flex-row items-center justify-end">
+            <AppBackgroundRefreshIndicator
+              visible={isBackgroundSyncing}
+              label="Refreshing"
+            />
+          </View>
+
           {isInitialLoading ? (
             <View
               style={{
@@ -441,7 +623,7 @@ export default function PortfolioSectorScreen() {
                   key={holding.symbol}
                   holding={holding}
                   displayMode={displayMode}
-                  portfolioTotalValue={portfolioTotalValue}
+                  portfolioTotalInvested={portfolioTotalInvested}
                   isShariahCompliant={isShariahCompliantSymbol(holding.symbol)}
                   onPress={() => handleOpenCompany(holding.symbol)}
                 />

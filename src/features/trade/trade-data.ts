@@ -502,6 +502,12 @@ async function shouldUseCachedQuote(options: {
 
   try {
     const cachedMarketStatus = await getCachedDpsMarketStatus();
+    if (cachedMarketStatus.uiStatus !== "OPEN") {
+      // Keep quote cache warm for instant paint, but revalidate from source
+      // when market is not open to avoid stale session snapshots.
+      return false;
+    }
+
     return !shouldFetchLiveFromDelayedFeed({
       asOf,
       marketUiStatus: cachedMarketStatus.uiStatus,

@@ -1,3 +1,4 @@
+import AppBackgroundRefreshIndicator from "@/components/ui/app-background-refresh-indicator";
 import AppButton from "@/components/ui/app-button";
 import AppFeedbackModal, {
   AppFeedbackModalTone,
@@ -59,6 +60,7 @@ import {
 import { calculateBrokerFeeAmount } from "@/src/lib/broker-fee";
 import { useGuardedRouter } from "@/src/lib/navigation";
 import { isInternetReachable } from "@/src/lib/network";
+import { useBackgroundSyncIndicator } from "@/src/lib/use-background-sync-indicator";
 import { APP_COLORS } from "@/src/theme/colors";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
 import { useFocusEffect } from "@react-navigation/native";
@@ -355,6 +357,8 @@ export default function HomeScreen() {
   const metricTooltipTimeoutRef = React.useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
+  const { isBackgroundSyncing, beginBackgroundSync, endBackgroundSync } =
+    useBackgroundSyncIndicator();
 
   const handleTradePress = React.useCallback(() => {
     router.push({
@@ -459,129 +463,145 @@ export default function HomeScreen() {
     async (preferCachedFirst = true) => {
       const requestId = homeRefreshRequestIdRef.current + 1;
       homeRefreshRequestIdRef.current = requestId;
+      let didStartBackgroundSync = false;
 
-      const [
-        totalDividendValue,
-        totalDepositValue,
-        storedAllTimeHighWorth,
-        savedTradeOrders,
-        savedBonusShareRecords,
-      ] = await Promise.all([
-        getTotalDividendFinalAmount(),
-        getTotalDepositAmount(),
-        getAllTimeHighPortfolioWorthPreference(),
-        getSavedTradeOrders(),
-        getSavedBonusShareRecords(),
-      ]);
-      if (requestId !== homeRefreshRequestIdRef.current) {
-        return;
-      }
+      try {
+        const [
+          totalDividendValue,
+          totalDepositValue,
+          storedAllTimeHighWorth,
+          savedTradeOrders,
+          savedBonusShareRecords,
+        ] = await Promise.all([
+          getTotalDividendFinalAmount(),
+          getTotalDepositAmount(),
+          getAllTimeHighPortfolioWorthPreference(),
+          getSavedTradeOrders(),
+          getSavedBonusShareRecords(),
+        ]);
+        if (requestId !== homeRefreshRequestIdRef.current) {
+          return;
+        }
 
-      setTotalDividendValue(totalDividendValue);
-      setRealizedProfitLoss(
-        calculateRealizedProfitLoss(savedTradeOrders, savedBonusShareRecords),
-      );
-      setTotalBrokerDeductionAmount(
-        savedTradeOrders.reduce((runningTotal, order) => {
-          if (order.brokerDeductionEnabled === false) {
-            return runningTotal;
+        setTotalDividendValue(totalDividendValue);
+        setRealizedProfitLoss(
+          calculateRealizedProfitLoss(savedTradeOrders, savedBonusShareRecords),
+        );
+        setTotalBrokerDeductionAmount(
+          savedTradeOrders.reduce((runningTotal, order) => {
+            if (order.brokerDeductionEnabled === false) {
+              return runningTotal;
+            }
+
+            const brokerDeduction = calculateBrokerFeeAmount({
+              price: order.price,
+              units: order.units,
+              brokerFeeType: order.brokerFeeType,
+              brokerFeeValue: order.brokerFeeValue,
+              brokerFeePct:
+                typeof order.brokerFeePct === "number"
+                  ? order.brokerFeePct
+                  : null,
+              brokerCommissionModel: order.brokerCommissionModel,
+              brokerCommissionRules: order.brokerCommissionRules,
+              cdcChargePerShare: order.brokerCdcChargePerShare,
+            });
+            return runningTotal + brokerDeduction;
+          }, 0),
+        );
+        const carryUnitsBySymbol = getCarryUnitsBySymbolBeforeToday(
+          savedTradeOrders,
+          savedBonusShareRecords,
+        );
+        let allTimeHighWorthBaseline = storedAllTimeHighWorth;
+        setAllTimeHighWorth(allTimeHighWorthBaseline);
+
+        if (preferCachedFirst) {
+          const [cachedHoldings, cachedMarketDetail, cachedDpsStatus] =
+            await Promise.all([
+              getPortfolioHoldingsWithCachedQuotes(),
+              getCachedMarketIndexDetail("KSE100"),
+              getCachedDpsMarketStatus(),
+            ]);
+          if (requestId !== homeRefreshRequestIdRef.current) {
+            return;
           }
 
-          const brokerDeduction = calculateBrokerFeeAmount({
-            price: order.price,
-            units: order.units,
-            brokerFeeType: order.brokerFeeType,
-            brokerFeeValue: order.brokerFeeValue,
-            brokerFeePct:
-              typeof order.brokerFeePct === "number"
-                ? order.brokerFeePct
-                : null,
-            brokerCommissionModel: order.brokerCommissionModel,
-            brokerCommissionRules: order.brokerCommissionRules,
-            cdcChargePerShare: order.brokerCdcChargePerShare,
-          });
-          return runningTotal + brokerDeduction;
-        }, 0),
-      );
-      const carryUnitsBySymbol = getCarryUnitsBySymbolBeforeToday(
-        savedTradeOrders,
-        savedBonusShareRecords,
-      );
-      let allTimeHighWorthBaseline = storedAllTimeHighWorth;
-      setAllTimeHighWorth(allTimeHighWorthBaseline);
+          setMarketAsOf(cachedMarketDetail?.snapshot.asOf ?? null);
+          setDpsMarketStatus(cachedDpsStatus);
+          allTimeHighWorthBaseline = applyHomeSnapshot(
+            cachedHoldings,
+            totalDividendValue,
+            totalDepositValue,
+            allTimeHighWorthBaseline,
+            carryUnitsBySymbol,
+          );
 
-      if (preferCachedFirst) {
-        const [cachedHoldings, cachedMarketDetail, cachedDpsStatus] =
+          const hasVisibleCachedData =
+            cachedHoldings.length > 0 ||
+            Boolean(cachedMarketDetail?.snapshot.asOf) ||
+            Boolean(cachedDpsStatus.fetchedAt);
+          if (hasVisibleCachedData) {
+            beginBackgroundSync();
+            didStartBackgroundSync = true;
+          }
+        }
+
+        const [latestHoldings, latestMarketDetail, latestDpsStatus] =
           await Promise.all([
-            getPortfolioHoldingsWithCachedQuotes(),
-            getCachedMarketIndexDetail("KSE100"),
-            getCachedDpsMarketStatus(),
+            getPortfolioHoldingsWithLatestQuotes(),
+            getLatestMarketIndexDetail("KSE100"),
+            getLatestDpsMarketStatus(),
           ]);
         if (requestId !== homeRefreshRequestIdRef.current) {
           return;
         }
 
-        setMarketAsOf(cachedMarketDetail?.snapshot.asOf ?? null);
-        setDpsMarketStatus(cachedDpsStatus);
-        allTimeHighWorthBaseline = applyHomeSnapshot(
-          cachedHoldings,
+        if (latestMarketDetail?.snapshot.asOf) {
+          setMarketAsOf(latestMarketDetail.snapshot.asOf);
+        }
+        setDpsMarketStatus(latestDpsStatus);
+        applyHomeSnapshot(
+          latestHoldings,
           totalDividendValue,
           totalDepositValue,
           allTimeHighWorthBaseline,
           carryUnitsBySymbol,
         );
-      }
 
-      const [latestHoldings, latestMarketDetail, latestDpsStatus] =
-        await Promise.all([
-          getPortfolioHoldingsWithLatestQuotes(),
-          getLatestMarketIndexDetail("KSE100"),
-          getLatestDpsMarketStatus(),
-        ]);
-      if (requestId !== homeRefreshRequestIdRef.current) {
-        return;
-      }
+        void (async () => {
+          try {
+            await syncPsxAnnouncementsToInAppNotifications();
+            const createdDividendTransactions =
+              await syncAutoDividendsFromNotifications();
+            if (createdDividendTransactions <= 0) {
+              return;
+            }
 
-      if (latestMarketDetail?.snapshot.asOf) {
-        setMarketAsOf(latestMarketDetail.snapshot.asOf);
-      }
-      setDpsMarketStatus(latestDpsStatus);
-      applyHomeSnapshot(
-        latestHoldings,
-        totalDividendValue,
-        totalDepositValue,
-        allTimeHighWorthBaseline,
-        carryUnitsBySymbol,
-      );
+            const updatedDividendValue = await getTotalDividendFinalAmount();
+            if (requestId !== homeRefreshRequestIdRef.current) {
+              return;
+            }
 
-      void (async () => {
-        try {
-          await syncPsxAnnouncementsToInAppNotifications();
-          const createdDividendTransactions =
-            await syncAutoDividendsFromNotifications();
-          if (createdDividendTransactions <= 0) {
-            return;
+            setTotalDividendValue(updatedDividendValue);
+            applyHomeSnapshot(
+              latestHoldings,
+              updatedDividendValue,
+              totalDepositValue,
+              allTimeHighWorthBaseline,
+              carryUnitsBySymbol,
+            );
+          } catch {
+            // Ignore background sync errors to keep the home screen responsive.
           }
-
-          const updatedDividendValue = await getTotalDividendFinalAmount();
-          if (requestId !== homeRefreshRequestIdRef.current) {
-            return;
-          }
-
-          setTotalDividendValue(updatedDividendValue);
-          applyHomeSnapshot(
-            latestHoldings,
-            updatedDividendValue,
-            totalDepositValue,
-            allTimeHighWorthBaseline,
-            carryUnitsBySymbol,
-          );
-        } catch {
-          // Ignore background sync errors to keep the home screen responsive.
+        })();
+      } finally {
+        if (didStartBackgroundSync) {
+          endBackgroundSync();
         }
-      })();
+      }
     },
-    [applyHomeSnapshot],
+    [applyHomeSnapshot, beginBackgroundSync, endBackgroundSync],
   );
 
   const handlePullToRefresh = React.useCallback(async () => {
@@ -1140,22 +1160,30 @@ export default function HomeScreen() {
             <Text className="mt-1 text-sm font-semibold text-success-green">
               Dividend: {formatPKRAmount(totalDividendValue)}
             </Text>
-            <Text className="mt-1 text-sm font-semibold text-brand-red">
+            <Text className="mt-1 text-xs font-semibold text-brand-red text-end">
               Broker Deduction: {totalBrokerDeductionText}
             </Text>
 
-            <View className="mt-2 flex-row items-center justify-end gap-1">
-              <MaterialCommunityIcons
-                name="update"
-                style={{ transform: [{ rotate: "45deg" }] }}
-                size={10}
-                color={
-                  isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple
-                }
-              />
-              <Text className="text-[9px] font-semibold text-text-light dark:text-text-dark">
-                Updated {formatUpdatedAt(marketAsOf)}
-              </Text>
+            <View className="mt-2 flex-row items-center justify-end">
+              {isBackgroundSyncing ? (
+                <AppBackgroundRefreshIndicator visible label="Refreshing" />
+              ) : (
+                <View className="flex-row items-center gap-1">
+                  <MaterialCommunityIcons
+                    name="update"
+                    style={{ transform: [{ rotate: "45deg" }] }}
+                    size={10}
+                    color={
+                      isDarkMode
+                        ? APP_COLORS.brand.white
+                        : APP_COLORS.brand.purple
+                    }
+                  />
+                  <Text className="text-[9px] font-semibold text-text-light dark:text-text-dark">
+                    Updated {formatUpdatedAt(marketAsOf)}
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
 

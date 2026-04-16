@@ -478,7 +478,7 @@ export default function MarketTabScreen() {
             <View className="mt-1">
               <AppBackgroundRefreshIndicator
                 visible={isBackgroundSyncing}
-                label="Syncing"
+                label="Refreshing"
               />
             </View>
 

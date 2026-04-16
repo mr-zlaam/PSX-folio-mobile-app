@@ -877,7 +877,9 @@ async function shouldPreferCachedMarketData(options: {
   try {
     const cachedStatus = await getCachedDpsMarketStatus();
     if (cachedStatus.uiStatus !== "OPEN") {
-      return true;
+      // Treat cache as stale outside live session so periodic sync still
+      // fetches the most recent official close/updates from source.
+      return false;
     }
 
     if (cacheAsOfValues.length === 0) {

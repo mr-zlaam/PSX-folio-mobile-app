@@ -230,6 +230,12 @@ async function shouldUseCachedChartSeries(options: {
 
   try {
     const cachedMarketStatus = await getCachedDpsMarketStatus();
+    if (cachedMarketStatus.uiStatus !== "OPEN") {
+      // Outside market session, treat chart cache as stale and allow
+      // periodic revalidation from source (pull-to-refresh still force-live).
+      return false;
+    }
+
     return !shouldFetchLiveFromDelayedFeed({
       asOf,
       marketUiStatus: cachedMarketStatus.uiStatus,

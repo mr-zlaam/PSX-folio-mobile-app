@@ -890,7 +890,7 @@ export default function StockDetailScreen() {
           }
         }
 
-        if (hasUsableCachedQuote && !showLoader && !forceLive) {
+        if (hasUsableCachedQuote && !showLoader) {
           beginBackgroundSync();
           didStartBackgroundSync = true;
         }
@@ -938,7 +938,7 @@ export default function StockDetailScreen() {
           }
         }
 
-        if (hasUsableCachedSeries && !showLoader && !forceLive) {
+        if (hasUsableCachedSeries && !showLoader) {
           beginBackgroundSync();
           didStartBackgroundSync = true;
         }
@@ -980,7 +980,7 @@ export default function StockDetailScreen() {
         setYearChartSeries(cachedSeries);
       }
 
-      if (hasUsableCachedSeries && !forceLive) {
+      if (hasUsableCachedSeries) {
         beginBackgroundSync();
         didStartBackgroundSync = true;
       }
@@ -1053,37 +1053,16 @@ export default function StockDetailScreen() {
 
   React.useEffect(() => {
     void hydrateSymbolMeta();
-    void refreshQuote(true);
-    const intervalId = setInterval(() => {
-      void refreshQuote();
-    }, STOCK_DETAIL_REFRESH_INTERVAL_MS);
-
-    return () => {
-      clearInterval(intervalId);
-    };
+    void refreshQuote(true, true);
   }, [hydrateSymbolMeta, refreshQuote]);
 
   React.useEffect(() => {
     setSelectedChartPoint(null);
-    void refreshChart(chartRange, true);
-    const intervalId = setInterval(() => {
-      void refreshChart(chartRange);
-    }, STOCK_DETAIL_REFRESH_INTERVAL_MS);
-
-    return () => {
-      clearInterval(intervalId);
-    };
+    void refreshChart(chartRange, true, true);
   }, [chartRange, refreshChart]);
 
   React.useEffect(() => {
-    void refreshYearChart();
-    const intervalId = setInterval(() => {
-      void refreshYearChart();
-    }, STOCK_DETAIL_REFRESH_INTERVAL_MS);
-
-    return () => {
-      clearInterval(intervalId);
-    };
+    void refreshYearChart(true);
   }, [refreshYearChart]);
 
   React.useEffect(() => {
@@ -1114,6 +1093,33 @@ export default function StockDetailScreen() {
 
     void refreshCompanyDetail(true);
   }, [normalizedSymbol, refreshCompanyDetail, shouldLoadCompanyDetail]);
+
+  React.useEffect(() => {
+    const intervalId = setInterval(() => {
+      const refreshTasks: Promise<unknown>[] = [
+        refreshQuote(false, true),
+        refreshChart(chartRange, false, true),
+        refreshYearChart(true),
+      ];
+
+      if (shouldLoadCompanyDetail) {
+        refreshTasks.push(refreshCompanyDetail());
+      }
+
+      void Promise.allSettled(refreshTasks);
+    }, STOCK_DETAIL_REFRESH_INTERVAL_MS);
+
+    return () => {
+      clearInterval(intervalId);
+    };
+  }, [
+    chartRange,
+    refreshChart,
+    refreshCompanyDetail,
+    refreshQuote,
+    refreshYearChart,
+    shouldLoadCompanyDetail,
+  ]);
 
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
@@ -1245,9 +1251,25 @@ export default function StockDetailScreen() {
   const chartLastPoint = chartSeries.points[chartSeries.points.length - 1] ?? null;
   const activePoint = selectedChartPoint ?? chartLastPoint;
   const latestPriceFromChart = chartLastPoint?.price ?? 0;
-  const displayPrice = quote.lastPrice > 0 ? quote.lastPrice : latestPriceFromChart;
-  const displayChange = quote.change;
-  const displayChangePct = quote.changePct;
+  const displayPrice =
+    chartRange === "1D" && latestPriceFromChart > 0
+      ? latestPriceFromChart
+      : quote.lastPrice > 0
+        ? quote.lastPrice
+        : latestPriceFromChart;
+  const displayReferenceClose =
+    quote.previousClose > 0
+      ? quote.previousClose
+      : Number.isFinite(quote.lastPrice - quote.change) &&
+          quote.lastPrice - quote.change > 0
+        ? quote.lastPrice - quote.change
+        : 0;
+  const displayChange =
+    displayReferenceClose > 0 ? displayPrice - displayReferenceClose : quote.change;
+  const displayChangePct =
+    displayReferenceClose > 0
+      ? (displayChange / displayReferenceClose) * 100
+      : quote.changePct;
   const dayRange = React.useMemo(() => {
     const possibleValues = [
       quote.lowPrice,
@@ -1443,10 +1465,6 @@ export default function StockDetailScreen() {
                         ? formatPointTimestamp(activePoint.timestamp, chartRange)
                         : "--"}
                     </Text>
-                    <AppBackgroundRefreshIndicator
-                      visible={isBackgroundSyncing}
-                      label="Syncing"
-                    />
                   </View>
                 </View>
 
@@ -1465,7 +1483,19 @@ export default function StockDetailScreen() {
                   ))}
                 </View>
 
-                <View className="mt-4">
+                <View className="mt-2 flex-row items-center justify-end">
+                  <AppBackgroundRefreshIndicator
+                    visible={isBackgroundSyncing}
+                    label="Refreshing"
+                  />
+                </View>
+
+                <View
+                  className="mt-4"
+                  style={{
+                    opacity: isBackgroundSyncing && !isChartLoading ? 0.72 : 1,
+                  }}
+                >
                   {isChartLoading ? (
                     <AppChartSkeleton height={170} />
                   ) : (

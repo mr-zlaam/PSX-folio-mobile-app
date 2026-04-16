@@ -413,7 +413,7 @@ export default function MarketIndexStocksScreen() {
             <View className="mt-1">
               <AppBackgroundRefreshIndicator
                 visible={isBackgroundSyncing}
-                label="Syncing"
+                label="Refreshing"
               />
             </View>
 

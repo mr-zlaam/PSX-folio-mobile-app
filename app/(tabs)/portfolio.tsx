@@ -23,6 +23,7 @@ import {
 import AppFeedbackModal, {
   AppFeedbackModalTone,
 } from "@/components/ui/app-feedback-modal";
+import AppBackgroundRefreshIndicator from "@/components/ui/app-background-refresh-indicator";
 import {
   AppListScreenSkeleton,
   AppSkeletonBlock,
@@ -51,6 +52,7 @@ import {
   setPortfolioDisplayModePreference,
   setPortfolioGroupingModePreference,
 } from "@/src/lib/app-preferences";
+import { useBackgroundSyncIndicator } from "@/src/lib/use-background-sync-indicator";
 import { APP_COLORS } from "@/src/theme/colors";
 
 const PORTFOLIO_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
@@ -497,13 +499,18 @@ export default function PortfolioTabScreen() {
   const [isInitialLoading, setIsInitialLoading] = React.useState(true);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
   const [isBackupBusy, setIsBackupBusy] = React.useState(false);
-  const [groupingMode, setGroupingMode] = React.useState<PortfolioGroupingMode>("sectors");
+  const [groupingMode, setGroupingMode] = React.useState<PortfolioGroupingMode>("companies");
   const [displayMode, setDisplayMode] = React.useState<PortfolioDisplayMode>("percentage");
   const [backupNotice, setBackupNotice] = React.useState<BackupNoticeState | null>(
     null
   );
   const [hasHydratedViewPreferences, setHasHydratedViewPreferences] =
     React.useState(false);
+  const {
+    isBackgroundSyncing,
+    beginBackgroundSync,
+    endBackgroundSync,
+  } = useBackgroundSyncIndicator();
   const filterSheetRef = React.useRef<BottomSheetModal>(null);
   const filterSheetSnapPoints = React.useMemo(() => ["44%"], []);
   const sectorAggregates = React.useMemo(() => buildSectorAggregates(holdings), [holdings]);
@@ -517,6 +524,7 @@ export default function PortfolioTabScreen() {
     forceLive = false,
     showLoader = false
   ) => {
+    let didStartBackgroundSync = false;
     if (showLoader) {
       setIsInitialLoading(true);
     }
@@ -556,14 +564,24 @@ export default function PortfolioTabScreen() {
         return;
       }
 
-      const latestHoldings = await getPortfolioHoldingsWithLatestQuotes();
+      if (preferCachedFirst && hasUsableCachedHoldings && !showLoader) {
+        beginBackgroundSync();
+        didStartBackgroundSync = true;
+      }
+
+      const latestHoldings = await getPortfolioHoldingsWithLatestQuotes({
+        forceLive,
+      });
       setHoldings(latestHoldings);
     } finally {
+      if (didStartBackgroundSync) {
+        endBackgroundSync();
+      }
       if (showLoader) {
         setIsInitialLoading(false);
       }
     }
-  }, []);
+  }, [beginBackgroundSync, endBackgroundSync]);
 
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
@@ -857,7 +875,7 @@ export default function PortfolioTabScreen() {
               >
                 <MaterialCommunityIcons
                   name={
-                    groupingMode !== "sectors" || displayMode !== "percentage"
+                    groupingMode !== "companies" || displayMode !== "percentage"
                       ? "filter-check-outline"
                       : "filter-variant"
                   }
@@ -866,6 +884,13 @@ export default function PortfolioTabScreen() {
                 />
               </TouchableOpacity>
             </View>
+          </View>
+
+          <View className="flex-row items-center justify-end">
+            <AppBackgroundRefreshIndicator
+              visible={isBackgroundSyncing}
+              label="Refreshing"
+            />
           </View>
 
           {isInitialLoading ? (

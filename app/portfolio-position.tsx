@@ -200,12 +200,14 @@ export default function PortfolioPositionScreen() {
           }
         }
 
-        if (hasUsableCachedHolding && !showLoader && !forceLive) {
+        if (hasUsableCachedHolding && !showLoader) {
           beginBackgroundSync();
           didStartBackgroundSync = true;
         }
 
-        const latestHoldings = await getPortfolioHoldingsWithLatestQuotes();
+        const latestHoldings = await getPortfolioHoldingsWithLatestQuotes({
+          forceLive,
+        });
         const nextHolding =
           latestHoldings.find((item) => item.symbol === normalizedSymbol) ?? null;
         setHolding(nextHolding);
@@ -266,7 +268,7 @@ export default function PortfolioPositionScreen() {
           }
         }
 
-        if (hasUsableCachedSeries && !showLoader && !forceLive) {
+        if (hasUsableCachedSeries && !showLoader) {
           beginBackgroundSync();
           didStartBackgroundSync = true;
         }
@@ -302,27 +304,26 @@ export default function PortfolioPositionScreen() {
   }, [chartRange, refreshChart, refreshPosition]);
 
   React.useEffect(() => {
-    void refreshPosition(true);
-    const intervalId = setInterval(() => {
-      void refreshPosition();
-    }, POSITION_REFRESH_INTERVAL_MS);
-
-    return () => {
-      clearInterval(intervalId);
-    };
+    void refreshPosition(true, true);
   }, [refreshPosition]);
 
   React.useEffect(() => {
     setSelectedChartPoint(null);
-    void refreshChart(chartRange, true);
+    void refreshChart(chartRange, true, true);
+  }, [chartRange, refreshChart]);
+
+  React.useEffect(() => {
     const intervalId = setInterval(() => {
-      void refreshChart(chartRange);
+      void Promise.all([
+        refreshPosition(false, true),
+        refreshChart(chartRange, false, true),
+      ]);
     }, POSITION_REFRESH_INTERVAL_MS);
 
     return () => {
       clearInterval(intervalId);
     };
-  }, [chartRange, refreshChart]);
+  }, [chartRange, refreshChart, refreshPosition]);
 
   const chartToneValue = React.useMemo(() => {
     if (chartSeries.points.length < 2) {
@@ -541,10 +542,6 @@ export default function PortfolioPositionScreen() {
                   <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                     Performance
                   </Text>
-                  <AppBackgroundRefreshIndicator
-                    visible={isBackgroundSyncing}
-                    label="Syncing"
-                  />
                 </View>
 
                 <View className="mt-3 flex-row flex-wrap gap-2">
@@ -556,6 +553,13 @@ export default function PortfolioPositionScreen() {
                       onPress={() => setChartRange(rangeOption)}
                     />
                   ))}
+                </View>
+
+                <View className="mt-2 flex-row items-center justify-end">
+                  <AppBackgroundRefreshIndicator
+                    visible={isBackgroundSyncing}
+                    label="Refreshing"
+                  />
                 </View>
 
                 {selectedChartPoint ? (
@@ -574,7 +578,12 @@ export default function PortfolioPositionScreen() {
                   </View>
                 ) : null}
 
-                <View className="mt-4">
+                <View
+                  className="mt-4"
+                  style={{
+                    opacity: isBackgroundSyncing && !isChartLoading ? 0.72 : 1,
+                  }}
+                >
                   {isChartLoading ? (
                     <AppChartSkeleton />
                   ) : (

@@ -455,6 +455,10 @@ export default function AnalyticsScreen() {
     selectedPointValue ??
     (chartPoints.length > 0 ? chartPoints[chartPoints.length - 1].price : 0);
 
+  React.useEffect(() => {
+    setSelectedPointValue(null);
+  }, [snapshot?.asOf, trendRange]);
+
   const allocationItems = React.useMemo(() => {
     if (!snapshot) {
       return [];
@@ -572,10 +576,6 @@ export default function AnalyticsScreen() {
                   <Text className="text-[11px] font-semibold text-text-placeholderLight dark:text-text-placeholderDark">
                     Updated {formatUpdatedAt(snapshot.asOf)}
                   </Text>
-                  <AppBackgroundRefreshIndicator
-                    visible={isBackgroundSyncing}
-                    label="Syncing"
-                  />
                 </View>
               </View>
 
@@ -584,15 +584,9 @@ export default function AnalyticsScreen() {
                   <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                     Equity Trend
                   </Text>
-                  <View className="items-end gap-1">
-                    <Text className="text-sm font-extrabold text-app-text dark:text-app-textDark">
-                      {formatPKRAmount(chartLatestValue)}
-                    </Text>
-                    <AppBackgroundRefreshIndicator
-                      visible={isBackgroundSyncing}
-                      label="Syncing"
-                    />
-                  </View>
+                  <Text className="text-sm font-extrabold text-app-text dark:text-app-textDark">
+                    {formatPKRAmount(chartLatestValue)}
+                  </Text>
                 </View>
 
                 <View className="mt-3 flex-row flex-wrap gap-2">
@@ -606,7 +600,17 @@ export default function AnalyticsScreen() {
                   ))}
                 </View>
 
-                <View className="mt-4">
+                <View className="mt-2 flex-row items-center justify-end">
+                  <AppBackgroundRefreshIndicator
+                    visible={isBackgroundSyncing}
+                    label="Refreshing"
+                  />
+                </View>
+
+                <View
+                  className="mt-4"
+                  style={{ opacity: isBackgroundSyncing ? 0.72 : 1 }}
+                >
                   <StockLineChart
                     points={chartPoints}
                     lineColor={chartLineColor}

@@ -42,14 +42,19 @@ export type PortfolioHolding = {
 
 async function readQuoteForSymbol(
   symbol: string,
-  quoteMode: QuoteMode
+  quoteMode: QuoteMode,
+  options?: {
+    forceLive?: boolean;
+  }
 ): Promise<SymbolQuote> {
   if (quoteMode === "cache") {
     const cachedQuote = await getCachedSymbolQuote(symbol);
     return cachedQuote ?? getSymbolQuoteFallback(symbol);
   }
 
-  return getLatestSymbolQuote(symbol);
+  return getLatestSymbolQuote(symbol, {
+    forceLive: options?.forceLive === true,
+  });
 }
 
 async function readSymbolsByCode(
@@ -105,7 +110,10 @@ function buildHolding(
 }
 
 async function getPortfolioHoldingsWithQuoteMode(
-  quoteMode: QuoteMode
+  quoteMode: QuoteMode,
+  options?: {
+    forceLive?: boolean;
+  }
 ): Promise<PortfolioHolding[]> {
   const [savedOrders, bonusShareRecords] = await Promise.all([
     getSavedTradeOrders(),
@@ -119,7 +127,7 @@ async function getPortfolioHoldingsWithQuoteMode(
 
   const quotePairs = await Promise.all(
     positions.map(async (position) => {
-      const quote = await readQuoteForSymbol(position.symbol, quoteMode);
+      const quote = await readQuoteForSymbol(position.symbol, quoteMode, options);
       return [position, quote] as const;
     })
   );
@@ -137,8 +145,10 @@ export async function getPortfolioHoldingsWithCachedQuotes(): Promise<PortfolioH
   return getPortfolioHoldingsWithQuoteMode("cache");
 }
 
-export async function getPortfolioHoldingsWithLatestQuotes(): Promise<PortfolioHolding[]> {
-  return getPortfolioHoldingsWithQuoteMode("latest");
+export async function getPortfolioHoldingsWithLatestQuotes(options?: {
+  forceLive?: boolean;
+}): Promise<PortfolioHolding[]> {
+  return getPortfolioHoldingsWithQuoteMode("latest", options);
 }
 
 export async function getPortfolioHoldingBySymbol(
