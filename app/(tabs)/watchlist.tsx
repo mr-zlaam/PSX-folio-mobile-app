@@ -2,6 +2,7 @@ import AppButton from "@/components/ui/app-button";
 import {
   AppSkeletonBlock,
 } from "@/components/ui/app-skeleton";
+import RippleTouchableOpacity from "@/components/ui/ripple-touchable-opacity";
 import { useGuardedRouter } from "@/src/lib/navigation";
 import AppFeedbackModal, {
   AppFeedbackModalTone,
@@ -39,6 +40,7 @@ import React from "react";
 import {
   AppState,
   Modal,
+  Pressable,
   RefreshControl,
   ScrollView,
   Text,
@@ -272,6 +274,7 @@ export default function WatchlistTabScreen() {
   const inputPlaceholderTextColor = isDarkMode
     ? APP_COLORS.text.placeholderDark
     : APP_COLORS.text.placeholderLight;
+  const watchlistScrollRef = React.useRef<ScrollView>(null);
 
   const addSheetRef = React.useRef<BottomSheetModal>(null);
   const addSheetSnapPoints = React.useMemo(() => ["72%", "92%"], []);
@@ -281,7 +284,6 @@ export default function WatchlistTabScreen() {
   const [allSymbols, setAllSymbols] = React.useState<PsxSymbol[]>([]);
   const [watchlistItems, setWatchlistItems] = React.useState<WatchlistItem[]>([]);
   const [rows, setRows] = React.useState<WatchlistRow[]>([]);
-  const [isReorderMode, setIsReorderMode] = React.useState(false);
   const [deleteCandidateSymbol, setDeleteCandidateSymbol] = React.useState<string | null>(
     null
   );
@@ -328,9 +330,14 @@ export default function WatchlistTabScreen() {
     });
   }, [rows, watchlistSearchQuery]);
 
+  const canReorderRows = React.useMemo(
+    () => watchlistSearchQuery.trim().length === 0 && rows.length > 1,
+    [rows.length, watchlistSearchQuery]
+  );
+
   const displayedRows = React.useMemo(
-    () => (isReorderMode ? rows : filteredWatchlistRows),
-    [filteredWatchlistRows, isReorderMode, rows]
+    () => (canReorderRows ? rows : filteredWatchlistRows),
+    [canReorderRows, filteredWatchlistRows, rows]
   );
 
   const showNotice = React.useCallback(
@@ -350,15 +357,6 @@ export default function WatchlistTabScreen() {
 
   const closeAddSheet = React.useCallback(() => {
     addSheetRef.current?.dismiss();
-  }, []);
-
-  const enterReorderMode = React.useCallback(() => {
-    setWatchlistSearchQuery("");
-    setIsReorderMode(true);
-  }, []);
-
-  const exitReorderMode = React.useCallback(() => {
-    setIsReorderMode(false);
   }, []);
 
   const closeDeleteCandidateModal = React.useCallback(() => {
@@ -573,12 +571,6 @@ export default function WatchlistTabScreen() {
     };
   }, [hydrateWatchlist]);
 
-  React.useEffect(() => {
-    if (watchlistItems.length < 2 && isReorderMode) {
-      setIsReorderMode(false);
-    }
-  }, [isReorderMode, watchlistItems.length]);
-
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
     try {
@@ -687,10 +679,6 @@ export default function WatchlistTabScreen() {
       <TouchableOpacity
         activeOpacity={0.95}
         onPress={() => {
-          if (isReorderMode) {
-            return;
-          }
-
           router.push({
             pathname: "/stock-detail",
             params: {
@@ -700,14 +688,9 @@ export default function WatchlistTabScreen() {
           });
         }}
         onLongPress={() => {
-          if (!isReorderMode) {
-            enterReorderMode();
-          }
-          requestAnimationFrame(() => {
-            drag();
-          });
+          setDeleteCandidateSymbol(item.symbol);
         }}
-        delayLongPress={180}
+        delayLongPress={260}
         className={[
           "rounded-2xl bg-brand-white/95 px-3 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10",
           isActive ? "opacity-90" : "",
@@ -738,19 +721,20 @@ export default function WatchlistTabScreen() {
           </View>
 
           <View className="items-end">
-            {isReorderMode ? (
+            {canReorderRows ? (
               <TouchableOpacity
-                activeOpacity={0.88}
-                onPress={(event) => {
+                activeOpacity={0.9}
+                onPressIn={(event) => {
                   event.stopPropagation();
-                  setDeleteCandidateSymbol(item.symbol);
+                  drag();
                 }}
-                className="rounded-lg border border-brand-red/60 px-2 py-1"
+                hitSlop={{ top: 10, right: 10, bottom: 10, left: 10 }}
+                className="rounded-lg bg-app-highlight/10 px-2 py-1 dark:bg-brand-white/12"
               >
                 <MaterialCommunityIcons
-                  name="trash-can-outline"
-                  size={14}
-                  color={APP_COLORS.brand.red}
+                  name="drag-vertical"
+                  size={16}
+                  color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
                 />
               </TouchableOpacity>
             ) : null}
@@ -792,7 +776,7 @@ export default function WatchlistTabScreen() {
         </Text>
       </TouchableOpacity>
     ),
-    [enterReorderMode, isReorderMode, isShariahCompliantSymbol, router]
+    [canReorderRows, isDarkMode, isShariahCompliantSymbol, router]
   );
 
   return (
@@ -801,6 +785,7 @@ export default function WatchlistTabScreen() {
       className="flex-1 bg-app-bg dark:bg-app-bgDark"
     >
       <ScrollView
+        ref={watchlistScrollRef}
         className="flex-1"
         contentContainerStyle={{
           paddingTop: shouldShowCenterLoader ? 14 : shouldShowEmptyState ? 0 : 14,
@@ -864,21 +849,9 @@ export default function WatchlistTabScreen() {
                 <Text className="text-2xl font-extrabold text-app-text dark:text-app-textDark">
                   Watchlist
                 </Text>
-                {isReorderMode ? (
-                  <TouchableOpacity
-                    activeOpacity={0.88}
-                    onPress={exitReorderMode}
-                    className="rounded-xl bg-app-highlight px-3 py-1.5 dark:bg-app-highlightDark"
-                  >
-                    <Text className="text-xs font-bold uppercase tracking-wide text-brand-white dark:text-brand-purple">
-                      Done
-                    </Text>
-                  </TouchableOpacity>
-                ) : (
-                  <Text className="text-xs font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                    {watchlistItems.length} stocks
-                  </Text>
-                )}
+                <Text className="text-xs font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                  {watchlistItems.length} stocks
+                </Text>
               </View>
 
               <TextInput
@@ -886,16 +859,15 @@ export default function WatchlistTabScreen() {
                 onChangeText={setWatchlistSearchQuery}
                 placeholder="Search in watchlist"
                 placeholderTextColor={inputPlaceholderTextColor}
-                editable={!isReorderMode}
                 className="mt-3 rounded-xl border border-app-highlight/20 bg-app-highlight/5 px-3 py-2 text-sm font-semibold text-app-text dark:border-app-highlightDark/30 dark:bg-brand-white/5 dark:text-app-textDark"
               />
-              {isReorderMode ? (
+              {canReorderRows ? (
                 <Text className="mt-2 text-xs font-semibold text-app-text dark:text-app-textDark">
-                  Reorder mode is active. Long-press and drag cards.
+                  Drag handle to reorder cards. Long-press a card to remove it.
                 </Text>
               ) : (
                 <Text className="mt-2 text-xs font-semibold text-app-text dark:text-app-textDark">
-                  Long-press any card to reorder your watchlist.
+                  Search is active. Clear search to reorder cards.
                 </Text>
               )}
             </View>
@@ -917,12 +889,13 @@ export default function WatchlistTabScreen() {
                 data={displayedRows}
                 keyExtractor={(item) => item.symbol}
                 onDragEnd={({ data }) => {
-                  if (!isReorderMode) {
+                  if (!canReorderRows) {
                     return;
                   }
                   void persistReorderedRows(data);
                 }}
-                activationDistance={isReorderMode ? 8 : 10_000}
+                simultaneousHandlers={watchlistScrollRef}
+                activationDistance={6}
                 scrollEnabled={false}
                 showsVerticalScrollIndicator={false}
                 renderItem={renderWatchlistRow}
@@ -933,11 +906,15 @@ export default function WatchlistTabScreen() {
         )}
       </ScrollView>
 
-      {watchlistItems.length > 0 && !isReorderMode ? (
-        <TouchableOpacity
-          activeOpacity={0.9}
+      {watchlistItems.length > 0 ? (
+        <Pressable
           onPress={openAddSheet}
-          className="absolute right-5 h-14 w-14 items-center justify-center rounded-full bg-app-highlight shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-app-highlightDark"
+          className="absolute right-5 h-14 w-14 items-center justify-center overflow-hidden rounded-full bg-app-highlight shadow-md shadow-app-highlight/30 dark:shadow-none dark:bg-app-highlightDark"
+          android_ripple={{
+            color: "rgba(0, 0, 0, 0.42)",
+            borderless: false,
+            foreground: true,
+          }}
           style={{
             bottom: Math.max(12, insets.bottom + 8),
           }}
@@ -947,7 +924,7 @@ export default function WatchlistTabScreen() {
             size={30}
             color={isDarkMode ? APP_COLORS.brand.purple : APP_COLORS.brand.white}
           />
-        </TouchableOpacity>
+        </Pressable>
       ) : null}
 
       <BottomSheetModal
@@ -1081,16 +1058,16 @@ export default function WatchlistTabScreen() {
             </Text>
 
             <View className="mt-5 flex-row gap-3">
-              <TouchableOpacity
+              <RippleTouchableOpacity
                 activeOpacity={0.9}
                 onPress={closeDeleteCandidateModal}
-                className="flex-1 items-center justify-center rounded-2xl border border-app-highlight/15 bg-app-highlight/8 px-4 py-3 dark:border-brand-white/15 dark:bg-brand-white/10"
+                className="flex-1 items-center justify-center overflow-hidden rounded-2xl border border-app-highlight/15 bg-app-highlight/8 px-4 py-3 dark:border-brand-white/15 dark:bg-brand-white/10"
               >
                 <Text className="text-sm font-semibold tracking-wide text-app-highlight dark:text-app-highlightDark">
                   Cancel
                 </Text>
-              </TouchableOpacity>
-              <TouchableOpacity
+              </RippleTouchableOpacity>
+              <RippleTouchableOpacity
                 activeOpacity={0.9}
                 onPress={() => {
                   if (!deleteCandidateRow?.symbol) {
@@ -1100,12 +1077,12 @@ export default function WatchlistTabScreen() {
 
                   void handleRemoveSymbol(deleteCandidateRow.symbol);
                 }}
-                className="flex-1 items-center justify-center rounded-2xl bg-button-danger px-4 py-3"
+                className="flex-1 items-center justify-center overflow-hidden rounded-2xl bg-button-danger px-4 py-3"
               >
                 <Text className="text-sm font-semibold tracking-wide text-brand-white">
                   Delete
                 </Text>
-              </TouchableOpacity>
+              </RippleTouchableOpacity>
             </View>
           </View>
         </View>

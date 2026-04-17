@@ -14,6 +14,7 @@ import { useColorScheme } from "nativewind";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
 import AppButton from "@/components/ui/app-button";
 import AppFeedbackModal from "@/components/ui/app-feedback-modal";
+import RippleTouchableOpacity from "@/components/ui/ripple-touchable-opacity";
 import { AppSkeletonBlock } from "@/components/ui/app-skeleton";
 import { formatPKRAmount } from "@/src/features/home/home-formatters";
 import {
@@ -856,12 +857,12 @@ export default function TransactionHistoryScreen() {
                 />
               </View>
               <View className="flex-1">
-                <TouchableOpacity
+                <RippleTouchableOpacity
                   activeOpacity={0.88}
                   disabled={deletingEntryId !== null}
                   onPress={handleConfirmDelete}
                   className={[
-                    "rounded-xl bg-brand-red px-3 py-2",
+                    "overflow-hidden rounded-xl bg-brand-red px-3 py-2",
                     deletingEntryId !== null ? "opacity-70" : "",
                   ]
                     .filter(Boolean)
@@ -881,7 +882,7 @@ export default function TransactionHistoryScreen() {
                       Delete
                     </Text>
                   )}
-                </TouchableOpacity>
+                </RippleTouchableOpacity>
               </View>
             </View>
           </View>

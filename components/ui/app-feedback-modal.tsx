@@ -1,6 +1,7 @@
 import React from "react";
-import { Modal, Text, TouchableOpacity, View } from "react-native";
+import { Modal, Text, View } from "react-native";
 import AppButton from "@/components/ui/app-button";
+import RippleTouchableOpacity from "@/components/ui/ripple-touchable-opacity";
 
 export type AppFeedbackModalTone = "success" | "error" | "info";
 
@@ -73,15 +74,15 @@ export default function AppFeedbackModal({
               </Text>
             </View>
 
-            <TouchableOpacity
+            <RippleTouchableOpacity
               onPress={onClose}
               activeOpacity={0.88}
-              className="rounded-xl border border-app-highlight px-3 py-1 dark:border-app-highlightDark"
+              className="overflow-hidden rounded-xl border border-app-highlight px-3 py-1 dark:border-app-highlightDark"
             >
               <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                 Close
               </Text>
-            </TouchableOpacity>
+            </RippleTouchableOpacity>
           </View>
 
           <Text className="mt-4 text-xl font-extrabold text-app-text dark:text-app-textDark">

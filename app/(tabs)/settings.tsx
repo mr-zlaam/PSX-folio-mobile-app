@@ -20,6 +20,7 @@ import { useFocusEffect } from "@react-navigation/native";
 import AppBackIconButton from "@/components/ui/app-back-icon-button";
 import AppButton from "@/components/ui/app-button";
 import AppFeedbackModal from "@/components/ui/app-feedback-modal";
+import RippleTouchableOpacity from "@/components/ui/ripple-touchable-opacity";
 import { AppSkeletonBlock } from "@/components/ui/app-skeleton";
 import { APP_COLORS } from "@/src/theme/colors";
 import { MaterialCommunityIcons } from "@expo/vector-icons";
@@ -528,26 +529,26 @@ export default function SettingsTabScreen() {
 
             <View className="mt-5 flex-row items-center gap-3">
               <View className="flex-1">
-                <TouchableOpacity
+                <RippleTouchableOpacity
                   activeOpacity={0.88}
                   disabled={isResettingPortfolio}
                   onPress={handleCloseResetModal}
-                  className="rounded-xl bg-app-highlight/8 px-3 py-2 dark:bg-brand-white/7"
+                  className="overflow-hidden rounded-xl bg-app-highlight/8 px-3 py-2 dark:bg-brand-white/7"
                 >
                   <Text className="text-center text-sm font-semibold text-app-text dark:text-app-textDark">
                     Cancel
                   </Text>
-                </TouchableOpacity>
+                </RippleTouchableOpacity>
               </View>
               <View className="flex-1">
-                <TouchableOpacity
+                <RippleTouchableOpacity
                   activeOpacity={0.88}
                   disabled={isResettingPortfolio}
                   onPress={() => {
                     void handleConfirmPortfolioReset();
                   }}
                   className={[
-                    "rounded-xl bg-brand-red px-3 py-2",
+                    "overflow-hidden rounded-xl bg-brand-red px-3 py-2",
                     isResettingPortfolio ? "opacity-70" : "",
                   ]
                     .filter(Boolean)
@@ -567,7 +568,7 @@ export default function SettingsTabScreen() {
                       Confirm Reset
                     </Text>
                   )}
-                </TouchableOpacity>
+                </RippleTouchableOpacity>
               </View>
             </View>
           </View>
