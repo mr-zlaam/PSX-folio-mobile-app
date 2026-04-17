@@ -116,7 +116,6 @@ export default function PdfViewerScreen() {
   const [cacheToken, setCacheToken] = React.useState(1);
   const [hasError, setHasError] = React.useState(false);
   const [attemptCount, setAttemptCount] = React.useState(1);
-  const [isLoading, setIsLoading] = React.useState(true);
   const [isAutoRetrying, setIsAutoRetrying] = React.useState(false);
   const loadTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
   const secondaryTimeoutRef = React.useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -144,7 +143,6 @@ export default function PdfViewerScreen() {
     setCacheToken(1);
     setAttemptCount(1);
     setHasError(false);
-    setIsLoading(true);
     setIsAutoRetrying(false);
   }, [normalizedPdfUrl]);
 
@@ -184,14 +182,12 @@ export default function PdfViewerScreen() {
 
     if (attemptCount >= PDF_MAX_AUTO_ATTEMPTS) {
       setIsAutoRetrying(false);
-      setIsLoading(false);
       setHasError(true);
       return;
     }
 
     setIsAutoRetrying(true);
     setHasError(false);
-    setIsLoading(true);
     setAttemptCount((currentAttempt) => currentAttempt + 1);
     setCacheToken((currentToken) => currentToken + 1);
   }, [attemptCount, clearTimeouts]);
@@ -211,7 +207,6 @@ export default function PdfViewerScreen() {
     loadProgressRef.current = 0;
     hasRenderedPdfRef.current = false;
     setHasError(false);
-    setIsLoading(true);
     setIsAutoRetrying(false);
     setAttemptCount(1);
     setCacheToken((currentValue) => currentValue + 1);
@@ -321,7 +316,6 @@ export default function PdfViewerScreen() {
                 loadProgressRef.current = Math.max(loadProgressRef.current, nextProgress);
               }}
               onLoadStart={() => {
-                setIsLoading(true);
                 setIsAutoRetrying(false);
                 loadProgressRef.current = 0;
                 setHasError(false);
@@ -330,7 +324,6 @@ export default function PdfViewerScreen() {
               onLoadEnd={() => {
                 if (loadProgressRef.current >= 0.45) {
                   hasRenderedPdfRef.current = true;
-                  setIsLoading(false);
                   clearTimeouts();
                   return;
                 }
@@ -342,7 +335,6 @@ export default function PdfViewerScreen() {
                   }
                   if (loadProgressRef.current >= 0.45) {
                     hasRenderedPdfRef.current = true;
-                    setIsLoading(false);
                     return;
                   }
                   advanceToNextAttempt();
