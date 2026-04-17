@@ -192,6 +192,24 @@ function normalizePerformancePoints(points: StockChartPoint[]): StockChartPoint[
   }));
 }
 
+function normalizePortfolioGrowthFromInvested(
+  points: StockChartPoint[],
+  investedValue: number
+): StockChartPoint[] {
+  const safeInvestedValue = Number.isFinite(investedValue) ? investedValue : 0;
+  if (points.length === 0 || safeInvestedValue <= 0) {
+    return points.map((point) => ({
+      timestamp: point.timestamp,
+      price: 0,
+    }));
+  }
+
+  return points.map((point) => ({
+    timestamp: point.timestamp,
+    price: ((point.price - safeInvestedValue) / safeInvestedValue) * 100,
+  }));
+}
+
 function toSignedLogValue(value: number): number {
   if (!Number.isFinite(value)) {
     return 0;
@@ -492,7 +510,6 @@ export default function AnalyticsScreen() {
   );
   const [allocationView, setAllocationView] =
     React.useState<AllocationViewMode>("companies");
-  const [selectedPointValue, setSelectedPointValue] = React.useState<number | null>(null);
   const [selectedComparisonPointTimestamp, setSelectedComparisonPointTimestamp] =
     React.useState<number | null>(null);
   const comparisonSheetRef = React.useRef<BottomSheetModal>(null);
@@ -530,7 +547,7 @@ export default function AnalyticsScreen() {
   const selectedComparisonIndexLabel =
     comparisonIndexOptions.find((option) => option.code === comparisonIndexCode)?.label ??
     comparisonIndexCode;
-  const comparisonLineColor = isDarkMode ? "#67E8F9" : "#2563EB";
+  const comparisonLineColor = APP_COLORS.accent.indexLine;
 
   React.useEffect(() => {
     if (comparisonIndexOptions.length === 0) {
@@ -713,37 +730,9 @@ export default function AnalyticsScreen() {
     [trendPoints]
   );
 
-  const chartToneValue = React.useMemo(() => {
-    if (chartPoints.length < 2) {
-      return 0;
-    }
-
-    return chartPoints[chartPoints.length - 1].price - chartPoints[0].price;
-  }, [chartPoints]);
-
-  const chartLineColor = React.useMemo(() => {
-    if (chartToneValue > 0) {
-      return APP_COLORS.success.green;
-    }
-
-    if (chartToneValue < 0) {
-      return APP_COLORS.brand.red;
-    }
-
-    return isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple;
-  }, [chartToneValue, isDarkMode]);
-
   const chartGridColor = isDarkMode
     ? APP_COLORS.text.placeholderDark
     : APP_COLORS.text.placeholderLight;
-
-  const chartLatestValue =
-    selectedPointValue ??
-    (chartPoints.length > 0 ? chartPoints[chartPoints.length - 1].price : 0);
-
-  React.useEffect(() => {
-    setSelectedPointValue(null);
-  }, [snapshot?.asOf, trendRange]);
 
   const comparisonSourcePoints = React.useMemo(
     () =>
@@ -775,14 +764,18 @@ export default function AnalyticsScreen() {
     [comparisonSourcePoints, comparisonTimelinePoints]
   );
 
-  const portfolioComparisonPoints = React.useMemo(
-    () => normalizePerformancePoints(alignedPortfolioRawPoints),
-    [alignedPortfolioRawPoints]
-  );
-
   const indexComparisonPoints = React.useMemo(
     () => normalizePerformancePoints(alignedIndexRawPoints),
     [alignedIndexRawPoints]
+  );
+
+  const portfolioComparisonPoints = React.useMemo(
+    () =>
+      normalizePortfolioGrowthFromInvested(
+        alignedPortfolioRawPoints,
+        snapshot?.overview.invested ?? 0
+      ),
+    [alignedPortfolioRawPoints, snapshot?.overview.invested]
   );
 
   const portfolioComparisonChartPoints = React.useMemo(
@@ -1028,6 +1021,17 @@ export default function AnalyticsScreen() {
                   </View>
                 </View>
 
+                <View className="mt-3 flex-row flex-wrap gap-2">
+                  {TREND_RANGE_OPTIONS.map((rangeOption) => (
+                    <RangeChip
+                      key={rangeOption}
+                      label={rangeOption}
+                      selected={trendRange === rangeOption}
+                      onPress={() => setTrendRange(rangeOption)}
+                    />
+                  ))}
+                </View>
+
                 <View className="mt-2 flex-row items-center justify-end">
                   <AppBackgroundRefreshIndicator
                     visible={isBackgroundSyncing}
@@ -1054,48 +1058,6 @@ export default function AnalyticsScreen() {
                     onPointSelected={(point) =>
                       setSelectedComparisonPointTimestamp(point?.timestamp ?? null)
                     }
-                  />
-                </View>
-              </View>
-
-              <View className="rounded-3xl bg-brand-white px-4 py-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
-                <View className="flex-row items-center justify-between">
-                  <Text className="text-sm font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                    Equity Trend
-                  </Text>
-                  <Text className="text-sm font-extrabold text-app-text dark:text-app-textDark">
-                    {formatPKRAmount(chartLatestValue)}
-                  </Text>
-                </View>
-
-                <View className="mt-3 flex-row flex-wrap gap-2">
-                  {TREND_RANGE_OPTIONS.map((rangeOption) => (
-                    <RangeChip
-                      key={rangeOption}
-                      label={rangeOption}
-                      selected={trendRange === rangeOption}
-                      onPress={() => setTrendRange(rangeOption)}
-                    />
-                  ))}
-                </View>
-
-                <View className="mt-2 flex-row items-center justify-end">
-                  <AppBackgroundRefreshIndicator
-                    visible={isBackgroundSyncing}
-                    label="Refreshing"
-                  />
-                </View>
-
-                <View
-                  className="mt-4"
-                  style={{ opacity: isBackgroundSyncing ? 0.72 : 1 }}
-                >
-                  <StockLineChart
-                    points={chartPoints}
-                    lineColor={chartLineColor}
-                    gridColor={chartGridColor}
-                    emptyLabel="Not enough data for trend chart"
-                    onPointSelected={(point) => setSelectedPointValue(point?.price ?? null)}
                   />
                 </View>
               </View>
@@ -1345,7 +1307,7 @@ export default function AnalyticsScreen() {
             Select one benchmark index
           </Text>
 
-          <View className="mt-3 max-h-[420px] overflow-hidden rounded-2xl bg-brand-white/90 shadow-sm shadow-app-highlight/10 dark:bg-brand-white/6 dark:shadow-black/25">
+          <View className="mt-3 max-h-[420px] overflow-hidden rounded-2xl bg-brand-white/95 shadow-sm shadow-app-highlight/10 dark:bg-brand-white/5 dark:shadow-black/25">
             <ScrollView showsVerticalScrollIndicator={false}>
               <View className="pb-1">
                 {comparisonIndexOptions.map((indexOption, optionIndex) => {
@@ -1361,7 +1323,7 @@ export default function AnalyticsScreen() {
                       className={[
                         "relative flex-row items-center justify-between px-4 py-3.5",
                         selected
-                          ? "bg-app-highlight/10 dark:bg-brand-white/12"
+                          ? "bg-app-highlight/10 dark:bg-brand-white/10"
                           : "bg-transparent",
                       ]
                         .filter(Boolean)
@@ -1396,7 +1358,7 @@ export default function AnalyticsScreen() {
                         />
                       ) : null}
                       {optionIndex < comparisonIndexOptions.length - 1 ? (
-                        <View className="absolute bottom-0 left-4 right-4 h-px bg-app-highlight/8 dark:bg-brand-white/10" />
+                        <View className="absolute bottom-0 left-4 right-4 h-px bg-app-highlight/10 dark:bg-brand-white/10" />
                       ) : null}
                     </TouchableOpacity>
                   );

@@ -21,6 +21,9 @@ export const APP_COLORS = {
   success: {
     green: "#16A34A",
   },
+  accent: {
+    indexLine: "#60A5FA",
+  },
   button: {
     primary: "#140A26",
     neutral: "#FFFFFF",
