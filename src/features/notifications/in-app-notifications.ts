@@ -36,7 +36,6 @@ const NOTIFICATION_SOURCE_KEYS: PsxAnnouncementSourceKey[] = [
   "cdcNotices",
   "secpNotices",
   "nccplNotices",
-  "agmEogmCalendar",
   "payouts",
   "gisAuctionResults",
 ];
@@ -50,7 +49,6 @@ const NOTIFICATION_FETCH_COUNT_BY_SOURCE: Partial<
   cdcNotices: 5,
   secpNotices: 5,
   nccplNotices: 5,
-  agmEogmCalendar: 10,
   payouts: 8,
   gisAuctionResults: 5,
 };

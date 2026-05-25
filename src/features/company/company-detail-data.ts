@@ -436,27 +436,54 @@ function resolvePsxUrl(rawUrl: string): string | null {
 }
 
 function parseReportItems(reportsSection: string): CompanyDetailMetric[] {
-  const wrapperMatch = reportsSection.match(
-    /<div class="tbl__wrapper">([\s\S]*?)<\/div>/i
-  );
-  const sourceHtml = wrapperMatch?.[1] ?? reportsSection;
-  const linkMatches = Array.from(
-    sourceHtml.matchAll(/<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/gi)
-  );
+  const tableHtml = extractFirstTable(reportsSection);
+  if (!tableHtml) {
+    return [];
+  }
 
-  return linkMatches
-    .map((linkMatch, index) => {
-      const rawHref = (linkMatch[1] ?? "").trim();
-      const rawText = normalizeText(linkMatch[2] ?? "");
-      const label = rawText.length > 0 ? rawText : `Report ${index + 1}`;
-      const value = rawHref.length > 0 ? rawHref : "--";
+  const bodyRows = parseTableBodyRows(tableHtml);
+  const headerMatch = tableHtml.match(/<thead[^>]*>([\s\S]*?)<\/thead>/i);
+  const headerCells = headerMatch
+    ? Array.from(headerMatch[1].matchAll(/<th\b[^>]*>([\s\S]*?)<\/th>/gi))
+        .map((match) => normalizeText(match[1] ?? ""))
+        .filter((headerText) => headerText.length > 0)
+    : [];
+
+  return bodyRows
+    .map((rowCells) => {
+      const firstCell = rowCells[0] ?? "";
+      const linkMatch = firstCell.match(
+        /<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i
+      );
+      const rawHref = linkMatch?.[1]?.trim() ?? "";
+      const linkText = linkMatch
+        ? normalizeText(linkMatch[2] ?? "")
+        : normalizeText(firstCell);
+
+      const reportType = linkText.length > 0 ? linkText : `Report`;
+      const extraParts: string[] = [];
+      for (let cellIndex = 1; cellIndex < rowCells.length; cellIndex++) {
+        const cellText = normalizeText(rowCells[cellIndex] ?? "");
+        if (cellText.length > 0) {
+          const headerLabel =
+            cellIndex < headerCells.length ? headerCells[cellIndex] : "";
+          extraParts.push(
+            headerLabel ? `${headerLabel}: ${cellText}` : cellText
+          );
+        }
+      }
+
+      const label =
+        extraParts.length > 0
+          ? `${reportType} (${extraParts.join(", ")})`
+          : reportType;
 
       return {
         label,
-        value,
+        value: rawHref,
       };
     })
-    .filter((metricItem) => metricItem.value !== "--");
+    .filter((reportItem) => reportItem.value.length > 0);
 }
 
 function getFallbackCompanyDetail(symbol: string): CompanyDetailSnapshot {
@@ -682,5 +709,69 @@ export async function getLatestCompanyDetail(
     return parsedDetail;
   } catch {
     return getCachedCompanyDetail(normalizedSymbol);
+  }
+}
+
+export async function fetchCompanyReports(
+  symbol: string
+): Promise<CompanyDetailMetric[]> {
+  const normalizedSymbol = normalizeSymbol(symbol);
+  if (normalizedSymbol.length === 0) {
+    return [];
+  }
+
+  try {
+    const response = await fetch(
+      `${PSX_COMPANY_BASE_URL}/reports/${encodeURIComponent(normalizedSymbol)}`,
+      {
+        headers: {
+          Accept: "text/html",
+        },
+      }
+    );
+
+    if (!response.ok) {
+      return [];
+    }
+
+    const html = await response.text();
+    const tableMatch = html.match(/<table\b[\s\S]*?<\/table>/i);
+    if (!tableMatch) {
+      return [];
+    }
+
+    const bodyRows = parseTableBodyRows(tableMatch[0]);
+
+    return bodyRows
+      .map((rowCells) => {
+        const firstCell = rowCells[0] ?? "";
+        const linkMatch = firstCell.match(
+          /<a\b[^>]*href="([^"]+)"[^>]*>([\s\S]*?)<\/a>/i
+        );
+        const rawHref = linkMatch?.[1]?.trim() ?? "";
+        const linkText = linkMatch
+          ? normalizeText(linkMatch[2] ?? "")
+          : normalizeText(firstCell);
+
+        const reportType = linkText.length > 0 ? linkText : "Report";
+        const periodEnded = rowCells[1] ? normalizeText(rowCells[1]) : "";
+        const postingDate = rowCells[2] ? normalizeText(rowCells[2]) : "";
+
+        const parts = [reportType];
+        if (periodEnded) {
+          parts.push(`Period: ${periodEnded}`);
+        }
+        if (postingDate) {
+          parts.push(`Posted: ${postingDate}`);
+        }
+
+        return {
+          label: parts.join(" | "),
+          value: rawHref,
+        };
+      })
+      .filter((reportItem) => reportItem.value.length > 0);
+  } catch {
+    return [];
   }
 }

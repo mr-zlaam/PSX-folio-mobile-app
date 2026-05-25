@@ -51,6 +51,7 @@ import {
 import React from "react";
 import {
   Linking,
+  PanResponder,
   RefreshControl,
   ScrollView,
   Text,
@@ -773,7 +774,7 @@ export default function StockDetailScreen() {
   const { isShariahCompliantSymbol } = useShariahSymbols();
   const insets = useSafeAreaInsets();
   const { colorScheme } = useColorScheme();
-  const { height: windowHeight, width: windowWidth } = useWindowDimensions();
+  const { height: windowHeight } = useWindowDimensions();
   const isDarkMode = colorScheme === "dark";
   const sheetDividerColor = isDarkMode
     ? "rgba(255, 255, 255, 0.08)"
@@ -824,6 +825,7 @@ export default function StockDetailScreen() {
     React.useState<FundamentalsTabKey>("equity");
   const [selectedAnnouncementFilter, setSelectedAnnouncementFilter] =
     React.useState<AnnouncementFilterKey>("all");
+  const [showFinancialsInfo, setShowFinancialsInfo] = React.useState(false);
   const chartRequestIdRef = React.useRef(0);
   const yearChartRequestIdRef = React.useRef(0);
   const companyDetailRequestIdRef = React.useRef(0);
@@ -832,14 +834,43 @@ export default function StockDetailScreen() {
     beginBackgroundSync,
     endBackgroundSync,
   } = useBackgroundSyncIndicator();
-  const companyDetailPagerRef = React.useRef<ScrollView>(null);
   const fundamentalsFilterSheetRef = React.useRef<BottomSheetModal>(null);
   const fundamentalsFilterSheetSnapPoints = React.useMemo(() => ["40%"], []);
   const announcementFilterSheetRef = React.useRef<BottomSheetModal>(null);
-  const announcementFilterSheetSnapPoints = React.useMemo(() => ["56%"], []);
-  const companyDetailPageWidth = React.useMemo(
-    () => Math.max(windowWidth - 72, 260),
-    [windowWidth]
+  const announcementFilterSheetSnapPoints = React.useMemo(() => ["60%"], []);
+
+  const swipePanResponder = React.useMemo(
+    () =>
+      PanResponder.create({
+        onStartShouldSetPanResponder: () => false,
+        onMoveShouldSetPanResponder: (_, gestureState) => {
+          const SWIPE_THRESHOLD = 10;
+          return (
+            Math.abs(gestureState.dx) > SWIPE_THRESHOLD &&
+            Math.abs(gestureState.dx) > Math.abs(gestureState.dy) * 1.5
+          );
+        },
+        onPanResponderRelease: (_, gestureState) => {
+          const SWIPE_DISTANCE = 50;
+          if (gestureState.dx > SWIPE_DISTANCE) {
+            setSelectedCompanyTopTab((prev) => {
+              const currentIndex = COMPANY_DETAIL_TOP_TAB_KEYS.indexOf(prev);
+              const prevIndex = Math.max(0, currentIndex - 1);
+              return COMPANY_DETAIL_TOP_TAB_KEYS[prevIndex];
+            });
+          } else if (gestureState.dx < -SWIPE_DISTANCE) {
+            setSelectedCompanyTopTab((prev) => {
+              const currentIndex = COMPANY_DETAIL_TOP_TAB_KEYS.indexOf(prev);
+              const nextIndex = Math.min(
+                COMPANY_DETAIL_TOP_TAB_KEYS.length - 1,
+                currentIndex + 1
+              );
+              return COMPANY_DETAIL_TOP_TAB_KEYS[nextIndex];
+            });
+          }
+        },
+      }),
+    []
   );
 
   const hydrateSymbolMeta = React.useCallback(async () => {
@@ -1072,19 +1103,6 @@ export default function StockDetailScreen() {
   }, [normalizedOrigin, normalizedSymbol]);
 
   React.useEffect(() => {
-    const selectedIndex = COMPANY_DETAIL_TOP_TAB_KEYS.indexOf(selectedCompanyTopTab);
-    if (selectedIndex < 0) {
-      return;
-    }
-
-    companyDetailPagerRef.current?.scrollTo({
-      x: selectedIndex * companyDetailPageWidth,
-      y: 0,
-      animated: true,
-    });
-  }, [companyDetailPageWidth, selectedCompanyTopTab]);
-
-  React.useEffect(() => {
     if (!shouldLoadCompanyDetail || normalizedSymbol.length === 0) {
       setCompanyDetail(null);
       setIsCompanyDetailLoading(false);
@@ -1201,25 +1219,6 @@ export default function StockDetailScreen() {
       />
     ),
     []
-  );
-
-  const handleCompanyDetailPagerMomentumEnd = React.useCallback(
-    (event: {
-      nativeEvent: {
-        contentOffset: {
-          x: number;
-        };
-      };
-    }) => {
-      const nextIndex = Math.round(
-        event.nativeEvent.contentOffset.x / companyDetailPageWidth
-      );
-      const nextTabKey = COMPANY_DETAIL_TOP_TAB_KEYS[nextIndex];
-      if (nextTabKey) {
-        setSelectedCompanyTopTab(nextTabKey);
-      }
-    },
-    [companyDetailPageWidth]
   );
 
   const chartToneValue = React.useMemo(() => {
@@ -1356,6 +1355,15 @@ export default function StockDetailScreen() {
         announcementItem.normalizedCategory === selectedAnnouncementFilter
     );
   }, [categorizedCompanyAnnouncementItems, selectedAnnouncementFilter]);
+  const peRatioValue = React.useMemo(() => {
+    const ratioRows = companyDetail?.ratioTable?.rows ?? [];
+    for (const row of ratioRows) {
+      if (/P\/E|price.*earning/i.test(row.label)) {
+        return row.values[0] ?? null;
+      }
+    }
+    return null;
+  }, [companyDetail?.ratioTable]);
   const companyDetailsSourceLabel = companyDetail
     ? companyDetail.source === "cache"
       ? "Cached"
@@ -1625,7 +1633,7 @@ export default function StockDetailScreen() {
                     </View>
                   </View>
 
-                  <View className="mt-4 gap-3">
+                  <View className="mt-4">
                     {isCompanyDetailLoading && !companyDetail ? (
                       <View className="rounded-2xl bg-brand-white/70 p-4 dark:bg-brand-white/5">
                         <AppSkeletonTextGroup rows={4} rowHeight={12} />
@@ -1637,22 +1645,13 @@ export default function StockDetailScreen() {
                     ) : (
                       <>
                         {isCompanyDetailLoading ? (
-                          <Text className="text-xs font-semibold text-app-text dark:text-app-textDark">
+                          <Text className="mb-3 text-xs font-semibold text-app-text dark:text-app-textDark">
                             Refreshing company details...
                           </Text>
                         ) : null}
 
-                        <ScrollView
-                          ref={companyDetailPagerRef}
-                          horizontal
-                          pagingEnabled
-                          bounces={false}
-                          nestedScrollEnabled
-                          showsHorizontalScrollIndicator={false}
-                          onMomentumScrollEnd={handleCompanyDetailPagerMomentumEnd}
-                          scrollEventThrottle={16}
-                        >
-                          <View style={{ width: companyDetailPageWidth }} className="pr-1">
+                        <View {...swipePanResponder.panHandlers}>
+                          {selectedCompanyTopTab === "profile" ? (
                             <View className="gap-3">
                               {companyDetail.businessDescription ? (
                                 <View className="rounded-2xl bg-brand-white/70 p-3 dark:bg-brand-white/5">
@@ -1705,10 +1704,20 @@ export default function StockDetailScreen() {
                                 )}
                               </View>
                             </View>
-                          </View>
+                          ) : null}
 
-                          <View style={{ width: companyDetailPageWidth }} className="px-1">
+                          {selectedCompanyTopTab === "fundamentals" ? (
                             <View className="gap-3">
+                              {peRatioValue ? (
+                                <View className="rounded-2xl bg-brand-white/70 p-3 dark:bg-brand-white/5">
+                                  <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                                    P/E Ratio (TTM)
+                                  </Text>
+                                  <Text className="mt-1 text-lg font-extrabold text-app-text dark:text-app-textDark">
+                                    {peRatioValue}
+                                  </Text>
+                                </View>
+                              ) : null}
                               <View className="flex-row items-center justify-between rounded-xl bg-brand-white/70 px-3 py-2 dark:bg-brand-white/5">
                                 <Text className="text-xs font-semibold uppercase tracking-wide text-app-text dark:text-app-textDark">
                                   {getFundamentalsTabLabel(selectedFundamentalsTab)}
@@ -1737,7 +1746,17 @@ export default function StockDetailScreen() {
                                   </Text>
                                   <View className="mt-2">
                                     <CompanyMetricRows
-                                      metrics={companyDetail.equityMetrics}
+                                      metrics={companyDetail.equityMetrics.map(
+                                        (m) =>
+                                          /free\s*float/i.test(m.label)
+                                            ? {
+                                                ...m,
+                                                value: m.value.includes("%")
+                                                  ? m.value
+                                                  : `${m.value}%`,
+                                              }
+                                            : m
+                                      )}
                                       emptyText="No equity metrics available."
                                       onOpenUrl={handleOpenExternalUrl}
                                       showCalculatedPercentage
@@ -1748,6 +1767,52 @@ export default function StockDetailScreen() {
 
                               {selectedFundamentalsTab === "financials" ? (
                                 <View className="gap-3">
+                                  <TouchableOpacity
+                                    activeOpacity={0.86}
+                                    onPress={() =>
+                                      setShowFinancialsInfo(!showFinancialsInfo)
+                                    }
+                                    className="flex-row items-center gap-1.5 rounded-xl bg-brand-white/70 px-3 py-2 dark:bg-brand-white/5"
+                                  >
+                                    <MaterialCommunityIcons
+                                      name="information-outline"
+                                      size={14}
+                                      color={
+                                        isDarkMode
+                                          ? APP_COLORS.brand.white
+                                          : APP_COLORS.brand.purple
+                                      }
+                                    />
+                                    <Text className="text-xs font-semibold text-app-text dark:text-app-textDark">
+                                      All numbers in thousands (000s) except EPS
+                                    </Text>
+                                    <MaterialCommunityIcons
+                                      name={
+                                        showFinancialsInfo
+                                          ? "chevron-up"
+                                          : "chevron-down"
+                                      }
+                                      size={14}
+                                      color={
+                                        isDarkMode
+                                          ? APP_COLORS.brand.white
+                                          : APP_COLORS.brand.purple
+                                      }
+                                    />
+                                  </TouchableOpacity>
+                                  {showFinancialsInfo ? (
+                                    <View className="rounded-xl bg-brand-white/70 p-3 dark:bg-brand-white/5">
+                                      <Text className="text-xs font-semibold leading-5 text-app-text dark:text-app-textDark">
+                                        All values in financial statements are
+                                        presented in thousands of the reporting
+                                        currency (PKR), meaning you should
+                                        multiply each figure by 1,000 to get the
+                                        actual value, except for Earnings Per
+                                        Share (EPS) which is shown in actual
+                                        units.
+                                      </Text>
+                                    </View>
+                                  ) : null}
                                   <CompanyMatrixTableCard
                                     table={companyDetail.annualFinancials}
                                     emptyText="No annual financial table available."
@@ -1766,77 +1831,78 @@ export default function StockDetailScreen() {
                                 />
                               ) : null}
                             </View>
-                          </View>
+                          ) : null}
 
-                          <View style={{ width: companyDetailPageWidth }} className="pl-1">
+                          {selectedCompanyTopTab === "announcements" ? (
                             <View className="gap-3">
                               <View className="flex-row items-center justify-between">
-                                <Text className="text-[11px] font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
-                                  Filter
-                                </Text>
-                                <TouchableOpacity
-                                  activeOpacity={0.86}
-                                  onPress={handleOpenAnnouncementFilterSheet}
-                                  className="rounded-xl border border-app-highlight/15 bg-app-highlight/5 px-3 py-2 dark:border-app-highlightDark/12 dark:bg-brand-white/8"
-                                >
-                                  <View className="flex-row items-center gap-2">
-                                    <MaterialCommunityIcons
-                                      name="filter-variant"
-                                      size={16}
-                                      color={
-                                        isDarkMode
-                                          ? APP_COLORS.brand.white
-                                          : APP_COLORS.brand.purple
-                                      }
-                                    />
-                                    <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
-                                      {getAnnouncementFilterLabel(
-                                        selectedAnnouncementFilter
-                                      ).toUpperCase()}
-                                    </Text>
-                                  </View>
-                                </TouchableOpacity>
-                              </View>
+                              <Text className="text-[11px] font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
+                                Filter
+                              </Text>
+                              <TouchableOpacity
+                                activeOpacity={0.86}
+                                onPress={handleOpenAnnouncementFilterSheet}
+                                className="rounded-xl border border-app-highlight/15 bg-app-highlight/5 px-3 py-2 dark:border-app-highlightDark/12 dark:bg-brand-white/8"
+                              >
+                                <View className="flex-row items-center gap-2">
+                                  <MaterialCommunityIcons
+                                    name="filter-variant"
+                                    size={16}
+                                    color={
+                                      isDarkMode
+                                        ? APP_COLORS.brand.white
+                                        : APP_COLORS.brand.purple
+                                    }
+                                  />
+                                  <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                                    {getAnnouncementFilterLabel(
+                                      selectedAnnouncementFilter
+                                    ).toUpperCase()}
+                                  </Text>
+                                </View>
+                              </TouchableOpacity>
+                            </View>
 
-                              {companyAnnouncementItems.length === 0 ? (
-                                <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
-                                  No announcements available.
-                                </Text>
-                              ) : filteredCompanyAnnouncementItems.length === 0 ? (
-                                <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
-                                  No announcements in this category.
-                                </Text>
-                              ) : (
-                                <View className="gap-2">
-                                  {filteredCompanyAnnouncementItems.map(
-                                    (
-                                      announcement: CategorizedAnnouncementItem,
-                                      announcementIndex
-                                    ) => {
-                                      const hasPdfUrl =
-                                        Boolean(announcement.pdfUrl) &&
-                                        announcement.pdfUrl!.trim().length > 0;
+                            {companyAnnouncementItems.length === 0 ? (
+                              <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+                                No announcements available.
+                              </Text>
+                            ) : filteredCompanyAnnouncementItems.length ===
+                              0 ? (
+                              <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+                                No announcements in this category.
+                              </Text>
+                            ) : (
+                              <View className="gap-2">
+                                {filteredCompanyAnnouncementItems.map(
+                                  (
+                                    announcement: CategorizedAnnouncementItem,
+                                    announcementIndex
+                                  ) => {
+                                    const hasPdfUrl =
+                                      Boolean(announcement.pdfUrl) &&
+                                      announcement.pdfUrl!.trim().length > 0;
 
-                                      return (
-                                        <TouchableOpacity
-                                          key={`${announcement.category}-${announcement.date}-${announcementIndex}`}
-                                          activeOpacity={hasPdfUrl ? 0.86 : 1}
-                                          disabled={!hasPdfUrl}
-                                          onPress={() => {
-                                            if (hasPdfUrl && announcement.pdfUrl) {
-                                              handleOpenPdfInApp(
-                                                announcement.pdfUrl,
-                                                announcement.title
-                                              );
-                                            }
-                                          }}
-                                          className={[
-                                            "rounded-2xl bg-brand-white/70 p-3 dark:bg-brand-white/5",
-                                            !hasPdfUrl ? "opacity-80" : "",
-                                          ]
-                                            .filter(Boolean)
-                                            .join(" ")}
-                                        >
+                                    return (
+                                      <TouchableOpacity
+                                        key={`${announcement.category}-${announcement.date}-${announcementIndex}`}
+                                        activeOpacity={hasPdfUrl ? 0.86 : 1}
+                                        disabled={!hasPdfUrl}
+                                        onPress={() => {
+                                          if (hasPdfUrl && announcement.pdfUrl) {
+                                            handleOpenPdfInApp(
+                                              announcement.pdfUrl,
+                                              announcement.title
+                                            );
+                                          }
+                                        }}
+                                        className={[
+                                          "rounded-2xl bg-brand-white/70 p-3 dark:bg-brand-white/5",
+                                          !hasPdfUrl ? "opacity-80" : "",
+                                        ]
+                                          .filter(Boolean)
+                                          .join(" ")}
+                                      >
                                           <View className="flex-row items-center justify-between gap-3">
                                             <Text className="flex-1 text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                                               {getAnnouncementFilterLabel(
@@ -1859,15 +1925,15 @@ export default function StockDetailScreen() {
                                           >
                                             {announcement.document}
                                           </Text>
-                                        </TouchableOpacity>
-                                      );
-                                    }
-                                  )}
-                                </View>
-                              )}
+                                      </TouchableOpacity>
+                                    );
+                                  }
+                                )}
+                              </View>
+                            )}
                             </View>
-                          </View>
-                        </ScrollView>
+                          ) : null}
+                        </View>
                       </>
                     )}
                   </View>
