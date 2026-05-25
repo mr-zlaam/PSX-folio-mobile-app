@@ -618,8 +618,15 @@ export async function getLatestSymbolQuote(
   }
 
   try {
-    const liveRows = await fetchIntradayRowsFromApi(normalizedSymbol);
-    const previousClose = getPreviousCloseFromIntradayRows(liveRows) ?? 0;
+    const [liveRows, liveEodRows] = await Promise.all([
+      fetchIntradayRowsFromApi(normalizedSymbol),
+      fetchEodRowsFromApi(normalizedSymbol).catch(() => [] as EodRow[]),
+    ]);
+
+    const previousClose =
+      getPreviousCloseFromIntradayRows(liveRows) ??
+      getPreviousCloseFromEodRows(liveEodRows, liveRows[0][0]) ??
+      0;
 
     const liveQuote = deriveQuoteFromRows(
       normalizedSymbol,

@@ -272,10 +272,8 @@ export default function WatchlistTabScreen() {
   const { colorScheme } = useColorScheme();
   const isDarkMode = colorScheme === "dark";
   const inputPlaceholderTextColor = isDarkMode
-    ? APP_COLORS.text.placeholderDark
-    : APP_COLORS.text.placeholderLight;
-  const watchlistScrollRef = React.useRef<ScrollView>(null);
-
+    ? "rgba(255, 255, 255, 0.42)"
+    : "rgba(20, 10, 38, 0.32)";
   const addSheetRef = React.useRef<BottomSheetModal>(null);
   const addSheetSnapPoints = React.useMemo(() => ["72%", "92%"], []);
 
@@ -784,66 +782,80 @@ export default function WatchlistTabScreen() {
       edges={["top", "left", "right"]}
       className="flex-1 bg-app-bg dark:bg-app-bgDark"
     >
-      <ScrollView
-        ref={watchlistScrollRef}
-        className="flex-1"
-        contentContainerStyle={{
-          paddingTop: shouldShowCenterLoader ? 14 : shouldShowEmptyState ? 0 : 14,
-          paddingHorizontal: 20,
-          paddingBottom: insets.bottom + (watchlistItems.length > 0 ? 100 : 24),
-          flexGrow: 1,
-          justifyContent: shouldShowEmptyState ? "center" : "flex-start",
-        }}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefreshing}
-            onRefresh={handlePullToRefresh}
-            tintColor={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
-            colors={[isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple]}
-            progressBackgroundColor={
-              isDarkMode ? APP_COLORS.brand.purple : APP_COLORS.brand.white
-            }
-          />
-        }
-      >
-        {shouldShowCenterLoader ? (
-          <View
-            className="w-full gap-3"
-            style={{ minHeight: Math.max(windowHeight - insets.bottom - 220, 460) }}
-          >
-            <View className="rounded-2xl bg-brand-white/95 px-4 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
-              <AppSkeletonBlock width={126} height={22} borderRadius={9} />
-              <AppSkeletonBlock
-                className="mt-3"
-                width="100%"
-                height={38}
-                borderRadius={12}
-              />
-            </View>
-            {Array.from({ length: watchlistSkeletonCardCount }).map((_, index) => (
-              <WatchlistCardSkeleton key={`watchlist-card-skeleton-${index}`} />
-            ))}
+      {shouldShowCenterLoader ? (
+        <View
+          className="w-full flex-1 gap-3 px-5 pt-3.5"
+          style={{ minHeight: Math.max(windowHeight - insets.bottom - 220, 460) }}
+        >
+          <View className="rounded-2xl bg-brand-white/95 px-4 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+            <AppSkeletonBlock width={126} height={22} borderRadius={9} />
+            <AppSkeletonBlock
+              className="mt-3"
+              width="100%"
+              height={38}
+              borderRadius={12}
+            />
           </View>
-        ) : shouldShowEmptyState ? (
-          <View className="items-center px-6">
-            <Text className="text-3xl font-extrabold text-app-text dark:text-app-textDark">
-              Watchlist
-            </Text>
-            <Text className="mt-3 text-center text-sm font-semibold text-app-text dark:text-app-textDark">
-              No stocks in watchlist.
-            </Text>
-            <View className="mt-6 w-full max-w-xs">
-              <AppButton
-                label="Add Stocks"
-                variant="primary"
-                size="md"
-                onPress={openAddSheet}
-              />
+          {Array.from({ length: watchlistSkeletonCardCount }).map((_, index) => (
+            <WatchlistCardSkeleton key={`watchlist-card-skeleton-${index}`} />
+          ))}
+        </View>
+      ) : shouldShowEmptyState ? (
+        <View className="flex-1 items-center justify-center px-6">
+          <Text className="text-3xl font-extrabold text-app-text dark:text-app-textDark">
+            Watchlist
+          </Text>
+          <Text className="mt-3 text-center text-sm font-semibold text-app-text dark:text-app-textDark">
+            No stocks in watchlist.
+          </Text>
+          <View className="mt-6 w-full max-w-xs">
+            <AppButton
+              label="Add Stocks"
+              variant="primary"
+              size="md"
+              onPress={openAddSheet}
+            />
+          </View>
+        </View>
+      ) : shouldShowRowsLoader ? (
+        <View className="flex-1 gap-3 px-5 pt-3.5">
+          <View className="rounded-2xl bg-brand-white/95 px-4 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+            <View className="flex-row items-center justify-between">
+              <Text className="text-2xl font-extrabold text-app-text dark:text-app-textDark">
+                Watchlist
+              </Text>
+              <Text className="text-xs font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                {watchlistItems.length} stocks
+              </Text>
             </View>
           </View>
-        ) : (
-          <View className="gap-3">
+          <WatchlistCardSkeleton />
+          <WatchlistCardSkeleton />
+          <WatchlistCardSkeleton />
+        </View>
+      ) : (
+        <DraggableFlatList
+          className="flex-1"
+          containerStyle={{ flex: 1 }}
+          contentContainerStyle={{
+            paddingHorizontal: 20,
+            paddingTop: 14,
+            paddingBottom: insets.bottom + 100,
+            gap: 12,
+          }}
+          showsVerticalScrollIndicator={false}
+          refreshControl={
+            <RefreshControl
+              refreshing={isRefreshing}
+              onRefresh={handlePullToRefresh}
+              tintColor={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
+              colors={[isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple]}
+              progressBackgroundColor={
+                isDarkMode ? APP_COLORS.brand.purple : APP_COLORS.brand.white
+              }
+            />
+          }
+          ListHeaderComponent={
             <View className="rounded-2xl bg-brand-white/95 px-4 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
               <View className="flex-row items-center justify-between">
                 <Text className="text-2xl font-extrabold text-app-text dark:text-app-textDark">
@@ -871,40 +883,26 @@ export default function WatchlistTabScreen() {
                 </Text>
               )}
             </View>
-
-            {shouldShowRowsLoader ? (
-              <View className="gap-3">
-                <WatchlistCardSkeleton />
-                <WatchlistCardSkeleton />
-                <WatchlistCardSkeleton />
-              </View>
-            ) : displayedRows.length === 0 ? (
-              <View className="rounded-2xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
-                <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
-                  No stock matches your search.
-                </Text>
-              </View>
-            ) : (
-              <DraggableFlatList
-                data={displayedRows}
-                keyExtractor={(item) => item.symbol}
-                onDragEnd={({ data }) => {
-                  if (!canReorderRows) {
-                    return;
-                  }
-                  void persistReorderedRows(data);
-                }}
-                simultaneousHandlers={watchlistScrollRef}
-                activationDistance={6}
-                scrollEnabled={false}
-                showsVerticalScrollIndicator={false}
-                renderItem={renderWatchlistRow}
-                contentContainerStyle={{ gap: 12 }}
-              />
-            )}
-          </View>
-        )}
-      </ScrollView>
+          }
+          data={displayedRows}
+          keyExtractor={(item) => item.symbol}
+          onDragEnd={({ data }) => {
+            if (!canReorderRows) {
+              return;
+            }
+            void persistReorderedRows(data);
+          }}
+          activationDistance={6}
+          renderItem={renderWatchlistRow}
+          ListEmptyComponent={
+            <View className="rounded-2xl bg-brand-white/95 p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+              <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+                No stock matches your search.
+              </Text>
+            </View>
+          }
+        />
+      )}
 
       {watchlistItems.length > 0 ? (
         <Pressable
