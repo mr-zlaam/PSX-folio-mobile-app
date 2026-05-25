@@ -1,4 +1,5 @@
 import * as FileSystem from "expo-file-system/legacy";
+import { getMemoryCache, setMemoryCache } from "@/src/lib/memory-cache";
 
 type DpsMarketStatusSource = "live" | "cache" | "fallback";
 
@@ -323,15 +324,24 @@ async function fetchLiveMarketStatus(): Promise<DpsMarketStatusSnapshot> {
 }
 
 export async function getCachedDpsMarketStatus(): Promise<DpsMarketStatusSnapshot> {
-  const store = await readStore();
-  if (!store.snapshot) {
-    return getFallbackDpsMarketStatus("fallback");
+  const memoryCached = getMemoryCache<DpsMarketStatusSnapshot>("market-status", "cached", 5_000);
+  if (memoryCached) {
+    return memoryCached;
   }
 
-  return {
-    ...toSafeSnapshot(store.snapshot, "cache"),
-    source: "cache",
-  };
+  const store = await readStore();
+  let snapshot: DpsMarketStatusSnapshot;
+  if (!store.snapshot) {
+    snapshot = getFallbackDpsMarketStatus("fallback");
+  } else {
+    snapshot = {
+      ...toSafeSnapshot(store.snapshot, "cache"),
+      source: "cache",
+    };
+  }
+
+  setMemoryCache("market-status", "cached", snapshot);
+  return snapshot;
 }
 
 export async function getLatestDpsMarketStatus(): Promise<DpsMarketStatusSnapshot> {

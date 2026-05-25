@@ -1,11 +1,12 @@
 import * as FileSystem from "expo-file-system/legacy";
 import { getCachedDpsMarketStatus } from "@/src/features/market/dps-market-status";
 import { shouldFetchLiveFromDelayedFeed } from "@/src/features/market/market-status";
+import { getMemoryCache, setMemoryCache } from "@/src/lib/memory-cache";
 
 export const PSX_SYMBOLS_ENDPOINT = "https://dps.psx.com.pk/symbols";
 export const PSX_INTRADAY_ENDPOINT_BASE = "https://dps.psx.com.pk/timeseries/int";
 export const PSX_EOD_ENDPOINT_BASE = "https://dps.psx.com.pk/timeseries/eod";
-const PSX_NETWORK_TIMEOUT_MS = 12_000;
+const PSX_NETWORK_TIMEOUT_MS = 8_000;
 
 const SYMBOLS_CACHE_FILE_URI = FileSystem.documentDirectory
   ? `${FileSystem.documentDirectory}psx-symbols-cache.json`
@@ -557,6 +558,12 @@ export function getSymbolQuoteFallback(symbol: string): SymbolQuote {
 }
 
 export async function getCachedSymbolQuote(symbol: string): Promise<SymbolQuote | null> {
+  const memoryKey = `quote:${symbol}`;
+  const cached = getMemoryCache<SymbolQuote>("trade-data", memoryKey, 15_000);
+  if (cached) {
+    return cached;
+  }
+
   const [intradayRows, eodRows] = await Promise.all([
     readIntradayRowsFromCache(symbol),
     readEodRowsFromCache(symbol),
@@ -570,7 +577,11 @@ export async function getCachedSymbolQuote(symbol: string): Promise<SymbolQuote 
     getPreviousCloseFromIntradayRows(rows) ??
     getPreviousCloseFromEodRows(eodRows ?? [], rows[0][0]);
 
-  return deriveQuoteFromRows(symbol, rows, "cache", previousClose);
+  const quote = deriveQuoteFromRows(symbol, rows, "cache", previousClose);
+  if (quote) {
+    setMemoryCache("trade-data", memoryKey, quote);
+  }
+  return quote;
 }
 
 export async function getLatestSymbolQuote(
@@ -582,6 +593,12 @@ export async function getLatestSymbolQuote(
   const normalizedSymbol = symbol.trim().toUpperCase();
   if (normalizedSymbol.length === 0) {
     return getSymbolQuoteFallback(symbol);
+  }
+
+  const memoryKey = `live-quote:${normalizedSymbol}`;
+  const memoryCached = getMemoryCache<SymbolQuote>("trade-data", memoryKey, 8_000);
+  if (memoryCached && !options?.forceLive) {
+    return memoryCached;
   }
 
   const cachedQuote = await getCachedSymbolQuote(normalizedSymbol);
@@ -601,16 +618,8 @@ export async function getLatestSymbolQuote(
   }
 
   try {
-    const [liveRows, liveEodRows] = await Promise.all([
-      fetchIntradayRowsFromApi(normalizedSymbol),
-      fetchEodRowsFromApi(normalizedSymbol).catch(async () => {
-        const cachedEodRows = await readEodRowsFromCache(normalizedSymbol);
-        return cachedEodRows ?? [];
-      }),
-    ]);
-    const previousClose =
-      getPreviousCloseFromIntradayRows(liveRows) ??
-      getPreviousCloseFromEodRows(liveEodRows, liveRows[0][0]);
+    const liveRows = await fetchIntradayRowsFromApi(normalizedSymbol);
+    const previousClose = getPreviousCloseFromIntradayRows(liveRows) ?? 0;
 
     const liveQuote = deriveQuoteFromRows(
       normalizedSymbol,
@@ -622,6 +631,7 @@ export async function getLatestSymbolQuote(
       throw new Error(`Unable to derive intraday quote for ${normalizedSymbol}`);
     }
 
+    setMemoryCache("trade-data", memoryKey, liveQuote);
     await writeIntradayRowsToCache(normalizedSymbol, liveRows);
     return liveQuote;
   } catch {

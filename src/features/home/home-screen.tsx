@@ -41,8 +41,8 @@ import {
 } from "@/src/features/notifications/in-app-notifications";
 import {
   getPortfolioHoldingsWithCachedQuotes,
-  getPortfolioHoldingsWithLatestQuotes,
   PortfolioHolding,
+  streamLatestPortfolioHoldings,
 } from "@/src/features/portfolio/portfolio-data";
 import { getAllPositionSnapshots } from "@/src/features/portfolio/position-ledger";
 import { calculateRealizedProfitLoss } from "@/src/features/portfolio/realized-pnl";
@@ -337,6 +337,10 @@ export default function HomeScreen() {
       source: "fallback",
     });
   const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const [streamProgress, setStreamProgress] = React.useState<{
+    completed: number;
+    total: number;
+  } | null>(null);
   const [noticeState, setNoticeState] = React.useState<HomeNoticeState | null>(
     null,
   );
@@ -547,12 +551,10 @@ export default function HomeScreen() {
           }
         }
 
-        const [latestHoldings, latestMarketDetail, latestDpsStatus] =
-          await Promise.all([
-            getPortfolioHoldingsWithLatestQuotes(),
-            getLatestMarketIndexDetail("KSE100"),
-            getLatestDpsMarketStatus(),
-          ]);
+        const [latestMarketDetail, latestDpsStatus] = await Promise.all([
+          getLatestMarketIndexDetail("KSE100"),
+          getLatestDpsMarketStatus(),
+        ]);
         if (requestId !== homeRefreshRequestIdRef.current) {
           return;
         }
@@ -561,6 +563,27 @@ export default function HomeScreen() {
           setMarketAsOf(latestMarketDetail.snapshot.asOf);
         }
         setDpsMarketStatus(latestDpsStatus);
+
+        const latestHoldings = await new Promise<PortfolioHolding[]>(
+          (resolve) => {
+            streamLatestPortfolioHoldings(
+              (update) => {
+                setStreamProgress({
+                  completed: update.completedCount,
+                  total: update.totalCount,
+                });
+              },
+              (holdings) => {
+                setStreamProgress(null);
+                resolve(holdings);
+              },
+            );
+          },
+        );
+        if (requestId !== homeRefreshRequestIdRef.current) {
+          return;
+        }
+
         applyHomeSnapshot(
           latestHoldings,
           totalDividendValue,
@@ -1165,7 +1188,11 @@ export default function HomeScreen() {
             </Text>
 
             <View className="mt-2 flex-row items-center justify-end">
-              {isBackgroundSyncing ? (
+              {streamProgress ? (
+                <Text className="text-[9px] font-semibold text-text-light dark:text-text-dark">
+                  Updating {streamProgress.completed} of {streamProgress.total}
+                </Text>
+              ) : isBackgroundSyncing ? (
                 <AppBackgroundRefreshIndicator visible label="Refreshing" />
               ) : (
                 <View className="flex-row items-center gap-1">

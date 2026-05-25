@@ -151,6 +151,81 @@ export async function getPortfolioHoldingsWithLatestQuotes(options?: {
   return getPortfolioHoldingsWithQuoteMode("latest", options);
 }
 
+export type PortfolioHoldingUpdate = {
+  symbol: string;
+  companyName: string;
+  sectorName: string;
+  currentPrice: number;
+  previousClose: number;
+  marketValue: number;
+  priceDiff: number;
+  priceDiffPct: number;
+  pnl: number;
+  pnlPct: number;
+  asOf: string | null;
+  quoteSource: SymbolQuote["source"];
+  completedCount: number;
+  totalCount: number;
+};
+
+export async function streamLatestPortfolioHoldings(
+  onHoldingUpdate: (holding: PortfolioHoldingUpdate) => void,
+  onComplete: (holdings: PortfolioHolding[]) => void,
+): Promise<void> {
+  const [savedOrders, bonusShareRecords, symbolMetaByCode] = await Promise.all([
+    getSavedTradeOrders(),
+    getSavedBonusShareRecords(),
+    readSymbolsByCode("latest"),
+  ]);
+
+  const positions = getAllPositionSnapshots(savedOrders, bonusShareRecords);
+  if (positions.length === 0) {
+    onComplete([]);
+    return;
+  }
+
+  const completedHoldings: PortfolioHolding[] = [];
+  let completedCount = 0;
+  const totalCount = positions.length;
+
+  await Promise.all(
+    positions.map(async (position) => {
+      const quote = await readQuoteForSymbol(position.symbol, "latest", {
+        forceLive: true,
+      });
+      const holding = buildHolding(
+        position,
+        quote,
+        symbolMetaByCode.get(position.symbol),
+      );
+      completedHoldings.push(holding);
+      completedCount += 1;
+      onHoldingUpdate({
+        symbol: holding.symbol,
+        companyName: holding.companyName,
+        sectorName: holding.sectorName,
+        currentPrice: holding.currentPrice,
+        previousClose: holding.previousClose,
+        marketValue: holding.marketValue,
+        priceDiff: holding.priceDiff,
+        priceDiffPct: holding.priceDiffPct,
+        pnl: holding.pnl,
+        pnlPct: holding.pnlPct,
+        asOf: holding.asOf,
+        quoteSource: holding.quoteSource,
+        completedCount,
+        totalCount,
+      });
+    }),
+  );
+
+  completedHoldings.sort(
+    (firstHolding, secondHolding) =>
+      secondHolding.marketValue - firstHolding.marketValue,
+  );
+  onComplete(completedHoldings);
+}
+
 export async function getPortfolioHoldingBySymbol(
   symbol: string
 ): Promise<PortfolioHolding | null> {
