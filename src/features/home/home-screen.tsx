@@ -361,7 +361,7 @@ export default function HomeScreen() {
   const metricTooltipTimeoutRef = React.useRef<ReturnType<
     typeof setTimeout
   > | null>(null);
-  const { isBackgroundSyncing, beginBackgroundSync, endBackgroundSync } =
+  const { isBackgroundSyncing } =
     useBackgroundSyncIndicator();
 
   const handleTradePress = React.useCallback(() => {
@@ -467,7 +467,6 @@ export default function HomeScreen() {
     async (preferCachedFirst = true) => {
       const requestId = homeRefreshRequestIdRef.current + 1;
       homeRefreshRequestIdRef.current = requestId;
-      let didStartBackgroundSync = false;
 
       try {
         const [
@@ -540,15 +539,6 @@ export default function HomeScreen() {
             allTimeHighWorthBaseline,
             carryUnitsBySymbol,
           );
-
-          const hasVisibleCachedData =
-            cachedHoldings.length > 0 ||
-            Boolean(cachedMarketDetail?.snapshot.asOf) ||
-            Boolean(cachedDpsStatus.fetchedAt);
-          if (hasVisibleCachedData) {
-            beginBackgroundSync();
-            didStartBackgroundSync = true;
-          }
         }
 
         const [latestMarketDetail, latestDpsStatus] = await Promise.all([
@@ -619,12 +609,10 @@ export default function HomeScreen() {
           }
         })();
       } finally {
-        if (didStartBackgroundSync) {
-          endBackgroundSync();
-        }
+        // Auto-refreshes update silently; pull-to-refresh uses its own indicator.
       }
     },
-    [applyHomeSnapshot, beginBackgroundSync, endBackgroundSync],
+    [applyHomeSnapshot],
   );
 
   const handlePullToRefresh = React.useCallback(async () => {

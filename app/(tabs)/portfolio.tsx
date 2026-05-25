@@ -510,8 +510,6 @@ export default function PortfolioTabScreen() {
     React.useState(false);
   const {
     isBackgroundSyncing,
-    beginBackgroundSync,
-    endBackgroundSync,
   } = useBackgroundSyncIndicator();
   const filterSheetRef = React.useRef<BottomSheetModal>(null);
   const filterSheetSnapPoints = React.useMemo(() => ["44%"], []);
@@ -528,7 +526,6 @@ export default function PortfolioTabScreen() {
     forceLive = false,
     showLoader = false
   ) => {
-    let didStartBackgroundSync = false;
     if (showLoader) {
       setIsInitialLoading(true);
     }
@@ -568,24 +565,16 @@ export default function PortfolioTabScreen() {
         return;
       }
 
-      if (preferCachedFirst && hasUsableCachedHoldings && !showLoader) {
-        beginBackgroundSync();
-        didStartBackgroundSync = true;
-      }
-
       const latestHoldings = await getPortfolioHoldingsWithLatestQuotes({
         forceLive,
       });
       setHoldings(latestHoldings);
     } finally {
-      if (didStartBackgroundSync) {
-        endBackgroundSync();
-      }
       if (showLoader) {
         setIsInitialLoading(false);
       }
     }
-  }, [beginBackgroundSync, endBackgroundSync]);
+  }, []);
 
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);

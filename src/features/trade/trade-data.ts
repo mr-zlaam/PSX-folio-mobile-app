@@ -6,7 +6,7 @@ import { getMemoryCache, setMemoryCache } from "@/src/lib/memory-cache";
 export const PSX_SYMBOLS_ENDPOINT = "https://dps.psx.com.pk/symbols";
 export const PSX_INTRADAY_ENDPOINT_BASE = "https://dps.psx.com.pk/timeseries/int";
 export const PSX_EOD_ENDPOINT_BASE = "https://dps.psx.com.pk/timeseries/eod";
-const PSX_NETWORK_TIMEOUT_MS = 8_000;
+const PSX_NETWORK_TIMEOUT_MS = 5_000;
 
 const SYMBOLS_CACHE_FILE_URI = FileSystem.documentDirectory
   ? `${FileSystem.documentDirectory}psx-symbols-cache.json`
@@ -504,9 +504,8 @@ async function shouldUseCachedQuote(options: {
   try {
     const cachedMarketStatus = await getCachedDpsMarketStatus();
     if (cachedMarketStatus.uiStatus !== "OPEN") {
-      // Keep quote cache warm for instant paint, but revalidate from source
-      // when market is not open to avoid stale session snapshots.
-      return false;
+      // Market is closed — prices are frozen, use cached data.
+      return true;
     }
 
     return !shouldFetchLiveFromDelayedFeed({
@@ -526,9 +525,15 @@ export async function getCachedSymbols(): Promise<PsxSymbol[]> {
 }
 
 export async function getLatestSymbols(): Promise<PsxSymbol[]> {
+  const memoryCached = getMemoryCache<PsxSymbol[]>("trade-data", "symbols", 30_000);
+  if (memoryCached) {
+    return memoryCached;
+  }
+
   try {
     const liveSymbols = await fetchSymbolsFromApi();
     await writeSymbolsToCache(liveSymbols);
+    setMemoryCache("trade-data", "symbols", liveSymbols);
     return liveSymbols;
   } catch {
     return getCachedSymbols();
@@ -538,6 +543,7 @@ export async function getLatestSymbols(): Promise<PsxSymbol[]> {
 export async function getStrictLiveSymbols(): Promise<PsxSymbol[]> {
   const liveSymbols = await fetchSymbolsFromApi();
   await writeSymbolsToCache(liveSymbols);
+  setMemoryCache("trade-data", "symbols", liveSymbols);
   return liveSymbols;
 }
 
@@ -596,7 +602,7 @@ export async function getLatestSymbolQuote(
   }
 
   const memoryKey = `live-quote:${normalizedSymbol}`;
-  const memoryCached = getMemoryCache<SymbolQuote>("trade-data", memoryKey, 8_000);
+  const memoryCached = getMemoryCache<SymbolQuote>("trade-data", memoryKey, 30_000);
   if (memoryCached && !options?.forceLive) {
     return memoryCached;
   }
