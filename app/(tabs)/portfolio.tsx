@@ -12,6 +12,8 @@ import {
 import { useFocusEffect } from "@react-navigation/native";
 
 import * as DocumentPicker from "expo-document-picker";
+import { File, Paths } from "expo-file-system";
+import * as Print from "expo-print";
 import * as Sharing from "expo-sharing";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { useColorScheme } from "nativewind";
@@ -513,6 +515,8 @@ export default function PortfolioTabScreen() {
   } = useBackgroundSyncIndicator();
   const filterSheetRef = React.useRef<BottomSheetModal>(null);
   const filterSheetSnapPoints = React.useMemo(() => ["44%"], []);
+  const exportSheetRef = React.useRef<BottomSheetModal>(null);
+  const exportSheetSnapPoints = React.useMemo(() => ["44%"], []);
   const sectorAggregates = React.useMemo(() => buildSectorAggregates(holdings), [holdings]);
   const totalInvested = React.useMemo(
     () => holdings.reduce((sum, holding) => sum + holding.invested, 0),
@@ -696,6 +700,10 @@ export default function PortfolioTabScreen() {
     filterSheetRef.current?.present();
   }, []);
 
+  const openExportSheet = React.useCallback(() => {
+    exportSheetRef.current?.present();
+  }, []);
+
   const filterSheetBackdrop = React.useCallback(
     (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
       <BottomSheetBackdrop
@@ -708,7 +716,186 @@ export default function PortfolioTabScreen() {
     []
   );
 
-  const handleExportBackup = React.useCallback(async () => {
+  const exportSheetBackdrop = React.useCallback(
+    (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        pressBehavior="close"
+      />
+    ),
+    []
+  );
+
+  const handleExportCsv = React.useCallback(async () => {
+    if (isBackupBusy) {
+      return;
+    }
+
+    setIsBackupBusy(true);
+    try {
+      const header = "Symbol,Company,Sector,Units,Avg Price,Invested,Current Price,Market Value,P&L,P&L %";
+      const rows = holdings.map((h) =>
+        [
+          h.symbol,
+          `"${h.companyName.replace(/"/g, '""')}"`,
+          `"${h.sectorName.replace(/"/g, '""')}"`,
+          h.units,
+          h.averageBuyPrice.toFixed(2),
+          h.invested.toFixed(2),
+          h.currentPrice.toFixed(2),
+          h.marketValue.toFixed(2),
+          h.pnl.toFixed(2),
+          `${h.pnlPct.toFixed(2)}%`,
+        ].join(",")
+      );
+      const csv = `${header}\n${rows.join("\n")}`;
+      const file = new File(Paths.cache, `portfolio_${Date.now()}.csv`);
+      file.create();
+      file.write(csv);
+      const sharingAvailable = await Sharing.isAvailableAsync();
+      if (sharingAvailable) {
+        await Sharing.shareAsync(file.uri, {
+          mimeType: "text/csv",
+          dialogTitle: "Export Portfolio CSV",
+        });
+      }
+      setBackupNotice({
+        title: "CSV Exported",
+        message: `Portfolio exported with ${holdings.length} holdings.`,
+        tone: "success",
+      });
+    } catch (error) {
+      setBackupNotice({
+        title: "Export Failed",
+        message: error instanceof Error ? error.message : "Unable to export CSV.",
+        tone: "error",
+      });
+    } finally {
+      setIsBackupBusy(false);
+      exportSheetRef.current?.dismiss();
+    }
+  }, [holdings, isBackupBusy]);
+
+  const handleExportPdf = React.useCallback(async () => {
+    if (isBackupBusy) {
+      return;
+    }
+
+    setIsBackupBusy(true);
+    try {
+      const totalInvestedVal = totalInvested;
+      const totalMarketValue = holdings.reduce(
+        (sum, h) => sum + h.marketValue,
+        0
+      );
+      const totalPnl = totalMarketValue - totalInvestedVal;
+      const totalPnlPct =
+        totalInvestedVal > 0
+          ? (totalPnl / totalInvestedVal) * 100
+          : 0;
+
+      const rowsHtml = holdings
+        .map(
+          (h) => `
+          <tr>
+            <td>${h.symbol}</td>
+            <td style="color:${h.pnl >= 0 ? "#16a34a" : "#dc2626"}">${h.pnl.toFixed(2)}</td>
+            <td style="color:${h.pnlPct >= 0 ? "#16a34a" : "#dc2626"}">${h.pnlPct.toFixed(2)}%</td>
+            <td>${h.marketValue.toFixed(2)}</td>
+            <td>${h.invested.toFixed(2)}</td>
+            <td>${h.units}</td>
+          </tr>`
+        )
+        .join("");
+
+      const html = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, Helvetica, sans-serif; padding: 24px; color: #111; }
+    h1 { font-size: 24px; margin-bottom: 4px; }
+    .subtitle { font-size: 14px; color: #666; margin-bottom: 20px; }
+    .summary { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+    .summary-card { background: #f4f4f5; border-radius: 10px; padding: 14px 18px; flex: 1; min-width: 120px; }
+    .summary-card .label { font-size: 11px; text-transform: uppercase; color: #666; letter-spacing: 0.5px; }
+    .summary-card .value { font-size: 20px; font-weight: 700; margin-top: 4px; }
+    .summary-card .value.positive { color: #16a34a; }
+    .summary-card .value.negative { color: #dc2626; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th { background: #f4f4f5; text-align: left; padding: 10px 8px; font-size: 11px; text-transform: uppercase; letter-spacing: 0.5px; color: #555; }
+    td { padding: 10px 8px; border-bottom: 1px solid #e4e4e7; }
+    .footer { margin-top: 24px; font-size: 11px; color: #999; text-align: center; }
+  </style>
+</head>
+<body>
+  <h1>Portfolio Report</h1>
+  <p class="subtitle">Generated ${new Date().toLocaleDateString("en-PK", { year: "numeric", month: "long", day: "numeric", hour: "2-digit", minute: "2-digit" })}</p>
+  <div class="summary">
+    <div class="summary-card">
+      <div class="label">Invested</div>
+      <div class="value">${totalInvestedVal.toLocaleString("en-PK", { minimumFractionDigits: 2 })}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">Market Value</div>
+      <div class="value">${totalMarketValue.toLocaleString("en-PK", { minimumFractionDigits: 2 })}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">P&amp;L</div>
+      <div class="value ${totalPnl >= 0 ? "positive" : "negative"}">${totalPnl >= 0 ? "+" : ""}${totalPnl.toFixed(2)}</div>
+    </div>
+    <div class="summary-card">
+      <div class="label">P&amp;L %</div>
+      <div class="value ${totalPnlPct >= 0 ? "positive" : "negative"}">${totalPnlPct >= 0 ? "+" : ""}${totalPnlPct.toFixed(2)}%</div>
+    </div>
+  </div>
+  <table>
+    <thead>
+      <tr>
+        <th>Symbol</th>
+        <th>P&amp;L</th>
+        <th>P&amp;L %</th>
+        <th>Market Value</th>
+        <th>Invested</th>
+        <th>Shares</th>
+      </tr>
+    </thead>
+    <tbody>${rowsHtml}</tbody>
+  </table>
+  <p class="footer">PSX Folio — Portfolio Report</p>
+</body>
+</html>`;
+
+      const { uri } = await Print.printToFileAsync({ html });
+      const sharingAvailable = await Sharing.isAvailableAsync();
+      if (sharingAvailable) {
+        await Sharing.shareAsync(uri, {
+          mimeType: "application/pdf",
+          dialogTitle: "Export Portfolio PDF",
+          UTI: "com.adobe.pdf",
+        });
+      }
+      setBackupNotice({
+        title: "PDF Exported",
+        message: `Portfolio PDF exported with ${holdings.length} holdings.`,
+        tone: "success",
+      });
+    } catch (error) {
+      setBackupNotice({
+        title: "Export Failed",
+        message: error instanceof Error ? error.message : "Unable to export PDF.",
+        tone: "error",
+      });
+    } finally {
+      setIsBackupBusy(false);
+      exportSheetRef.current?.dismiss();
+    }
+  }, [holdings, totalInvested, isBackupBusy]);
+
+  const handleExportXls = React.useCallback(async () => {
     if (isBackupBusy) {
       return;
     }
@@ -717,7 +904,6 @@ export default function PortfolioTabScreen() {
     try {
       const exportSummary = await exportPortfolioWorkbookBackup();
       const sharingAvailable = await Sharing.isAvailableAsync();
-
       if (sharingAvailable) {
         await Sharing.shareAsync(exportSummary.fileUri, {
           mimeType: "application/vnd.ms-excel",
@@ -725,26 +911,20 @@ export default function PortfolioTabScreen() {
           UTI: "com.microsoft.excel.xls",
         });
       }
-
       setBackupNotice({
-        title: "Backup Ready (.xls)",
-        message: sharingAvailable
-          ? `Backup file prepared with ${exportSummary.rows} rows.`
-          : `Backup file saved at:\n${exportSummary.fileUri}`,
+        title: "XLS Exported",
+        message: `Backup file prepared with ${exportSummary.rows} rows.`,
         tone: "success",
       });
     } catch (error) {
-      const message =
-        error instanceof Error && error.message.trim().length > 0
-          ? error.message
-          : "Unable to export backup right now.";
       setBackupNotice({
         title: "Export Failed",
-        message,
+        message: error instanceof Error ? error.message : "Unable to export XLS.",
         tone: "error",
       });
     } finally {
       setIsBackupBusy(false);
+      exportSheetRef.current?.dismiss();
     }
   }, [isBackupBusy]);
 
@@ -839,7 +1019,7 @@ export default function PortfolioTabScreen() {
               <TouchableOpacity
                 activeOpacity={0.88}
                 disabled={isBackupBusy}
-                onPress={handleExportBackup}
+                onPress={openExportSheet}
                 className={[
                   "rounded-xl bg-app-highlight/10 px-3 py-2 dark:bg-brand-white/10",
                   isBackupBusy ? "opacity-50" : "",
@@ -1010,6 +1190,115 @@ export default function PortfolioTabScreen() {
                 onPress={() => setDisplayMode("price")}
               />
             </View>
+          </View>
+        </BottomSheetView>
+      </BottomSheetModal>
+
+      <BottomSheetModal
+        ref={exportSheetRef}
+        snapPoints={exportSheetSnapPoints}
+        enablePanDownToClose
+        backdropComponent={exportSheetBackdrop}
+        backgroundStyle={{
+          backgroundColor: isDarkMode
+            ? APP_COLORS.brand.purple
+            : APP_COLORS.brand.white,
+        }}
+        handleIndicatorStyle={{
+          backgroundColor: isDarkMode
+            ? APP_COLORS.brand.white
+            : APP_COLORS.brand.purple,
+        }}
+      >
+        <BottomSheetView
+          style={{
+            paddingHorizontal: 16,
+            paddingTop: 8,
+            paddingBottom: insets.bottom + 16,
+          }}
+        >
+          <Text className="text-lg font-extrabold text-app-text dark:text-app-textDark">
+            Export Portfolio
+          </Text>
+
+          <View className="mt-4 gap-2">
+            <TouchableOpacity
+              activeOpacity={0.88}
+              disabled={isBackupBusy}
+              onPress={handleExportCsv}
+              className="flex-row items-center gap-3 rounded-2xl border border-app-highlight/15 bg-app-highlight/5 p-4 dark:border-app-highlightDark/12 dark:bg-brand-white/8"
+            >
+              <MaterialCommunityIcons
+                name="file-delimited-outline"
+                size={24}
+                color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
+              />
+              <View className="flex-1">
+                <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                  CSV
+                </Text>
+                <Text className="text-xs text-app-text dark:text-app-textDark opacity-60">
+                  Holdings data as comma-separated values
+                </Text>
+              </View>
+              <MaterialCommunityIcons
+                name="download"
+                size={20}
+                color={isDarkMode ? "rgba(255,255,255,0.4)" : "rgba(40,40,43,0.4)"}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.88}
+              disabled={isBackupBusy}
+              onPress={handleExportPdf}
+              className="flex-row items-center gap-3 rounded-2xl border border-app-highlight/15 bg-app-highlight/5 p-4 dark:border-app-highlightDark/12 dark:bg-brand-white/8"
+            >
+              <MaterialCommunityIcons
+                name="file-pdf-box"
+                size={24}
+                color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
+              />
+              <View className="flex-1">
+                <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                  PDF
+                </Text>
+                <Text className="text-xs text-app-text dark:text-app-textDark opacity-60">
+                  Formatted report with holdings and summary
+                </Text>
+              </View>
+              <MaterialCommunityIcons
+                name="download"
+                size={20}
+                color={isDarkMode ? "rgba(255,255,255,0.4)" : "rgba(40,40,43,0.4)"}
+              />
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              activeOpacity={0.88}
+              disabled={isBackupBusy}
+              onPress={handleExportXls}
+              className="flex-row items-center gap-3 rounded-2xl border border-app-highlight/15 bg-app-highlight/5 p-4 dark:border-app-highlightDark/12 dark:bg-brand-white/8"
+            >
+              <MaterialCommunityIcons
+                name="file-excel-box"
+                size={24}
+                color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
+              />
+              <View className="flex-1">
+                <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                  XLS (Backup)
+                </Text>
+                <Text className="text-xs text-app-text dark:text-app-textDark opacity-60">
+                  Full workbook backup with trades and dividends
+                </Text>
+              </View>
+              <MaterialCommunityIcons
+                name="download"
+                size={20}
+                color={isDarkMode ? "rgba(255,255,255,0.4)" : "rgba(40,40,43,0.4)"}
+              />
+            </TouchableOpacity>
           </View>
         </BottomSheetView>
       </BottomSheetModal>
