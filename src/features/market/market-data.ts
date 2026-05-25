@@ -981,6 +981,80 @@ export async function getLatestMarketSnapshot(options?: {
   return latestItems;
 }
 
+export async function getCachedSingleIndexSnapshot(
+  code: string
+): Promise<MarketIndexSnapshot | null> {
+  const definition = getMarketIndexDefinitionByCodeInternal(code);
+  if (!definition) {
+    return null;
+  }
+
+  const allCached = await getCachedMarketSnapshot();
+  return allCached.find((item) => item.code === definition.code) ?? null;
+}
+
+export async function getLatestSingleIndexSnapshot(
+  code: string,
+  options?: {
+    forceLive?: boolean;
+  }
+): Promise<MarketIndexSnapshot | null> {
+  const definition = getMarketIndexDefinitionByCodeInternal(code);
+  if (!definition) {
+    return null;
+  }
+
+  const cachedItem = await getCachedSingleIndexSnapshot(code);
+  const hasUsableCache = Boolean(
+    cachedItem &&
+      cachedItem.asOf !== null &&
+      Number.isFinite(cachedItem.latestPrice) &&
+      cachedItem.latestPrice > 0
+  );
+  const shouldUseCache = await shouldPreferCachedMarketData({
+    forceLive: options?.forceLive === true,
+    hasUsableCache,
+    cacheAsOfValues: [cachedItem?.asOf ?? null],
+  });
+  if (shouldUseCache && cachedItem) {
+    return cachedItem;
+  }
+
+  try {
+    let snapshot: MarketIndexSnapshot;
+    if (definition.endpointType === "eod") {
+      const rows = await fetchRowsFromApi(definition);
+      snapshot = toSnapshot(definition, rows, "live");
+    } else {
+      const [intradayRows, eodRows] = await Promise.all([
+        fetchTimeseriesRowsFromApi(definition.code, "int"),
+        fetchEodRowsFromApi(definition.code).catch(() => []),
+      ]);
+      const previousCloseFromEod =
+        intradayRows.length > 0
+          ? getPreviousCloseFromEodRows(eodRows, intradayRows[0].timestamp)
+          : null;
+      snapshot = toSnapshot(definition, intradayRows, "live", previousCloseFromEod);
+    }
+
+    const nextStore = await readStore();
+    const existingIndex = nextStore.items.findIndex(
+      (item) => item.code === definition.code
+    );
+    if (existingIndex >= 0) {
+      nextStore.items[existingIndex] = snapshot;
+    } else {
+      nextStore.items.push(snapshot);
+    }
+    nextStore.updatedAt = new Date().toISOString();
+    await writeStore(nextStore);
+
+    return snapshot;
+  } catch {
+    return cachedItem ?? getFallbackSnapshot(definition, "fallback");
+  }
+}
+
 export async function getCachedMarketIndexDetail(
   code: string
 ): Promise<MarketIndexDetailSnapshot | null> {

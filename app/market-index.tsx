@@ -1,5 +1,4 @@
 import StockLineChart from "@/components/charts/stock-line-chart";
-import AppBackIconButton from "@/components/ui/app-back-icon-button";
 import AppBackgroundRefreshIndicator from "@/components/ui/app-background-refresh-indicator";
 import {
   AppChartSkeleton,
@@ -12,6 +11,8 @@ import {
   getCachedMarketIndexDetail,
   getLatestMarketIndexDetail,
   getMarketIndexDefinitionByCode,
+  getMarketIndexDefinitions,
+  MarketIndexDefinition,
   MarketIndexDetailSnapshot,
 } from "@/src/features/market/market-data";
 import { useBackgroundSyncIndicator } from "@/src/lib/use-background-sync-indicator";
@@ -37,6 +38,12 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
+import {
+  BottomSheetBackdrop,
+  BottomSheetFlatList,
+  BottomSheetModal,
+} from "@gorhom/bottom-sheet";
+import { MaterialCommunityIcons } from "@expo/vector-icons";
 
 const MARKET_DETAIL_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 const CHART_RANGE_OPTIONS: StockChartRange[] = [
@@ -48,6 +55,7 @@ const CHART_RANGE_OPTIONS: StockChartRange[] = [
   "3Y",
   "5Y",
 ];
+const ALL_DEFINITIONS = getMarketIndexDefinitions();
 
 function getValueToneClassName(value: number): string {
   if (value > 0) {
@@ -246,7 +254,7 @@ export default function MarketIndexScreen() {
     const rawCode = Array.isArray(searchParams.code)
       ? searchParams.code[0]
       : searchParams.code;
-    return (rawCode ?? "").trim().toUpperCase();
+    return (rawCode ?? "KSE100").trim().toUpperCase();
   }, [searchParams.code]);
   const indexDefinition = React.useMemo(
     () => getMarketIndexDefinitionByCode(normalizedCode),
@@ -256,6 +264,8 @@ export default function MarketIndexScreen() {
   const [detail, setDetail] = React.useState<MarketIndexDetailSnapshot | null>(null);
   const [isInitialLoading, setIsInitialLoading] = React.useState(true);
   const [isRefreshing, setIsRefreshing] = React.useState(false);
+  const indexSheetRef = React.useRef<BottomSheetModal>(null);
+  const indexSheetSnapPoints = React.useMemo(() => ["50%", "80%"], []);
   const [chartRange, setChartRange] = React.useState<StockChartRange>("1D");
   const [chartSeries, setChartSeries] = React.useState<StockChartSeries>(() =>
     getStockChartSeriesFallback("1D")
@@ -382,6 +392,9 @@ export default function MarketIndexScreen() {
       forceLive: true,
       preferCachedFirst: true,
     });
+  }, [chartRange, normalizedCode, refreshSyncedIndexData]);
+
+  React.useEffect(() => {
     const intervalId = setInterval(() => {
       void refreshSyncedIndexData({
         range: chartRange,
@@ -394,7 +407,31 @@ export default function MarketIndexScreen() {
     return () => {
       clearInterval(intervalId);
     };
-  }, [chartRange, refreshSyncedIndexData]);
+  }, [chartRange, normalizedCode, refreshSyncedIndexData]);
+
+  const openIndexSheet = React.useCallback(() => {
+    indexSheetRef.current?.present();
+  }, []);
+
+  const handleSwitchIndex = React.useCallback(
+    (code: string) => {
+      indexSheetRef.current?.dismiss();
+      router.setParams({ code });
+    },
+    [router],
+  );
+
+  const indexSheetBackdrop = React.useCallback(
+    (props: React.ComponentProps<typeof BottomSheetBackdrop>) => (
+      <BottomSheetBackdrop
+        {...props}
+        appearsOnIndex={0}
+        disappearsOnIndex={-1}
+        pressBehavior="close"
+      />
+    ),
+    [],
+  );
 
   const handlePullToRefresh = React.useCallback(async () => {
     setIsRefreshing(true);
@@ -542,15 +579,32 @@ export default function MarketIndexScreen() {
         }
       >
         <View className="gap-5">
-          <View className="flex-row items-center justify-between">
-            <AppBackIconButton onPress={() => router.back()} />
+            <View className="flex-row items-center justify-between">
+              <View className="w-14" />
 
-            <Text className="max-w-[66%] text-center text-2xl font-extrabold text-app-text dark:text-app-textDark">
-              {titleText}
-            </Text>
+              <Text className="max-w-[52%] text-center text-2xl font-extrabold text-app-text dark:text-app-textDark">
+                {titleText}
+              </Text>
 
-            <View className="w-14" />
-          </View>
+              <TouchableOpacity
+                activeOpacity={0.7}
+                onPress={openIndexSheet}
+                className="flex-row items-center gap-0.5"
+              >
+                <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                  {normalizedCode}
+                </Text>
+                <MaterialCommunityIcons
+                  name="chevron-down"
+                  size={14}
+                  color={
+                    isDarkMode
+                      ? APP_COLORS.brand.white
+                      : APP_COLORS.brand.purple
+                  }
+                />
+              </TouchableOpacity>
+            </View>
 
           {isInitialLoading && !detail ? (
             <View
@@ -825,6 +879,72 @@ export default function MarketIndexScreen() {
           )}
         </View>
       </ScrollView>
+
+      <BottomSheetModal
+        ref={indexSheetRef}
+        snapPoints={indexSheetSnapPoints}
+        enablePanDownToClose
+        backdropComponent={indexSheetBackdrop}
+        backgroundStyle={{
+          backgroundColor: isDarkMode
+            ? APP_COLORS.brand.purple
+            : APP_COLORS.brand.white,
+        }}
+        handleIndicatorStyle={{
+          backgroundColor: isDarkMode
+            ? APP_COLORS.brand.white
+            : APP_COLORS.brand.purple,
+        }}
+      >
+        <BottomSheetFlatList
+          data={ALL_DEFINITIONS}
+          keyExtractor={(item: MarketIndexDefinition) => item.code}
+          contentContainerStyle={{
+            paddingHorizontal: 16,
+            paddingBottom: insets.bottom + 16,
+          }}
+          renderItem={({ item }: { item: MarketIndexDefinition }) => (
+            <TouchableOpacity
+              activeOpacity={0.7}
+              onPress={() => handleSwitchIndex(item.code)}
+              className={`flex-row items-center justify-between rounded-xl px-3 py-3 ${
+                item.code === normalizedCode
+                  ? "bg-brand-purple/10 dark:bg-brand-purple/20"
+                  : ""
+              }`}
+            >
+              <View className="flex-1 pr-2">
+                <Text
+                  className={`text-base font-bold ${
+                    item.code === normalizedCode
+                      ? "text-brand-purple dark:text-brand-purple-dark"
+                      : "text-app-text dark:text-app-textDark"
+                  }`}
+                >
+                  {item.displayCode}
+                </Text>
+                <Text
+                  className={`mt-0.5 text-xs font-semibold ${
+                    item.code === normalizedCode
+                      ? "text-brand-purple/70 dark:text-brand-purple-dark/70"
+                      : "text-app-text/60 dark:text-app-textDark/60"
+                  }`}
+                  numberOfLines={1}
+                >
+                  {item.name}
+                </Text>
+              </View>
+              {item.code === normalizedCode ? (
+                <MaterialCommunityIcons
+                  name="check"
+                  size={20}
+                  color={APP_COLORS.brand.purple}
+                />
+              ) : null}
+            </TouchableOpacity>
+          )}
+        />
+      </BottomSheetModal>
     </SafeAreaView>
   );
 }

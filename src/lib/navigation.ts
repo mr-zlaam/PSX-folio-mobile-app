@@ -76,12 +76,20 @@ export function useGuardedRouter() {
     routerRef.current.back();
   }, []);
 
+  const guardedSetParams = React.useCallback(
+    (params: Record<string, undefined | string | number | (string | number)[]>) => {
+      routerRef.current.setParams(params);
+    },
+    [],
+  );
+
   return React.useMemo(
     () => ({
       back: guardedBack,
       push: guardedPush,
       replace: guardedReplace,
+      setParams: guardedSetParams,
     }),
-    [guardedBack, guardedPush, guardedReplace],
+    [guardedBack, guardedPush, guardedReplace, guardedSetParams],
   );
 }
