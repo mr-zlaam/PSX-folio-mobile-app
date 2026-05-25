@@ -83,7 +83,7 @@ const ANNOUNCEMENT_FILTER_OPTIONS = [
   { value: "all", label: "All" },
   { value: "dividend", label: "Dividend" },
   { value: "boardMeeting", label: "Board Meeting" },
-  { value: "financialResults", label: "Earnings Update" },
+  { value: "financialResults", label: "Financial Results" },
   { value: "corporateBriefing", label: "Briefing Session" },
   { value: "materialInfo", label: "Material Update" },
   { value: "disclosureOfInterest", label: "Interest Disclosure" },
@@ -1931,6 +1931,83 @@ export default function StockDetailScreen() {
                                 )}
                               </View>
                             )}
+
+                            <View className="rounded-2xl bg-brand-white/70 p-3 dark:bg-brand-white/5">
+                              <Text className="text-xs font-bold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
+                                Financial Reports
+                              </Text>
+                              {(() => {
+                                const reportPdfs =
+                                  filteredCompanyAnnouncementItems.filter(
+                                    (a) =>
+                                      a.pdfUrl &&
+                                      a.pdfUrl.trim().length > 0
+                                  );
+                                return reportPdfs.length === 0 ? (
+                                  <Text className="mt-2 text-sm font-semibold text-app-text dark:text-app-textDark">
+                                    No reports available.
+                                  </Text>
+                                ) : (
+                                  <View className="mt-2 gap-2">
+                                    {reportPdfs.map(
+                                      (announcement, reportIndex) => {
+                                        const pdfUrl =
+                                          announcement.pdfUrl!.startsWith(
+                                            "/"
+                                          )
+                                            ? `https://dps.psx.com.pk${announcement.pdfUrl}`
+                                            : announcement.pdfUrl!;
+                                        return (
+                                          <TouchableOpacity
+                                            key={`report-${reportIndex}`}
+                                            activeOpacity={0.86}
+                                            onPress={() => {
+                                              handleOpenPdfInApp(
+                                                pdfUrl,
+                                                announcement.title
+                                              );
+                                            }}
+                                            className="rounded-xl border border-app-highlight/15 bg-app-highlight/5 p-3 dark:border-app-highlightDark/12 dark:bg-brand-white/8"
+                                          >
+                                            <View className="flex-row items-start gap-2">
+                                              <MaterialCommunityIcons
+                                                name="file-document-outline"
+                                                size={18}
+                                                color={
+                                                  isDarkMode
+                                                    ? APP_COLORS.brand.white
+                                                    : APP_COLORS.brand.purple
+                                                }
+                                                style={{
+                                                  marginTop: 2,
+                                                }}
+                                              />
+                                              <View className="flex-1">
+                                                <Text className="text-sm font-bold text-app-text dark:text-app-textDark">
+                                                  {announcement.title}
+                                                </Text>
+                                                <Text className="mt-0.5 text-[11px] font-semibold text-app-text dark:text-app-textDark opacity-60">
+                                                  {announcement.date}
+                                                </Text>
+                                              </View>
+                                              <MaterialCommunityIcons
+                                                name="open-in-new"
+                                                size={16}
+                                                color={
+                                                  isDarkMode
+                                                    ? "rgba(255,255,255,0.4)"
+                                                    : "rgba(40,40,43,0.4)"
+                                                }
+                                              />
+                                            </View>
+                                          </TouchableOpacity>
+                                        );
+                                      }
+                                    )}
+                                  </View>
+                                );
+                              })()}
+                            </View>
                             </View>
                           ) : null}
                         </View>

@@ -34,15 +34,38 @@ import {
 import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 
 const MARKET_CONSTITUENTS_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
-type ConstituentsFilter = "all" | "gainers" | "decliners" | "active";
-const CONSTITUENTS_FILTER_OPTIONS: {
-  value: ConstituentsFilter;
+type ConstituentsSort =
+  | "raw"
+  | "gainers"
+  | "decliners"
+  | "active"
+  | "aToZ"
+  | "weight"
+  | "priceLow"
+  | "priceHigh";
+type ShariahFilter = "all" | "shariah" | "nonShariah";
+
+const CONSTITUENTS_SORT_OPTIONS: {
+  value: ConstituentsSort;
   label: string;
 }[] = [
   { value: "active", label: "Most Active" },
   { value: "gainers", label: "Top Gainers" },
   { value: "decliners", label: "Top Decliners" },
-  { value: "all", label: "All" },
+  { value: "aToZ", label: "A-Z" },
+  { value: "weight", label: "By Weight" },
+  { value: "priceLow", label: "Price: Low to High" },
+  { value: "priceHigh", label: "Price: High to Low" },
+  { value: "raw", label: "Default (Index Order)" },
+];
+
+const CONSTITUENTS_SHARIAH_FILTER_OPTIONS: {
+  value: ShariahFilter;
+  label: string;
+}[] = [
+  { value: "all", label: "All Stocks" },
+  { value: "shariah", label: "Shariah" },
+  { value: "nonShariah", label: "Non-Shariah" },
 ];
 
 function getValueToneClassName(value: number): string {
@@ -187,8 +210,10 @@ export default function MarketIndexStocksScreen() {
   );
 
   const [searchQuery, setSearchQuery] = React.useState("");
-  const [activeFilter, setActiveFilter] =
-    React.useState<ConstituentsFilter>("active");
+  const [activeSort, setActiveSort] =
+    React.useState<ConstituentsSort>("active");
+  const [shariahFilter, setShariahFilter] =
+    React.useState<ShariahFilter>("all");
   const deferredSearchQuery = React.useDeferredValue(searchQuery);
   const [constituents, setConstituents] =
     React.useState<MarketIndexConstituentSnapshot | null>(null);
@@ -200,7 +225,7 @@ export default function MarketIndexStocksScreen() {
     endBackgroundSync,
   } = useBackgroundSyncIndicator();
   const filterSheetRef = React.useRef<BottomSheetModal>(null);
-  const filterSheetSnapPoints = React.useMemo(() => ["44%"], []);
+  const filterSheetSnapPoints = React.useMemo(() => ["60%"], []);
   const skeletonCardCount = React.useMemo(
     () =>
       Math.max(
@@ -297,24 +322,60 @@ export default function MarketIndexStocksScreen() {
 
   const tabFilteredConstituents = React.useMemo(() => {
     const items = constituents?.items ?? [];
-    if (activeFilter === "all") {
-      return items;
+
+    const shariahFilteredItems =
+      shariahFilter === "all"
+        ? items
+        : items.filter((item) =>
+            shariahFilter === "shariah"
+              ? isShariahCompliantSymbol(item.symbol)
+              : !isShariahCompliantSymbol(item.symbol)
+          );
+
+    if (activeSort === "raw") {
+      return shariahFilteredItems;
     }
 
-    if (activeFilter === "gainers") {
-      return items
+    if (activeSort === "gainers") {
+      return shariahFilteredItems
         .filter((item) => item.change > 0)
         .sort((first, second) => second.changePct - first.changePct);
     }
 
-    if (activeFilter === "decliners") {
-      return items
+    if (activeSort === "decliners") {
+      return shariahFilteredItems
         .filter((item) => item.change < 0)
         .sort((first, second) => first.changePct - second.changePct);
     }
 
-    return [...items].sort((first, second) => second.volume - first.volume);
-  }, [activeFilter, constituents?.items]);
+    if (activeSort === "aToZ") {
+      return [...shariahFilteredItems].sort((first, second) =>
+        first.symbol.localeCompare(second.symbol)
+      );
+    }
+
+    if (activeSort === "weight") {
+      return [...shariahFilteredItems].sort(
+        (first, second) => second.idxWeightPct - first.idxWeightPct
+      );
+    }
+
+    if (activeSort === "priceLow") {
+      return [...shariahFilteredItems].sort(
+        (first, second) => first.current - second.current
+      );
+    }
+
+    if (activeSort === "priceHigh") {
+      return [...shariahFilteredItems].sort(
+        (first, second) => second.current - first.current
+      );
+    }
+
+    return [...shariahFilteredItems].sort(
+      (first, second) => second.volume - first.volume
+    );
+  }, [activeSort, shariahFilter, constituents?.items, isShariahCompliantSymbol]);
 
   const filteredConstituents = React.useMemo(() => {
     const normalizedQuery = deferredSearchQuery.trim().toLowerCase();
@@ -352,12 +413,13 @@ export default function MarketIndexStocksScreen() {
     indexDefinition?.displayCode ?? constituents?.indexCode ?? normalizedCode;
   const totalConstituentsCount = constituents?.items.length ?? 0;
   const shouldShowFilteredCountSuffix =
-    activeFilter !== "all" || deferredSearchQuery.trim().length > 0;
-  const hasActiveFilters = activeFilter !== "active";
+    shariahFilter !== "all" || activeSort !== "raw" || deferredSearchQuery.trim().length > 0;
+  const hasActiveFilters = activeSort !== "active" || shariahFilter !== "all";
 
   React.useEffect(() => {
     setSearchQuery("");
-    setActiveFilter("active");
+    setActiveSort("active");
+    setShariahFilter("all");
   }, [normalizedCode]);
 
   return (
@@ -562,16 +624,32 @@ export default function MarketIndexStocksScreen() {
 
           <View className="mt-4 rounded-2xl bg-brand-white p-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/12 dark:bg-brand-white/10">
             <Text className="text-[11px] font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
-              Sort/Mode (select one)
+              Filter by Compliance
             </Text>
             <View className="mt-2 gap-2">
-              {CONSTITUENTS_FILTER_OPTIONS.map((option) => (
+              {CONSTITUENTS_SHARIAH_FILTER_OPTIONS.map((option) => (
                 <ConstituentsFilterRowOption
                   key={option.value}
                   label={option.label}
-                  selected={activeFilter === option.value}
+                  selected={shariahFilter === option.value}
                   onPress={() => {
-                    setActiveFilter(option.value);
+                    setShariahFilter(option.value);
+                  }}
+                />
+              ))}
+            </View>
+
+            <Text className="mt-5 text-[11px] font-bold uppercase tracking-wide text-app-text dark:text-app-textDark">
+              Sort by
+            </Text>
+            <View className="mt-2 gap-2">
+              {CONSTITUENTS_SORT_OPTIONS.map((option) => (
+                <ConstituentsFilterRowOption
+                  key={option.value}
+                  label={option.label}
+                  selected={activeSort === option.value}
+                  onPress={() => {
+                    setActiveSort(option.value);
                     filterSheetRef.current?.dismiss();
                   }}
                 />

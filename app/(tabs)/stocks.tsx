@@ -52,7 +52,7 @@ const MAX_CONCURRENT_QUOTE_REQUESTS = 6;
 const SYMBOL_QUOTE_TIMEOUT_MS = 15_000;
 const STOCKS_REFRESH_INTERVAL_MS = 5 * 60 * 1000;
 type StockShariahFilter = "all" | "shariah" | "nonShariah";
-type StockSortMode = "az" | "weightHigh" | "weightLow";
+type StockSortMode = "az" | "weightHigh" | "weightLow" | "priceLow" | "priceHigh";
 
 const STOCK_SHARIAH_FILTER_OPTIONS: {
   value: StockShariahFilter;
@@ -70,6 +70,8 @@ const STOCK_SORT_OPTIONS: {
   { value: "az", label: "A-Z" },
   { value: "weightHigh", label: "Weight High" },
   { value: "weightLow", label: "Weight Low" },
+  { value: "priceLow", label: "Price: Low to High" },
+  { value: "priceHigh", label: "Price: High to Low" },
 ];
 
 function sortSymbolsAlphabetically(symbols: PsxSymbol[]): PsxSymbol[] {
@@ -671,6 +673,31 @@ export default function StocksTabScreen() {
       return sortedSymbols;
     }
 
+    if (sortMode === "priceLow" || sortMode === "priceHigh") {
+      sortedSymbols.sort((firstSymbol, secondSymbol) => {
+        const firstPrice = quotesBySymbol[firstSymbol.symbol]?.lastPrice;
+        const secondPrice = quotesBySymbol[secondSymbol.symbol]?.lastPrice;
+        const firstIsValid = Number.isFinite(firstPrice);
+        const secondIsValid = Number.isFinite(secondPrice);
+
+        if (!firstIsValid && !secondIsValid) {
+          return firstSymbol.symbol.localeCompare(secondSymbol.symbol);
+        }
+        if (!firstIsValid) {
+          return 1;
+        }
+        if (!secondIsValid) {
+          return -1;
+        }
+
+        if (sortMode === "priceLow") {
+          return firstPrice - secondPrice;
+        }
+        return secondPrice - firstPrice;
+      });
+      return sortedSymbols;
+    }
+
     sortedSymbols.sort((firstSymbol, secondSymbol) => {
       const firstWeight = weightsBySymbol[firstSymbol.symbol];
       const secondWeight = weightsBySymbol[secondSymbol.symbol];
@@ -701,6 +728,7 @@ export default function StocksTabScreen() {
   }, [
     deferredSearchQuery,
     isShariahCompliantSymbol,
+    quotesBySymbol,
     shariahFilter,
     sortMode,
     symbols,
