@@ -909,7 +909,7 @@ export default function MarketIndexScreen() {
               onPress={() => handleSwitchIndex(item.code)}
               className={`flex-row items-center justify-between rounded-xl px-3 py-3 ${
                 item.code === normalizedCode
-                  ? "bg-brand-purple/10 dark:bg-brand-purple/20"
+                  ? "bg-brand-purple/10 dark:bg-brand-white/10"
                   : ""
               }`}
             >
@@ -917,7 +917,7 @@ export default function MarketIndexScreen() {
                 <Text
                   className={`text-base font-bold ${
                     item.code === normalizedCode
-                      ? "text-brand-purple dark:text-brand-purple-dark"
+                      ? "text-brand-purple dark:text-brand-white"
                       : "text-app-text dark:text-app-textDark"
                   }`}
                 >
@@ -926,7 +926,7 @@ export default function MarketIndexScreen() {
                 <Text
                   className={`mt-0.5 text-xs font-semibold ${
                     item.code === normalizedCode
-                      ? "text-brand-purple/70 dark:text-brand-purple-dark/70"
+                      ? "text-brand-purple/70 dark:text-brand-white/70"
                       : "text-app-text/60 dark:text-app-textDark/60"
                   }`}
                   numberOfLines={1}
@@ -938,7 +938,7 @@ export default function MarketIndexScreen() {
                 <MaterialCommunityIcons
                   name="check"
                   size={20}
-                  color={APP_COLORS.brand.purple}
+                  color={isDarkMode ? APP_COLORS.brand.white : APP_COLORS.brand.purple}
                 />
               ) : null}
             </TouchableOpacity>
