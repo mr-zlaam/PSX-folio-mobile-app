@@ -656,11 +656,11 @@ export default function AnalyticsScreen() {
         setIsBootstrapping(false);
       }
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- isBootstrapping intentionally omitted; stale `true` triggers no-op setIsBootstrapping(false)
   }, [
     beginBackgroundSync,
     comparisonIndexCode,
     endBackgroundSync,
-    isBootstrapping,
     trendRange,
   ]);
 
@@ -1120,16 +1120,16 @@ export default function AnalyticsScreen() {
               </View>
 
               <View className="flex-row gap-3">
-                <View className="flex-1 rounded-3xl bg-brand-white px-4 py-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+                <View className="flex-1 rounded-3xl bg-brand-white px-3 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
                   <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                     Best Performer
                   </Text>
-                  <Text className="mt-2 text-2xl font-extrabold text-app-text dark:text-app-textDark">
+                  <Text className="mt-2 text-lg font-extrabold text-app-text dark:text-app-textDark">
                     {snapshot.bestPerformer?.symbol ?? "N/A"}
                   </Text>
                   <Text
                     className={[
-                      "mt-1 text-sm font-bold",
+                      "mt-1 text-xs font-bold",
                       getToneTextClassName(snapshot.bestPerformer?.impactPkr ?? 0),
                     ]
                       .filter(Boolean)
@@ -1137,30 +1137,30 @@ export default function AnalyticsScreen() {
                   >
                     {formatSignedPkr(snapshot.bestPerformer?.impactPkr ?? 0)}
                   </Text>
-                  <Text className="mt-1 text-[11px] font-semibold text-app-text dark:text-app-textDark">
+                  <Text className="mt-1 text-[10px] font-semibold text-app-text dark:text-app-textDark">
                     {`${formatSignedPercentage(
                       snapshot.bestPerformer?.impactPct ?? 0
                     )} impact • ${(snapshot.bestPerformer?.weightPct ?? 0).toFixed(
                       1
                     )}% weight`}
                   </Text>
-                  <Text className="mt-1 text-[11px] font-semibold text-app-text dark:text-app-textDark">
+                  <Text className="mt-1 text-[10px] font-semibold text-app-text dark:text-app-textDark">
                     {`Return ${formatSignedPercentage(
                       snapshot.bestPerformer?.returnPct ?? 0
                     )}`}
                   </Text>
                 </View>
 
-                <View className="flex-1 rounded-3xl bg-brand-white px-4 py-4 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
+                <View className="flex-1 rounded-3xl bg-brand-white px-3 py-3 shadow-md shadow-app-highlight/30 dark:shadow-none dark:border dark:border-app-highlightDark/25 dark:bg-brand-white/10">
                   <Text className="text-[11px] font-semibold uppercase tracking-wide text-app-highlight dark:text-app-highlightDark">
                     Weakest
                   </Text>
-                  <Text className="mt-2 text-2xl font-extrabold text-app-text dark:text-app-textDark">
+                  <Text className="mt-2 text-lg font-extrabold text-app-text dark:text-app-textDark">
                     {snapshot.worstPerformer?.symbol ?? "N/A"}
                   </Text>
                   <Text
                     className={[
-                      "mt-1 text-sm font-bold",
+                      "mt-1 text-xs font-bold",
                       getToneTextClassName(snapshot.worstPerformer?.impactPkr ?? 0),
                     ]
                       .filter(Boolean)
@@ -1168,14 +1168,14 @@ export default function AnalyticsScreen() {
                   >
                     {formatSignedPkr(snapshot.worstPerformer?.impactPkr ?? 0)}
                   </Text>
-                  <Text className="mt-1 text-[11px] font-semibold text-app-text dark:text-app-textDark">
+                  <Text className="mt-1 text-[10px] font-semibold text-app-text dark:text-app-textDark">
                     {`${formatSignedPercentage(
                       snapshot.worstPerformer?.impactPct ?? 0
                     )} impact • ${(snapshot.worstPerformer?.weightPct ?? 0).toFixed(
                       1
                     )}% weight`}
                   </Text>
-                  <Text className="mt-1 text-[11px] font-semibold text-app-text dark:text-app-textDark">
+                  <Text className="mt-1 text-[10px] font-semibold text-app-text dark:text-app-textDark">
                     {`Return ${formatSignedPercentage(
                       snapshot.worstPerformer?.returnPct ?? 0
                     )}`}

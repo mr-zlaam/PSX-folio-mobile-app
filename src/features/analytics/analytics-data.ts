@@ -400,6 +400,16 @@ function buildTrendPoints(
 ): AnalyticsPoint[] {
   const timelineEvents = buildTimelineEvents(trades, deposits, dividends, bonuses);
   const positionsBySymbol = new Map<string, PositionAccumulator>();
+
+  for (const holding of holdings) {
+    const symbol = normalizeSymbol(holding.symbol);
+    const units = toNonNegativeNumber(holding.units);
+    const avgPrice = toNonNegativeNumber(holding.averageBuyPrice);
+    if (units > 0 && avgPrice > 0) {
+      positionsBySymbol.set(symbol, { units, averagePrice: avgPrice });
+    }
+  }
+
   const points: AnalyticsPoint[] = [];
 
   for (const event of timelineEvents) {
@@ -449,13 +459,13 @@ function buildTrendPoints(
 }
 
 function calculateStandardDeviation(values: number[]): number {
-  if (values.length === 0) {
+  if (values.length <= 1) {
     return 0;
   }
 
   const mean = values.reduce((sum, value) => sum + value, 0) / values.length;
   const variance =
-    values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / values.length;
+    values.reduce((sum, value) => sum + (value - mean) ** 2, 0) / (values.length - 1);
   return Math.sqrt(variance);
 }
 
@@ -502,8 +512,14 @@ function buildRiskMetrics(
       continue;
     }
 
+    const pct = ((currentValue - previousValue) / previousValue) * 100;
+
+    if (Math.abs(pct) > 10) {
+      continue;
+    }
+
     dailyReturns.push({
-      pct: ((currentValue - previousValue) / previousValue) * 100,
+      pct,
       timestamp: current.timestamp,
     });
   }
