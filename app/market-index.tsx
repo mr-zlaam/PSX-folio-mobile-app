@@ -321,20 +321,22 @@ export default function MarketIndexScreen() {
           }
 
           const hasUsableCachedDetail = isUsableMarketIndexDetail(cachedDetail);
-          const hasUsableCachedSeries = cachedSeries.points.length > 0;
+          const hasUsableCachedSeries = cachedSeries.points.length >= 2;
 
           if (hasUsableCachedDetail && cachedDetail) {
             setDetail(cachedDetail);
             hasPaintedCachedData = true;
           }
 
-          if (hasUsableCachedSeries) {
+          if (cachedSeries.points.length > 0) {
             setChartSeries(cachedSeries);
-            hasPaintedCachedData = true;
           }
 
           if (showLoader && hasPaintedCachedData) {
             setIsInitialLoading(false);
+          }
+
+          if (showLoader && hasUsableCachedSeries) {
             setIsChartLoading(false);
           }
         }

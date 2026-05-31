@@ -826,10 +826,21 @@ function buildMarketIndexDetail(
     eodRows.length > 0 && Number.isFinite(eodRows[0].openPrice)
       ? eodRows[0].openPrice
       : snapshot.latestPrice - snapshot.change;
-  const lastDayClose =
-    eodRows.length > 1 && Number.isFinite(eodRows[1].closePrice)
-      ? eodRows[1].closePrice
-      : snapshot.latestPrice - snapshot.change;
+
+  // During market hours eodRows[0] is yesterday (no today EOD yet), after
+  // close eodRows[0] shifts to today and eodRows[1] becomes yesterday.
+  // Walk the rows to find the first EOD entry before the snapshot day.
+  const snapshotDayKey = snapshot.asOf
+    ? getDayKeyFromEpochSeconds(new Date(snapshot.asOf).getTime() / 1000)
+    : getDayKeyFromEpochSeconds(Date.now() / 1000);
+  let lastDayClose = snapshot.latestPrice - snapshot.change;
+  for (const row of eodRows) {
+    const rowDayKey = getDayKeyFromEpochSeconds(row.timestamp);
+    if (rowDayKey < snapshotDayKey && Number.isFinite(row.closePrice) && row.closePrice > 0) {
+      lastDayClose = row.closePrice;
+      break;
+    }
+  }
 
   const nowTimestamp = Date.now();
   const week52StartTimestamp = nowTimestamp - 52 * 7 * 24 * 60 * 60 * 1000;

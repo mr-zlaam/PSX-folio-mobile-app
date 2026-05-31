@@ -435,16 +435,20 @@ export default function StockLineChart({
     onPointSelected(nextPoint);
   }, [onPointSelected, selectedPoint]);
 
+  const hasEnoughPoints = points.length >= 2;
+
   return (
     <View className="w-full" onLayout={handleLayout}>
-      {points.length < 2 || chartWidth <= 0 || polylinePoints.length === 0 ? (
+      {!hasEnoughPoints || chartWidth <= 0 || polylinePoints.length === 0 ? (
         <View
           style={{ height }}
           className="items-center justify-center rounded-2xl bg-text-light/5 dark:bg-brand-white/5"
         >
-          <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
-            {emptyLabel}
-          </Text>
+          {hasEnoughPoints && chartWidth <= 0 ? null : (
+            <Text className="text-sm font-semibold text-app-text dark:text-app-textDark">
+              {emptyLabel}
+            </Text>
+          )}
         </View>
       ) : (
         <View className="rounded-2xl bg-text-light/5 p-3 dark:bg-brand-white/5">

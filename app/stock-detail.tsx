@@ -961,7 +961,7 @@ export default function StockDetailScreen() {
         }
 
         const cachedSeries = await getCachedStockChartSeries(normalizedSymbol, range);
-        const hasUsableCachedSeries = cachedSeries.points.length > 0;
+        const hasUsableCachedSeries = cachedSeries.points.length >= 2;
         if (requestId === chartRequestIdRef.current) {
           setChartSeries(cachedSeries);
           if (showLoader && hasUsableCachedSeries) {
